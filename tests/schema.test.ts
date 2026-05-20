@@ -105,4 +105,11 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(sql, /create policy "owners can manage share links"/);
     assert.match(sql, /m\.role = 'owner'/);
   });
+
+  it("keeps production Priority A verification pointed at the canonical legacy organization", async () => {
+    const verifySql = await readFile(join(process.cwd(), "scripts", "verify_priority_a.sql"), "utf8");
+
+    assert.match(verifySql, /slug = 'legacy-hidayathon'/);
+    assert.doesNotMatch(verifySql, /hidayathon-legacy/);
+  });
 });

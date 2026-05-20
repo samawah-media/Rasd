@@ -39,7 +39,7 @@ npm run dev
 - `/api/imports/legacy/backfill` إحصائيات وقائمة Backfill للروابط الأصلية الناقصة أو المعطوبة.
 - `/api/imports/legacy` استيراد الداتا القديمة المعتمدة بشكل idempotent.
 - `/api/imports/legacy/supabase-plan` خطة upsert كاملة لما سيكتب في Supabase بدون تنفيذ.
-- `/api/imports/legacy/upsert-supabase` تنفيذ upsert إلى Supabase عند تمرير `{"dry_run": false}` ووجود `SUPABASE_SERVICE_ROLE_KEY` و`RASD_ADMIN_IMPORT_TOKEN` مطابق؛ الوضع الافتراضي dry-run آمن.
+- `/api/imports/legacy/upsert-supabase` تنفيذ upsert إلى Supabase عند تمرير `{"dry_run": false}` ووجود `SUPABASE_SERVICE_ROLE_KEY` و`RASD_ADMIN_IMPORT_TOKEN` مطابق داخل header `x-rasd-admin-token` فقط؛ الوضع الافتراضي dry-run آمن.
 - `/ops` تشغيل دورة العمل: manual URL -> review -> capture -> report-ready.
 - `/reports/report-5` نموذج تقرير HTML.
 - `/api/admin/health` حالة النظام.
@@ -108,7 +108,7 @@ npm run build
 
 ## ملاحظة أمنية
 
-`npm audit` أظهر سابقًا تحذيرًا متوسطًا داخل dependency فرعية مرتبطة بـ Next/PostCSS. لا يتم تطبيق `npm audit fix --force` لأنه يقترح تغييرًا غير آمن. تتم مراجعته عند تحديث Next.
+`npm audit --audit-level=moderate` يظهر حاليًا تحذيرًا متوسطًا داخل dependency فرعية مرتبطة بـ Next/PostCSS. لا يتم تطبيق `npm audit fix --force` لأنه يقترح تغييرًا غير آمن. تتم مراجعته عند تحديث Next.
 
 ## Supabase Activation Notes
 

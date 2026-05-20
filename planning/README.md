@@ -50,12 +50,21 @@ Use it to track:
 
 Never store actual secrets in this file.
 
+### `qa-checklist.md`
+
+Repeatable production smoke tests.
+
+Use it to track:
+
+- What the owner must verify manually after deployment.
+- What can be verified automatically from the local machine.
+- Which Priority A checks are done before UI redesign begins.
+
 ## Suggested Future Files
 
 Create these as the project grows:
 
 - `decision-log.md`: architecture/product decisions and why we made them.
-- `qa-checklist.md`: repeatable smoke test and release checklist.
 - `data-model-notes.md`: Supabase tables, RLS, and persistence rules.
 - `source-integrations.md`: X, RSS, news, manual URL, and screenshot pipeline details.
 - `client-feedback.md`: notes from testing with real users.

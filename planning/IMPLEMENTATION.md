@@ -35,7 +35,7 @@ Open `http://localhost:3000`.
 - `/api/imports/legacy/backfill` returns link-backfill counts, status, search URLs, and override templates for legacy items.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.
 - `/api/imports/legacy/supabase-plan` returns the deterministic Supabase upsert plan for the approved legacy archive without writing rows.
-- `/api/imports/legacy/upsert-supabase` writes the legacy archive to Supabase only when server credentials are configured, `RASD_ADMIN_IMPORT_TOKEN` matches `x-rasd-admin-token` or `admin_token`, and the request body includes `{"dry_run": false}`; otherwise it returns a safe dry-run plan.
+- `/api/imports/legacy/upsert-supabase` writes the legacy archive to Supabase only when server credentials are configured, `RASD_ADMIN_IMPORT_TOKEN` matches the `x-rasd-admin-token` request header, and the request body includes `{"dry_run": false}`; otherwise it returns a safe dry-run plan.
 - `/ops` interactive workflow console for manual intake, editorial review, report-grade capture, and report insertion.
 - `/reports/report-5` HTML report page.
 - `/api/admin/health` connector and system health.
@@ -90,6 +90,7 @@ The prototype now includes Node test coverage for the most important workflow ru
 - API checks verify `/api/client-report/hidayathon` serves the interactive report data.
 - backfill utility/API checks verify that missing legacy URLs are not fabricated, malformed PDF links remain blocked, search URLs are generated, and the 24 extracted values are split into 21 openable and 3 malformed links.
 - legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and safe handling of 100 missing plus 3 malformed original URLs.
+- production persistence checks verify the canonical legacy organization slug `legacy-hidayathon`, live row-count sanity SQL, protected admin persistence endpoint behavior, and owner-confirmed Supabase runtime mode.
 
 Run:
 
@@ -142,3 +143,10 @@ npm run supabase:legacy:upsert
 ```
 
 `/api/admin/persistence` distinguishes partial activation from full persistence: public Supabase settings may be present while writes remain on local memory until `SUPABASE_SERVICE_ROLE_KEY` is configured and the schema is reachable.
+
+Production confirmation on 2026-05-20:
+
+- Owner-authenticated `/api/admin/persistence` returned `mode: "supabase"`, `ok: true`, `publicConfigured: true`, `serverConfigured: true`, and project ref `ewunxfttbpqisspqthiz`.
+- Unauthenticated `/api/admin/persistence` returns `401 auth_required`.
+- Live Supabase row-count sanity check after Vercel redeploy showed 124 legacy monitoring items, 124 captures, 124 report-item links, 4 legacy reports, 3 legacy link overrides, 2 default manual items, and 0 public tables without RLS.
+- `share_links` was smoke-tested against Supabase by creating and revoking a test link for a legacy report; the usable token was not stored in `token_hash`.
