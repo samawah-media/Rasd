@@ -1,4 +1,5 @@
 import importData from "../../data/imports/hidayathon_reports.json";
+import { getLegacyContentCropForItemId } from "@/lib/legacy-content-crops";
 import {
   getLegacyLinkOverrides,
   getLegacyLinkOverrideForItemIdFromOverrides,
@@ -44,6 +45,9 @@ export type ImportedReportItem = {
   originalUrlOverride: LegacyLinkOverride | null;
   extractedUrls: string[];
   evidenceImagePath: string | null;
+  contentImagePath: string | null;
+  publisherProfileImagePath: string | null;
+  sourceEvidenceImagePath: string | null;
   rawText: string;
   imageCount: number;
   confidence: ImportConfidence;
@@ -129,6 +133,9 @@ function normalizeItem(report: RawReport, item: RawItem, index: number, override
   const overrideUrl = annotationUrl ? null : getOpenableOverrideUrlFromOverrides(overrides, id);
   const pdfUrl = annotationUrl ?? (isOpenableHttpUrl(extractedOriginalUrl) ? extractedOriginalUrl : null);
   const originalUrl = pdfUrl ?? overrideUrl;
+  const sourceEvidenceImagePath = cleanText(item.evidence_image_path) || null;
+  const contentCrop = getLegacyContentCropForItemId(id);
+  const contentImagePath = contentCrop?.contentImagePath ?? null;
 
   return {
     id,
@@ -148,7 +155,10 @@ function normalizeItem(report: RawReport, item: RawItem, index: number, override
     originalUrlSource: overrideUrl ? "override" : pdfUrl ? "pdf" : null,
     originalUrlOverride: getLegacyLinkOverrideForItemIdFromOverrides(overrides, id),
     extractedUrls: item.extracted_urls ?? [],
-    evidenceImagePath: cleanText(item.evidence_image_path) || null,
+    evidenceImagePath: contentImagePath ?? sourceEvidenceImagePath,
+    contentImagePath,
+    publisherProfileImagePath: contentCrop?.publisherProfileImagePath ?? null,
+    sourceEvidenceImagePath,
     rawText: cleanText(item.raw_text) || "لا يوجد نص خام.",
     imageCount: item.image_count ?? 0,
     confidence,

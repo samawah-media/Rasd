@@ -109,9 +109,18 @@ describe("connector and budget utilities", () => {
     assert.ok(report.filters.screenshotStatuses.includes("available"));
     assert.ok(report.dailyDistribution.length > 0);
     assert.ok(report.platformDistribution.some((entry) => entry.platform === "X"));
+    assert.deepEqual(report.filters.sentiments, ["positive"]);
+    assert.deepEqual(report.sentimentDistribution, [{ sentiment: "positive", label: "إيجابي", count: 124, percent: 100 }]);
+    assert.equal(report.items.every((item) => item.sentiment === "positive" && item.sentimentLabel === "إيجابي"), true);
     assert.equal(report.items.every((item) => item.reportLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.clientStatusLabel.length > 0), true);
-    assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-pages/")), true);
+    assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-content-crops/full/content-")), true);
+    assert.equal(report.items.every((item) => item.contentImagePath?.startsWith("/imports/legacy-content-crops/full/content-")), true);
+    assert.equal(
+      report.items.every((item) => item.publisherProfileImagePath?.startsWith("/imports/legacy-content-crops/full/publisher-")),
+      true,
+    );
+    assert.equal(report.items.every((item) => item.sourceEvidenceImagePath?.startsWith("/imports/legacy-pages/")), true);
     assert.equal(report.items.filter((item) => item.originalUrl).length, 124);
     assert.equal(report.items.filter((item) => item.extractedOriginalUrl).length, 124);
     assert.equal(

@@ -1,6 +1,6 @@
 # RASD Remaining Platform Workplan
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 This file lists the remaining work needed to make the platform operate efficiently and become testable with real Hidayathon monitoring data.
 
@@ -183,7 +183,49 @@ Acceptance:
 - When a link is corrected, it remains corrected after redeploy.
 - Client report reflects corrected original links.
 
-### A7. Minimum Real Monitoring Input
+### A7. Content Screenshot Evidence Pipeline
+
+Goal:
+
+Show the actual visual content for each item, not only the full PDF page image.
+
+Planning reference:
+
+- `planning/content-screenshot-pipeline-plan.md`
+
+Current finding:
+
+- The existing capture workflow is a state machine, but live capture currently stores a placeholder asset (`/window.svg`) rather than a real browser screenshot.
+- The safest baseline is to extract/crop images already present in the legacy PDF report pages, then trial live screenshots on a small sample.
+
+Status update - 2026-05-21:
+
+- PDF crop extraction is now production-ready for the legacy Hidayathon archive.
+- Generated 124 content crops and 124 publisher profile crops under `public/imports/legacy-content-crops/full`.
+- `public/imports/legacy-content-crops/full/manifest.json` maps every legacy item to its content image, publisher image, and full-page fallback evidence.
+- `/client-report` now reads only the legacy Hidayathon organization for this report and no longer mixes default/manual test items into the client dataset.
+- Client report data now returns 124 items, 124 content images, 124 publisher profile images, and 124 full-page fallback references.
+- Supabase was upserted with cropped content image paths in `monitoring_items.evidence_image_path`, `captures.asset_url`, and report card data while preserving full-page fallback paths in metadata.
+- Automated coverage now asserts full production crop assets, Supabase mapping, and client-report image fields.
+
+Tasks:
+
+- [x] Build a PDF crop proof of concept for 10 representative items.
+- [x] Compare crop quality across X posts, news/site pages, and official links.
+- [x] Keep full-page report evidence as fallback for every item.
+- [x] Add crop metadata and confidence before running all 124 items.
+- [x] Persist chosen content image paths through the legacy import/Supabase path.
+- Trial live Playwright screenshots on a 10-link sample only after PDF crops are reviewed.
+- Replace placeholder capture behavior with real capture only after the sample succeeds.
+
+Acceptance:
+
+- Client report can show a useful content image for most legacy items.
+- Missing or weak crops do not remove the historical full-page evidence.
+- No expensive all-link live capture is run before a sample proves value.
+- Screenshot references survive redeploy.
+
+### A8. Minimum Real Monitoring Input
 
 Goal:
 
@@ -202,7 +244,7 @@ Acceptance:
 - We can add a real URL today and see it flow into review/report.
 - Dedupe prevents repeated test submissions.
 
-### A8. Review Workflow Persistence
+### A9. Review Workflow Persistence
 
 Goal:
 
@@ -221,7 +263,7 @@ Acceptance:
 - Refresh/redeploy does not erase review state.
 - Admin can understand who changed what and when.
 
-### A9. Production Smoke Test
+### A10. Production Smoke Test
 
 Goal:
 
@@ -410,8 +452,9 @@ Sprint tasks:
 3. Upsert legacy Hidayathon archive into Supabase.
 4. Make `/client-report` read persisted Supabase data in production.
 5. Make link backfill writes persistent.
-6. Add one real manual URL intake test path.
-7. Run one end-to-end smoke test.
+6. Add PDF-cropped content images for legacy items.
+7. Add one real manual URL intake test path.
+8. Run one end-to-end smoke test.
 
 Definition of done:
 
@@ -419,5 +462,6 @@ Definition of done:
 - Data is persisted in Supabase.
 - Client report shows real Hidayathon data.
 - Original links/screenshots/statuses survive redeploy.
+- Legacy items have content images or safe full-page evidence fallback.
 - One manually added item can be reviewed and shown in the client report.
 - Viewer cannot access admin pages.

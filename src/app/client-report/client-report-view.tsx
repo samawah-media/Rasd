@@ -239,7 +239,7 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
               />
 
               <SelectField
-                label="المشاعر"
+                label="تصنيف المحتوى"
                 onChange={(value) => updateFilter("sentiment", value)}
                 options={[
                   { label: "كل التصنيفات", value: "all" },
@@ -419,14 +419,27 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
           {selectedItem ? (
             <Panel title="تفاصيل المادة" icon={<Link2 size={18} />}>
   <div className="space-y-3">
-                {selectedItem.evidenceImagePath ? (
+                {selectedItem.publisherProfileImagePath ? (
+                  <div className="overflow-hidden rounded-lg border border-[#dfe3de] bg-white">
+                    <Image
+                      alt="صورة الناشر"
+                      className="h-auto w-full"
+                      height={180}
+                      priority
+                      src={selectedItem.publisherProfileImagePath}
+                      unoptimized
+                      width={720}
+                    />
+                  </div>
+                ) : null}
+                {(selectedItem.contentImagePath ?? selectedItem.evidenceImagePath) ? (
                   <div className="overflow-hidden rounded-lg border border-[#dfe3de] bg-[#f7f8f6]">
                     <Image
-                      alt={`صورة صفحة ${selectedItem.page} من ${selectedItem.reportLabel}`}
+                      alt="صورة المحتوى"
                       className="h-auto w-full"
                       height={1200}
                       priority
-                      src={selectedItem.evidenceImagePath}
+                      src={selectedItem.contentImagePath ?? selectedItem.evidenceImagePath ?? ""}
                       unoptimized
                       width={900}
                     />
@@ -438,12 +451,13 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <Fact label="التقرير" value={selectedItem.reportLabel} />
                   <Fact label="الصفحة" value={String(selectedItem.page)} />
-                  <Fact label="الكاتب" value={selectedItem.authorName} />
+                  <Fact label="الناشر" value={selectedItem.authorName} />
                   <Fact label="النشر" value={selectedItem.publishDateLabel} />
                   <Fact label="الالتقاط" value={selectedItem.captureDateLabel} />
+                  <Fact label="تصنيف المحتوى" value={selectedItem.sentimentLabel} />
                   <Fact label="الثقة" value={selectedItem.confidenceLabel} />
                   <Fact label="حالة الرابط" value={linkStatusLabels[selectedItem.linkStatus]} />
-                  <Fact label="حالة اللقطة" value={screenshotStatusLabels[selectedItem.screenshotStatus]} />
+                  <Fact label="صورة المحتوى" value={screenshotStatusLabels[selectedItem.screenshotStatus]} />
                 </div>
                 {selectedItem.warnings.length ? (
                   <div className="rounded-lg border border-[#f4d7b0] bg-[#fff1df] p-3 text-sm leading-6 text-[#9a5522]">
@@ -678,14 +692,30 @@ function DistributionList({ items, colors }: { items: { key: string; label: stri
 }
 
 function ReportItemCard({ item, selected, onSelect }: { item: ClientReportItem; selected: boolean; onSelect: () => void }) {
+  const imagePath = item.contentImagePath ?? item.evidenceImagePath;
+
   return (
     <button
-      className={`grid w-full gap-4 px-4 py-4 text-right transition hover:bg-[#fbfcfb] md:grid-cols-[1fr_180px] ${
+      className={`grid w-full gap-4 px-4 py-4 text-right transition hover:bg-[#fbfcfb] md:grid-cols-[124px_1fr_180px] ${
         selected ? "bg-[#fbfcfb]" : ""
       }`}
       onClick={onSelect}
       type="button"
     >
+      <div className="overflow-hidden rounded-lg border border-[#dfe3de] bg-[#f7f8f6]">
+        {imagePath ? (
+          <Image
+            alt="صورة المحتوى"
+            className="h-28 w-full object-cover object-top"
+            height={180}
+            src={imagePath}
+            unoptimized
+            width={220}
+          />
+        ) : (
+          <div className="grid h-28 place-items-center text-xs text-[#69716d]">لا توجد صورة</div>
+        )}
+      </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2 text-sm text-[#69716d]">
           <PlatformPill item={item} />
@@ -699,7 +729,7 @@ function ReportItemCard({ item, selected, onSelect }: { item: ClientReportItem; 
       <div className="grid content-start gap-2 text-sm">
         <Fact label="تاريخ النشر" value={item.publishDateLabel} />
         <Fact label="التقاط المصدر" value={item.captureDateLabel} />
-        <Fact label="المشاعر" value={item.sentimentLabel} />
+        <Fact label="تصنيف المحتوى" value={item.sentimentLabel} />
       </div>
     </button>
   );

@@ -1,5 +1,5 @@
 import { formatGregorian, formatHijri } from "@/lib/dates";
-import { DEFAULT_ORGANIZATION_ID, LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
+import { LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
 import { getImportedReportsDataset, type ImportConfidence, type ImportedReportItem } from "@/lib/imported-reports";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 
@@ -134,7 +134,7 @@ const confidenceLabels: Record<string, string> = {
 };
 
 const confidenceLevels: ImportConfidence[] = ["high", "medium", "low"];
-const hidayathonReportOrganizationIds = [LEGACY_ORGANIZATION_ID, DEFAULT_ORGANIZATION_ID];
+const hidayathonReportOrganizationIds = [LEGACY_ORGANIZATION_ID];
 
 export function getHidayathonClientReportData(): ClientReportData {
   const dataset = getImportedReportsDataset();
@@ -330,7 +330,16 @@ function toClientReportItemFromDb(
   const sourcePdf = rawString(row.raw_response, "sourcePdf") ?? report?.title ?? "supabase";
   const reportIssue = rawNumber(row.raw_response, "reportIssue") ?? report?.version ?? null;
   const platform = rawString(row.raw_response, "platform") ?? platformFromDbRow(row);
-  const evidenceImagePath = row.evidence_image_path ?? openableAssetUrl(capture?.asset_url);
+  const contentImagePath =
+    rawContentCropString(row.raw_response, "contentImagePath") ??
+    openableAssetUrl(capture?.asset_url) ??
+    openableAssetUrl(row.evidence_image_path);
+  const sourceEvidenceImagePath =
+    rawContentCropString(row.raw_response, "sourceEvidenceImagePath") ??
+    rawString(row.raw_response, "sourceEvidenceImagePath") ??
+    openableAssetUrl(row.evidence_image_path);
+  const publisherProfileImagePath = rawContentCropString(row.raw_response, "publisherProfileImagePath");
+  const evidenceImagePath = contentImagePath ?? sourceEvidenceImagePath;
   const originalUrl = row.original_url_status === "openable" ? openableHttpUrl(row.original_url) : null;
   const extractedOriginalUrl = row.original_url_extracted ?? rawString(row.raw_response, "extractedOriginalUrl");
   const warnings = unique([row.warning, link.warning].filter((warning): warning is string => Boolean(warning)));
@@ -354,6 +363,9 @@ function toClientReportItemFromDb(
     originalUrlOverride: null,
     extractedUrls: rawStringArray(row.raw_response, "extractedUrls"),
     evidenceImagePath,
+    contentImagePath,
+    publisherProfileImagePath,
+    sourceEvidenceImagePath,
     rawText: row.summary_source_text ?? row.summary ?? "لا يوجد نص خام.",
     imageCount: evidenceImagePath ? 1 : 0,
     confidence: confidenceFromScore(row.sentiment_confidence, rawString(row.raw_response, "confidence")),
@@ -527,6 +539,12 @@ function rawNumber(value: unknown, key: string) {
 function rawStringArray(value: unknown, key: string) {
   const entry = rawRecord(value)[key];
   return Array.isArray(entry) ? entry.filter((item): item is string => typeof item === "string") : [];
+}
+
+function rawContentCropString(value: unknown, key: string) {
+  const contentCrop = rawRecord(rawRecord(value).contentCrop);
+  const entry = contentCrop[key];
+  return typeof entry === "string" && entry.trim() ? entry.trim() : null;
 }
 
 function openableHttpUrl(value: string | null | undefined) {

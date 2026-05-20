@@ -15,6 +15,11 @@ try:
 except Exception:  # pragma: no cover - optional local rendering dependency
     fitz = None
 
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover - optional local visual classification dependency
+    Image = None
+
 
 REPORT_NAME_RE = re.compile(r"report\s+E(?P<issue>\d+)", re.IGNORECASE)
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
@@ -62,6 +67,11 @@ MONTHS_AR = {
     "نوفمبر": "11",
     "ديسمبر": "12",
     "ديســـمبر": "12",
+}
+SENTIMENT_CHECKBOX_REGIONS = {
+    "negative": (0.405, 0.815, 0.435, 0.865),
+    "neutral": (0.486, 0.815, 0.516, 0.865),
+    "positive": (0.568, 0.815, 0.598, 0.865),
 }
 
 
@@ -168,6 +178,10 @@ def render_page_image(
     return f"{public_prefix.rstrip('/')}/{relative}"
 
 
+def rendered_page_image_path(pdf_name: str, assets_root: Path, page_number: int) -> Path:
+    return assets_root / safe_slug(Path(pdf_name).stem) / f"page-{page_number:03d}.jpg"
+
+
 def page_image_count(page: Any) -> int:
     resources = page.get("/Resources") or {}
     xobj = resources.get("/XObject") or {}
@@ -243,6 +257,28 @@ def infer_sentiment(text: str) -> str:
     if "إيجابي" in text and "سلبي" not in text and "محايد" not in text:
         return "positive"
     return "neutral"
+
+
+def infer_visual_sentiment(image_path: Path) -> str | None:
+    if Image is None or not image_path.exists():
+        return None
+
+    try:
+        image = Image.open(image_path).convert("RGB")
+    except Exception:
+        return None
+
+    width, height = image.size
+    scores: dict[str, int] = {}
+    for sentiment, (x1, y1, x2, y2) in SENTIMENT_CHECKBOX_REGIONS.items():
+        crop = image.crop((int(width * x1), int(height * y1), int(width * x2), int(height * y2)))
+        pixels = crop.get_flattened_data() if hasattr(crop, "get_flattened_data") else crop.getdata()
+        scores[sentiment] = sum(1 for red, green, blue in pixels if red < 120 and green < 140 and blue < 140)
+
+    ranked = sorted(scores.items(), key=lambda entry: entry[1], reverse=True)
+    if len(ranked) < 2 or ranked[0][1] - ranked[1][1] < 100:
+        return None
+    return ranked[0][0]
 
 
 def extract_capture_text(text: str) -> str | None:
@@ -373,6 +409,10 @@ def extract_report(
                 render_assets_root,
                 public_prefix,
             )
+            if render_assets_root:
+                visual_sentiment = infer_visual_sentiment(rendered_page_image_path(path.name, render_assets_root, idx))
+                if visual_sentiment:
+                    item.sentiment = visual_sentiment
             items.append(item)
 
     warnings: list[str] = []

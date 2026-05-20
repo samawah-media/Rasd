@@ -106,7 +106,10 @@ describe("monitoring workflow store", () => {
     const legacyCaptures = store.listCaptures().filter((capture) => capture.id.startsWith("legacy-item-"));
     assert.equal(legacyItems.every((item) => item.state === "published"), true);
     assert.equal(legacyItems.every((item) => item.hasReportGradeCapture), true);
-    assert.equal(legacyCaptures.every((capture) => capture.assetUrl?.startsWith("/imports/legacy-pages/")), true);
+    assert.equal(
+      legacyCaptures.every((capture) => capture.assetUrl?.startsWith("/imports/legacy-content-crops/full/content-")),
+      true,
+    );
     assert.ok(legacyItems.some((item) => item.originalUrl.startsWith("https://")));
   });
 });

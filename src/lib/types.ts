@@ -116,6 +116,9 @@ export type ReportItemCard = {
   hijri_date: string;
   captured_at?: string;
   screenshot_url?: string;
+  content_image_url?: string;
+  publisher_profile_image_url?: string;
+  source_evidence_image_url?: string;
   original_url: string;
   source_icon: string;
   warning?: string;

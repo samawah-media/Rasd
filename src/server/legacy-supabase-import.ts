@@ -303,6 +303,7 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
   const originalUrlStatus = getOriginalUrlStatus(item);
   const legacyEvidenceUrl = legacyEvidenceUrlForItem(item);
   const storedOriginalUrl = item.originalUrl ?? legacyEvidenceUrl;
+  const evidenceImagePath = item.contentImagePath ?? item.evidenceImagePath;
 
   return {
     id: legacyItemUuid(item),
@@ -317,7 +318,7 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
     original_url_extracted: item.extractedOriginalUrl,
     original_url_status: originalUrlStatus,
     original_url_source: item.originalUrlSource ?? "legacy_evidence",
-    evidence_image_path: item.evidenceImagePath,
+    evidence_image_path: evidenceImagePath,
     canonical_url_hash: stableFingerprint(`${item.originalUrl ?? legacyEvidenceUrl}:${item.id}`),
     source_item_id: item.id,
     normalized_text_hash: stableFingerprint(item.rawText),
@@ -340,6 +341,14 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
       extractedOriginalUrl: item.extractedOriginalUrl,
       originalUrlStatus,
       originalUrlSource: item.originalUrlSource,
+      sourceEvidenceImagePath: item.sourceEvidenceImagePath,
+      contentCrop: item.contentImagePath
+        ? {
+            contentImagePath: item.contentImagePath,
+            publisherProfileImagePath: item.publisherProfileImagePath,
+            sourceEvidenceImagePath: item.sourceEvidenceImagePath,
+          }
+        : null,
       imageCount: item.imageCount,
       confidence: item.confidence,
       capturedAtText: item.capturedAtText,
@@ -378,7 +387,7 @@ function captureRow(item: ImportedReportItem): DbRow {
     monitoring_item_id: legacyItemUuid(item),
     kind: "report_grade",
     status: "success",
-    asset_url: item.evidenceImagePath ?? legacyEvidenceUrlForItem(item),
+    asset_url: item.contentImagePath ?? item.evidenceImagePath ?? legacyEvidenceUrlForItem(item),
     html_archive_url: null,
     failure_reason: null,
     captured_at: null,
@@ -412,7 +421,10 @@ function buildReportItemCard(item: ImportedReportItem, warning?: string): Report
     gregorian_date: item.publishedDateText,
     hijri_date: item.publishedDateText,
     captured_at: item.capturedAtText,
-    screenshot_url: item.evidenceImagePath ?? undefined,
+    screenshot_url: item.contentImagePath ?? item.evidenceImagePath ?? undefined,
+    content_image_url: item.contentImagePath ?? undefined,
+    publisher_profile_image_url: item.publisherProfileImagePath ?? undefined,
+    source_evidence_image_url: item.sourceEvidenceImagePath ?? undefined,
     original_url: item.originalUrl ?? legacyEvidenceUrlForItem(item),
     source_icon: item.platform,
     warning,

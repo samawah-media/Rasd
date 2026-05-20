@@ -96,6 +96,58 @@ describe("legacy Supabase import plan", () => {
     assert.equal(monitoringRows.every((row) => String(row.normalized_text_hash).length === 32), true);
   });
 
+  it("uses cropped content images for report captures while preserving the full legacy page as fallback evidence", () => {
+    const plan = buildLegacySupabaseUpsertPlan();
+    const monitoringRows = plan.batches.find((batch) => batch.table === "monitoring_items")?.rows ?? [];
+    const captureRows = plan.batches.find((batch) => batch.table === "captures")?.rows ?? [];
+    const reportItemRows = plan.batches.find((batch) => batch.table === "report_items")?.rows ?? [];
+
+    assert.equal(
+      monitoringRows.every((row) => String(row.evidence_image_path).startsWith("/imports/legacy-content-crops/full/content-")),
+      true,
+    );
+    assert.equal(
+      captureRows.every((row) => String(row.asset_url).startsWith("/imports/legacy-content-crops/full/content-")),
+      true,
+    );
+    assert.equal(
+      monitoringRows.every((row) => {
+        const raw = row.raw_response as {
+          sourceEvidenceImagePath?: string;
+          contentCrop?: {
+            contentImagePath?: string;
+            publisherProfileImagePath?: string;
+            sourceEvidenceImagePath?: string;
+          } | null;
+        };
+        return (
+          raw.sourceEvidenceImagePath?.startsWith("/imports/legacy-pages/") &&
+          raw.contentCrop?.contentImagePath?.startsWith("/imports/legacy-content-crops/full/content-") &&
+          raw.contentCrop?.publisherProfileImagePath?.startsWith("/imports/legacy-content-crops/full/publisher-") &&
+          raw.contentCrop?.sourceEvidenceImagePath?.startsWith("/imports/legacy-pages/")
+        );
+      }),
+      true,
+    );
+    assert.equal(
+      reportItemRows.every((row) => {
+        const card = row.card_data as {
+          screenshot_url?: string;
+          content_image_url?: string;
+          publisher_profile_image_url?: string;
+          source_evidence_image_url?: string;
+        };
+        return (
+          card.screenshot_url?.startsWith("/imports/legacy-content-crops/full/content-") &&
+          card.content_image_url?.startsWith("/imports/legacy-content-crops/full/content-") &&
+          card.publisher_profile_image_url?.startsWith("/imports/legacy-content-crops/full/publisher-") &&
+          card.source_evidence_image_url?.startsWith("/imports/legacy-pages/")
+        );
+      }),
+      true,
+    );
+  });
+
   it("does not include Supabase secrets or connection strings in the public upsert plan", async () => {
     await withEnv(
       {

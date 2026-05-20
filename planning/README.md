@@ -60,13 +60,24 @@ Use it to track:
 - What can be verified automatically from the local machine.
 - Which Priority A checks are done before UI redesign begins.
 
+### `content-screenshot-pipeline-plan.md`
+
+Plan for turning legacy report evidence into useful content images.
+
+Use it to track:
+
+- PDF crop extraction from existing report pages.
+- Small live screenshot trials.
+- Storage/Supabase mapping for visual evidence.
+- Client report image fallback behavior.
+
 ## Suggested Future Files
 
 Create these as the project grows:
 
 - `decision-log.md`: architecture/product decisions and why we made them.
 - `data-model-notes.md`: Supabase tables, RLS, and persistence rules.
-- `source-integrations.md`: X, RSS, news, manual URL, and screenshot pipeline details.
+- `source-integrations.md`: X, RSS, news, and manual URL details.
 - `client-feedback.md`: notes from testing with real users.
 
 ## Update Rule
