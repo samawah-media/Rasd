@@ -8,7 +8,8 @@ export type ClientReportItem = ImportedReportItem & {
   platformLabel: string;
   sentimentLabel: string;
   confidenceLabel: string;
-  linkStatus: "openable" | "malformed" | "legacy_evidence_only";
+  contentUrl: string | null;
+  linkStatus: "openable" | "content_link_only" | "malformed" | "legacy_evidence_only";
   screenshotStatus: "available" | "missing";
   clientStatusLabel: string;
   publishDateIso: string | null;
@@ -364,11 +365,15 @@ function toClientReportItemFromDb(
 export function enrichClientReportItem(item: ImportedReportItem): ClientReportItem {
   const publishDateIso = extractLegacyPublishDateIso(item);
   const captureDateIso = extractLegacyCaptureDateIso(item.capturedAtText);
-  const linkStatus = getClientLinkStatus(item);
+  const originalUrl = getClientOriginalUrl(item);
+  const contentUrl = getClientContentUrl(item);
+  const linkStatus = getClientLinkStatus({ ...item, originalUrl, contentUrl });
   const screenshotStatus = item.evidenceImagePath ? "available" : "missing";
 
   return {
     ...item,
+    originalUrl,
+    contentUrl,
     reportLabel: item.reportIssue ? `الإصدار ${item.reportIssue}` : "تقرير غير مرقم",
     platformLabel: platformLabels[item.platform] ?? item.platform,
     sentimentLabel: sentimentLabels[item.sentiment] ?? item.sentiment,
@@ -474,8 +479,9 @@ function allowsLocalClientReportFallback() {
   return process.env.NODE_ENV !== "production" || process.env.RASD_CLIENT_REPORT_FALLBACK === "local";
 }
 
-function getClientLinkStatus(item: ImportedReportItem): ClientReportItem["linkStatus"] {
+function getClientLinkStatus(item: ImportedReportItem & { contentUrl?: string | null }): ClientReportItem["linkStatus"] {
   if (item.originalUrl) return "openable";
+  if (item.contentUrl) return "content_link_only";
   if (item.extractedOriginalUrl) return "malformed";
   return "legacy_evidence_only";
 }
@@ -486,8 +492,22 @@ function getClientStatusLabel(
 ) {
   if (linkStatus === "openable" && screenshotStatus === "available") return "رابط ولقطة متاحة";
   if (linkStatus === "openable") return "رابط أصلي متاح";
+  if (linkStatus === "content_link_only" && screenshotStatus === "available") return "رابط مذكور ولقطة متاحة";
+  if (linkStatus === "content_link_only") return "رابط مذكور داخل المحتوى";
   if (linkStatus === "malformed") return "رابط يحتاج تصحيح";
   return "دليل من التقرير القديم";
+}
+
+function getClientOriginalUrl(item: ImportedReportItem) {
+  if (!item.originalUrl) return null;
+  if (item.platform === "X" && !isXPostUrl(item.originalUrl)) return null;
+  return item.originalUrl;
+}
+
+function getClientContentUrl(item: ImportedReportItem) {
+  if (!item.originalUrl) return null;
+  if (item.platform === "X" && !isXPostUrl(item.originalUrl)) return item.originalUrl;
+  return null;
 }
 
 function rawRecord(value: unknown) {
@@ -512,6 +532,16 @@ function rawStringArray(value: unknown, key: string) {
 function openableHttpUrl(value: string | null | undefined) {
   if (!value) return null;
   return value.startsWith("http://") || value.startsWith("https://") ? value : null;
+}
+
+function isXPostUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "");
+    return (host === "x.com" || host === "twitter.com") && /\/status\/\d+/.test(url.pathname);
+  } catch {
+    return false;
+  }
 }
 
 function openableAssetUrl(value: string | null | undefined) {

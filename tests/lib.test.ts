@@ -104,6 +104,7 @@ describe("connector and budget utilities", () => {
     assert.ok(report.filters.dates.length > 0);
     assert.ok(report.filters.sources.length > 0);
     assert.ok(report.filters.linkStatuses.includes("openable"));
+    assert.ok(report.filters.linkStatuses.includes("content_link_only"));
     assert.ok(report.filters.linkStatuses.includes("legacy_evidence_only"));
     assert.ok(report.filters.screenshotStatuses.includes("available"));
     assert.ok(report.dailyDistribution.length > 0);
@@ -111,9 +112,13 @@ describe("connector and budget utilities", () => {
     assert.equal(report.items.every((item) => item.reportLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.clientStatusLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-pages/")), true);
-    assert.ok(report.items.some((item) => item.originalUrl?.startsWith("https://")));
+    assert.ok(report.items.some((item) => item.contentUrl?.startsWith("https://")));
     assert.equal(report.items.filter((item) => item.extractedOriginalUrl).length, 24);
-    assert.equal(report.items.filter((item) => item.originalUrl).length, 24);
+    assert.equal(
+      report.items.filter((item) => item.platform === "X" && item.originalUrl && !item.originalUrl.includes("/status/")).length,
+      0,
+    );
+    assert.ok(report.items.filter((item) => item.platform === "X" && item.contentUrl).length > 0);
     assert.equal(report.items.some((item) => item.extractedOriginalUrl?.includes("hedayathon.comسجّل")), true);
     assert.equal(report.items.some((item) => item.originalUrl?.includes("hedayathon.comسجّل")), false);
   });

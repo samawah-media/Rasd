@@ -1,6 +1,6 @@
 # RASD QA Checklist
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 This checklist is the short production smoke test for RASD. Use it after each production deploy and before starting large UI work.
 
@@ -49,10 +49,11 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 4. Confirm the Hidayathon report loads real items, not an empty state.
 5. Use filters for date, platform, source, link status, and screenshot status.
 6. Open an item detail and confirm it shows the original link or historical evidence image.
-7. Open `https://rasd-gamma.vercel.app/imports/backfill`.
-8. Confirm missing-link items appear and evidence/search helpers are visible.
-9. Open `https://rasd-gamma.vercel.app/ops`.
-10. Confirm admin tools are visible only while logged in as owner/editor.
+7. For X items, confirm `hedayathon.com` or other official site links are labeled as links mentioned inside the content, not as the original tweet link.
+8. Open `https://rasd-gamma.vercel.app/imports/backfill`.
+9. Confirm missing-link items appear and evidence/search helpers are visible.
+10. Open `https://rasd-gamma.vercel.app/ops`.
+11. Confirm admin tools are visible only while logged in as owner/editor.
 
 ## Automated Local Checks
 
@@ -78,3 +79,4 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
 - Share links need a browser-level production test after the report/share UI is polished.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
+- Most historical X rows still need true tweet permalink backfill. Official site links found inside tweet text are preserved as content links, not original tweet links.

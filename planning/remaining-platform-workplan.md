@@ -163,6 +163,12 @@ Goal:
 
 Make link fixes permanent and visible in client report.
 
+Status update - 2026-05-21:
+
+- Client report now distinguishes true original links from links merely mentioned inside X content.
+- For X items, non-X URLs such as `hedayathon.com` are no longer shown as the original tweet link. They are shown as content links with a note that the tweet permalink still needs backfill.
+- Current local client-report split: 1 true openable original link, 23 content-only links, 100 legacy-evidence-only items, and 0 malformed client links.
+
 Tasks:
 
 - Keep `/imports/backfill` as the admin workflow for missing/malformed links.

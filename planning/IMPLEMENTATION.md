@@ -91,6 +91,7 @@ The prototype now includes Node test coverage for the most important workflow ru
 - backfill utility/API checks verify that missing legacy URLs are not fabricated, malformed PDF links remain blocked, search URLs are generated, and the 24 extracted values are split into 21 openable and 3 malformed links.
 - legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and safe handling of 100 missing plus 3 malformed original URLs.
 - production persistence checks verify the canonical legacy organization slug `legacy-hidayathon`, live row-count sanity SQL, protected admin persistence endpoint behavior, and owner-confirmed Supabase runtime mode.
+- client-report checks verify that X rows do not present official site links such as `hedayathon.com` as original tweet permalinks; those are exposed separately as content links until true `x.com/.../status/...` links are backfilled.
 
 Run:
 

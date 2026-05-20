@@ -46,6 +46,7 @@ const platformColors: Record<string, string> = {
 
 const linkStatusLabels: Record<ClientReportItem["linkStatus"], string> = {
   openable: "رابط أصلي متاح",
+  content_link_only: "رابط مذكور داخل المحتوى",
   malformed: "رابط يحتاج تصحيح",
   legacy_evidence_only: "دليل من التقرير القديم",
 };
@@ -460,6 +461,22 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                       <Link2 size={16} />
                       فتح الرابط الأصلي
                     </a>
+                  ) : selectedItem.contentUrl ? (
+                    <div className="rounded-lg border border-[#dfe3de] bg-[#f7f8f6] p-3 leading-6 text-[#4f5a55]">
+                      <p>
+                        الرابط المتاح داخل التقرير يفتح موقعًا مذكورًا في المحتوى، وليس رابط التغريدة الأصلي.
+                        نحتاج مطابقة لاحقة عبر X أو إدخال يدوي للوصول إلى رابط المنشور نفسه.
+                      </p>
+                      <a
+                        className="mt-2 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#18201e] px-3 font-semibold text-white"
+                        href={selectedItem.contentUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <Link2 size={16} />
+                        فتح الرابط المذكور
+                      </a>
+                    </div>
                   ) : (
                     <div className="rounded-lg border border-[#f4d7b0] bg-[#fff1df] p-3 leading-6 text-[#9a5522]">
                       <p>
