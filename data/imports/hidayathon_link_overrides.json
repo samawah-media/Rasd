@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "updated_at": "2026-05-20T00:00:00.000Z",
+  "items": {
+    "260228 PRH Hidayathon Media Monitoring report E03.pdf::3::6::X::skaau_com::1": {
+      "originalUrl": "https://hedayathon.com",
+      "status": "verified",
+      "note": "Recovered from malformed PDF text: http://hedayathon.com plus Arabic CTA suffix.",
+      "verifiedAt": "2026-05-20T00:00:00.000Z",
+      "verifiedBy": "codex"
+    },
+    "260228 PRH Hidayathon Media Monitoring report E03.pdf::3::8::X::UOfjeddah::3": {
+      "originalUrl": "https://hedayathon.com",
+      "status": "verified",
+      "note": "Recovered from malformed PDF text: http://hedayathon.com plus Arabic CTA suffix.",
+      "verifiedAt": "2026-05-20T00:00:00.000Z",
+      "verifiedBy": "codex"
+    },
+    "260228 PRH Hidayathon Media Monitoring report E03.pdf::3::9::X::HM2015s::4": {
+      "originalUrl": "https://hedayathon.com",
+      "status": "verified",
+      "note": "Recovered from malformed PDF text: http://hedayathon.com plus Arabic CTA suffix.",
+      "verifiedAt": "2026-05-20T00:00:00.000Z",
+      "verifiedBy": "codex"
+    }
+  }
+}

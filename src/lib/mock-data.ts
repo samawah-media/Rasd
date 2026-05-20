@@ -1,0 +1,192 @@
+import type {
+  Capture,
+  HealthMetric,
+  KeywordRule,
+  MonitoringItem,
+  ReportVersion,
+  Source,
+  UsageLimit,
+} from "./types";
+
+export const usageLimit: UsageLimit = {
+  maxXReadsPerDay: 500,
+  maxXReadsPerMonth: 6000,
+  maxAiTokensPerMonth: 800000,
+  maxScreenshotsPerMonth: 350,
+  maxStorageMb: 10240,
+  hardStopEnabled: true,
+  warningThresholdPercent: 70,
+};
+
+export const keywordRules: KeywordRule[] = [
+  {
+    id: "kw-1",
+    requiredTerms: ["هداية"],
+    optionalTerms: ["هاكاثون", "هاكثون", "هداية_ثون", "Hidayathon", "Hedayathon"],
+    excludeTerms: ["وظائف", "إعلان ممول"],
+    language: "mixed",
+    priority: 100,
+    activeFrom: "2026-02-01",
+    activeTo: "2026-02-20",
+    version: 1,
+  },
+];
+
+export const sources: Source[] = [
+  {
+    id: "src-x",
+    name: "منصة X",
+    type: "x_oembed",
+    url: "https://x.com",
+    handle: "@Hidayathon",
+    country: "السعودية",
+    credibility: "official",
+    isVerifiedSource: true,
+  },
+  {
+    id: "src-news",
+    name: "صحيفة رقمية",
+    type: "rss",
+    url: "https://example.com/rss.xml",
+    country: "السعودية",
+    credibility: "media",
+    isVerifiedSource: true,
+  },
+  {
+    id: "src-manual",
+    name: "إدخال يدوي",
+    type: "manual_url",
+    url: "manual://intake",
+    country: "السعودية",
+    credibility: "public",
+    isVerifiedSource: false,
+  },
+];
+
+export const monitoringItems: MonitoringItem[] = [
+  {
+    id: "item-1",
+    sourceId: "src-x",
+    sourceName: "حساب هاكاثون هداية",
+    sourceType: "x_oembed",
+    state: "report_ready",
+    title: "تفاعل واسع مع إطلاق هاكاثون هداية",
+    originalUrl: "https://x.com/example/status/1",
+    authorName: "هاكاثون هداية",
+    authorHandle: "@Hidayathon",
+    publishedAt: "2026-02-14T10:20:00.000Z",
+    summary:
+      "منشور رسمي يعلن انطلاق فعاليات هاكاثون هداية مع تفاعل إيجابي من المشاركين والجهات التقنية.",
+    summarySourceText:
+      "انطلقت فعاليات هاكاثون هداية بمشاركة واسعة من المهتمين بالتقنية والابتكار.",
+    sentiment: "positive",
+    sentimentConfidence: 92,
+    relevanceScore: 96,
+    relevanceReason: "طابقت المادة اسم الهاكاثون والهاشتاق الرسمي.",
+    matchedTerms: ["هداية", "هاكاثون"],
+    dedupeKey: "x_oembed:1",
+    hasReportGradeCapture: true,
+  },
+  {
+    id: "item-2",
+    sourceId: "src-news",
+    sourceName: "صحيفة رقمية",
+    sourceType: "rss",
+    state: "needs_review",
+    title: "جامعة تستضيف مبادرة ابتكارية للمهتمين بالهداية الرقمية",
+    originalUrl: "https://example.com/news/hidayathon",
+    authorName: "فريق التحرير",
+    publishedAt: "2026-02-15T08:05:00.000Z",
+    summary:
+      "خبر صحفي يشير إلى فعالية ابتكارية مرتبطة بموضوع الهداية الرقمية، ويحتاج مراجعة لتأكيد الصلة المباشرة.",
+    summarySourceText:
+      "استضافت الجامعة فعالية ابتكارية بمشاركة فرق تقنية تعمل على حلول الهداية الرقمية.",
+    sentiment: "neutral",
+    sentimentConfidence: 71,
+    relevanceScore: 74,
+    relevanceReason: "الخبر لا يذكر الاسم في العنوان لكنه يطابق النص الداخلي.",
+    matchedTerms: ["هداية"],
+    dedupeKey: "rss:https://example.com/news/hidayathon",
+    hasReportGradeCapture: false,
+  },
+  {
+    id: "item-3",
+    sourceId: "src-manual",
+    sourceName: "رابط يدوي",
+    sourceType: "manual_url",
+    state: "capture_failed",
+    title: "مادة مرشحة تحتاج إعادة التقاط",
+    originalUrl: "https://example.com/post/blocked",
+    authorName: "حساب مشارك",
+    publishedAt: "2026-02-16T15:30:00.000Z",
+    summary: "مادة ذات صلة عالية لكن لقطة الشاشة فشلت بسبب بطء الصفحة.",
+    summarySourceText: "تجربة مشارك في هاكاثون هداية.",
+    sentiment: "positive",
+    sentimentConfidence: 84,
+    relevanceScore: 88,
+    relevanceReason: "مطابقة مباشرة لاسم الفعالية وتجربة مشارك.",
+    matchedTerms: ["هاكاثون", "هداية"],
+    dedupeKey: "manual_url:https://example.com/post/blocked",
+    hasReportGradeCapture: false,
+    warning: "فشل الالتقاط. يمكن النشر بتحذير أو رفع لقطة يدويًا.",
+  },
+];
+
+export const captures: Capture[] = [
+  {
+    id: "cap-1",
+    itemId: "item-1",
+    kind: "report_grade",
+    status: "success",
+    capturedAt: "2026-02-14T12:00:00.000Z",
+    assetUrl: "/window.svg",
+  },
+  {
+    id: "cap-2",
+    itemId: "item-3",
+    kind: "report_grade",
+    status: "failed",
+    failureReason: "انتهت مهلة تحميل الصفحة بعد 30 ثانية.",
+  },
+];
+
+export const reportVersions: ReportVersion[] = [
+  {
+    id: "report-5",
+    version: 5,
+    status: "published",
+    title: "تقرير رصد هاكاثون هداية",
+    periodStart: "2026-02-14",
+    periodEnd: "2026-02-16",
+    publishedAt: "2026-02-17T09:00:00.000Z",
+    secureUrl: "/reports/report-5",
+    pdfUrl: "/reports/report-5/export.pdf",
+  },
+  {
+    id: "report-4",
+    version: 4,
+    status: "archived",
+    title: "تقرير رصد هاكاثون هداية",
+    periodStart: "2026-02-14",
+    periodEnd: "2026-02-15",
+    publishedAt: "2026-02-16T09:00:00.000Z",
+    secureUrl: "/reports/report-4",
+  },
+  {
+    id: "report-draft",
+    version: 6,
+    status: "draft",
+    title: "تقرير رصد هاكاثون هداية",
+    periodStart: "2026-02-14",
+    periodEnd: "2026-02-18",
+  },
+];
+
+export const healthMetrics: HealthMetric[] = [
+  { label: "RSS connector", value: "آخر نجاح قبل 12 دقيقة", status: "good" },
+  { label: "X API", value: "غير مهيأ بعد", status: "warning" },
+  { label: "Capture success", value: "86%", status: "good" },
+  { label: "PDF failures", value: "0%", status: "good" },
+  { label: "Review backlog", value: "3 مواد", status: "warning" },
+  { label: "Budget", value: "42% من حد الشهر", status: "good" },
+];
