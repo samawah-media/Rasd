@@ -124,13 +124,20 @@ Goal:
 
 Make `/client-report` show persisted real data.
 
+Status update - 2026-05-20:
+
+- Code completed: `/client-report` and `/api/client-report/hidayathon` now prefer the persisted legacy Hidayathon report data from Supabase when server credentials are configured.
+- Local fallback remains available for development, and production fallback now requires explicit `RASD_CLIENT_REPORT_FALLBACK=local`.
+- Client-safe filters now include source, link status, and screenshot status. Viewer role no longer sees the raw extracted text toggle.
+- Pending production verification: confirm the live Supabase import has data and the deployed report renders it after redeploy.
+
 Tasks:
 
-- Ensure `/api/client-report/hidayathon` reads from Supabase in production.
-- Keep local/mock fallback only for development or explicit fallback.
-- Show original links, evidence image paths, source, date, platform, text, and status.
-- Keep filters working by date range, platform, source, report, confidence, and link/screenshot status.
-- Hide raw extraction/admin details from viewer.
+- [x] Ensure `/api/client-report/hidayathon` reads from Supabase in production.
+- [x] Keep local/mock fallback only for development or explicit fallback.
+- [x] Show original links, evidence image paths, source, date, platform, text, and status.
+- [x] Keep filters working by date range, platform, source, report, confidence, and link/screenshot status.
+- [x] Hide raw extraction/admin details from viewer.
 
 Acceptance:
 
@@ -395,4 +402,3 @@ Definition of done:
 - Original links/screenshots/statuses survive redeploy.
 - One manually added item can be reviewed and shown in the client report.
 - Viewer cannot access admin pages.
-

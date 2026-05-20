@@ -26,8 +26,11 @@ import type { Role } from "@/lib/types";
 type Filters = {
   report: string;
   platform: string;
+  source: string;
   sentiment: string;
   confidence: string;
+  linkStatus: string;
+  screenshotStatus: string;
   from: string;
   to: string;
   query: string;
@@ -41,12 +44,26 @@ const platformColors: Record<string, string> = {
   Unknown: "#b45a21",
 };
 
+const linkStatusLabels: Record<ClientReportItem["linkStatus"], string> = {
+  openable: "رابط أصلي متاح",
+  malformed: "رابط يحتاج تصحيح",
+  legacy_evidence_only: "دليل من التقرير القديم",
+};
+
+const screenshotStatusLabels: Record<ClientReportItem["screenshotStatus"], string> = {
+  available: "لقطة متاحة",
+  missing: "لقطة غير متاحة",
+};
+
 export function ClientReportView({ data, role }: { data: ClientReportData; role: Role }) {
   const [filters, setFilters] = useState<Filters>({
     report: "all",
     platform: "all",
+    source: "all",
     sentiment: "all",
     confidence: "all",
+    linkStatus: "all",
+    screenshotStatus: "all",
     from: data.summary.dateFrom ?? "",
     to: data.summary.dateTo ?? "",
     query: "",
@@ -60,8 +77,12 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
     return data.items.filter((item) => {
       const matchesReport = filters.report === "all" || item.sourcePdf === filters.report;
       const matchesPlatform = filters.platform === "all" || item.platform === filters.platform;
+      const matchesSource = filters.source === "all" || item.sourceName === filters.source;
       const matchesSentiment = filters.sentiment === "all" || item.sentiment === filters.sentiment;
       const matchesConfidence = filters.confidence === "all" || item.confidence === filters.confidence;
+      const matchesLinkStatus = filters.linkStatus === "all" || item.linkStatus === filters.linkStatus;
+      const matchesScreenshotStatus =
+        filters.screenshotStatus === "all" || item.screenshotStatus === filters.screenshotStatus;
       const matchesFrom = !filters.from || (item.publishDateIso && item.publishDateIso >= filters.from);
       const matchesTo = !filters.to || (item.publishDateIso && item.publishDateIso <= filters.to);
       const matchesQuery =
@@ -74,8 +95,11 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
       return (
         matchesReport &&
         matchesPlatform &&
+        matchesSource &&
         matchesSentiment &&
         matchesConfidence &&
+        matchesLinkStatus &&
+        matchesScreenshotStatus &&
         matchesFrom &&
         matchesTo &&
         matchesQuery
@@ -101,8 +125,11 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
     setFilters({
       report: "all",
       platform: "all",
+      source: "all",
       sentiment: "all",
       confidence: "all",
+      linkStatus: "all",
+      screenshotStatus: "all",
       from: data.summary.dateFrom ?? "",
       to: data.summary.dateTo ?? "",
       query: "",
@@ -198,6 +225,19 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
               />
 
               <SelectField
+                label="المصدر"
+                onChange={(value) => updateFilter("source", value)}
+                options={[
+                  { label: "كل المصادر", value: "all" },
+                  ...data.filters.sources.map((source) => ({
+                    label: source,
+                    value: source,
+                  })),
+                ]}
+                value={filters.source}
+              />
+
+              <SelectField
                 label="المشاعر"
                 onChange={(value) => updateFilter("sentiment", value)}
                 options={[
@@ -221,6 +261,32 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                   })),
                 ]}
                 value={filters.confidence}
+              />
+
+              <SelectField
+                label="حالة الرابط"
+                onChange={(value) => updateFilter("linkStatus", value)}
+                options={[
+                  { label: "كل حالات الروابط", value: "all" },
+                  ...data.filters.linkStatuses.map((status) => ({
+                    label: linkStatusLabels[status],
+                    value: status,
+                  })),
+                ]}
+                value={filters.linkStatus}
+              />
+
+              <SelectField
+                label="حالة اللقطة"
+                onChange={(value) => updateFilter("screenshotStatus", value)}
+                options={[
+                  { label: "كل حالات اللقطات", value: "all" },
+                  ...data.filters.screenshotStatuses.map((status) => ({
+                    label: screenshotStatusLabels[status],
+                    value: status,
+                  })),
+                ]}
+                value={filters.screenshotStatus}
               />
 
               <div className="grid grid-cols-2 gap-2">
@@ -375,6 +441,8 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                   <Fact label="النشر" value={selectedItem.publishDateLabel} />
                   <Fact label="الالتقاط" value={selectedItem.captureDateLabel} />
                   <Fact label="الثقة" value={selectedItem.confidenceLabel} />
+                  <Fact label="حالة الرابط" value={linkStatusLabels[selectedItem.linkStatus]} />
+                  <Fact label="حالة اللقطة" value={screenshotStatusLabels[selectedItem.screenshotStatus]} />
                 </div>
                 {selectedItem.warnings.length ? (
                   <div className="rounded-lg border border-[#f4d7b0] bg-[#fff1df] p-3 text-sm leading-6 text-[#9a5522]">
@@ -412,18 +480,22 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                     </div>
                   )}
                 </div>
-                <button
-                  className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#dfe3de] bg-[#fbfbfa] px-3 text-sm font-semibold"
-                  onClick={() => setShowRaw((current) => !current)}
-                  type="button"
-                >
-                  <Eye size={16} />
-                  {showRaw ? "إخفاء النص الخام" : "عرض النص الخام"}
-                </button>
-                {showRaw ? (
-                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-lg border border-[#dfe3de] bg-[#f7f8f6] p-3 text-right text-xs leading-6">
-                    {selectedItem.rawText}
-                  </pre>
+                {canManage ? (
+                  <>
+                    <button
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#dfe3de] bg-[#fbfbfa] px-3 text-sm font-semibold"
+                      onClick={() => setShowRaw((current) => !current)}
+                      type="button"
+                    >
+                      <Eye size={16} />
+                      {showRaw ? "إخفاء النص الخام" : "عرض النص الخام"}
+                    </button>
+                    {showRaw ? (
+                      <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap rounded-lg border border-[#dfe3de] bg-[#f7f8f6] p-3 text-right text-xs leading-6">
+                        {selectedItem.rawText}
+                      </pre>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </Panel>

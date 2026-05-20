@@ -32,7 +32,13 @@ describe("legacy Supabase import plan", () => {
     assert.equal(plan.summary.openableOriginalUrls, 24);
     assert.equal(plan.summary.missingOriginalUrls, 100);
     assert.equal(plan.summary.invalidOriginalUrls, 0);
-    assert.equal(plan.batches.every((batch) => batch.onConflict === "id"), true);
+    assert.equal(plan.summary.legacyLinkOverrides, 3);
+    assert.equal(
+      plan.batches.every((batch) =>
+        batch.table === "legacy_link_overrides" ? batch.onConflict === "organization_id,external_id" : batch.onConflict === "id",
+      ),
+      true,
+    );
   });
 
   it("orders batches by foreign-key dependencies and keeps every tenant row scoped", () => {
@@ -49,6 +55,7 @@ describe("legacy Supabase import plan", () => {
         "report_templates",
         "reports",
         "monitoring_items",
+        "legacy_link_overrides",
         "captures",
         "report_items",
       ],
@@ -66,15 +73,19 @@ describe("legacy Supabase import plan", () => {
   it("applies reviewed overrides for malformed legacy links while keeping missing links as evidence", () => {
     const plan = buildLegacySupabaseUpsertPlan();
     const monitoringRows = plan.batches.find((batch) => batch.table === "monitoring_items")?.rows ?? [];
+    const overrideRows = plan.batches.find((batch) => batch.table === "legacy_link_overrides")?.rows ?? [];
     const invalidRows = monitoringRows.filter((row) => row.original_url_status === "invalid");
-    const overrideRows = monitoringRows.filter((row) => row.original_url_source === "override");
+    const importedOverrideRows = monitoringRows.filter((row) => row.original_url_source === "override");
     const missingRows = monitoringRows.filter((row) => row.original_url_status === "missing");
 
     assert.equal(invalidRows.length, 0);
-    assert.equal(overrideRows.length, 3);
-    assert.equal(missingRows.length, 100);
     assert.equal(overrideRows.every((row) => row.original_url === "https://hedayathon.com"), true);
-    assert.equal(overrideRows.every((row) => typeof row.original_url_extracted === "string"), true);
+    assert.equal(overrideRows.length, 3);
+    assert.equal(importedOverrideRows.length, 3);
+    assert.equal(missingRows.length, 100);
+    assert.equal(importedOverrideRows.every((row) => row.original_url === "https://hedayathon.com"), true);
+    assert.equal(overrideRows.every((row) => row.status === "verified"), true);
+    assert.equal(importedOverrideRows.every((row) => typeof row.original_url_extracted === "string"), true);
     assert.equal(missingRows.every((row) => row.original_url_extracted === null), true);
     assert.equal(missingRows.every((row) => row.original_url_source === "legacy_evidence"), true);
     assert.equal(monitoringRows.every((row) => String(row.canonical_url_hash).length === 32), true);

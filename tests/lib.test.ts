@@ -86,6 +86,14 @@ describe("connector and budget utilities", () => {
 
     assert.equal(publishDate, "2025-12-08");
     assert.equal(captureDate, "2026-02-14");
+    assert.equal(
+      extractLegacyPublishDateIso({
+        publishedDateText: "2026-05-20T10:30:00.000Z",
+        rawText: "Manual URL intake",
+      }),
+      "2026-05-20",
+    );
+    assert.equal(extractLegacyCaptureDateIso("2026-05-20T10:31:00.000Z"), "2026-05-20");
   });
 
   it("builds the Hidayathon client report dataset from approved legacy reports", () => {
@@ -94,9 +102,14 @@ describe("connector and budget utilities", () => {
     assert.equal(report.summary.items, 124);
     assert.equal(report.reports.length, 4);
     assert.ok(report.filters.dates.length > 0);
+    assert.ok(report.filters.sources.length > 0);
+    assert.ok(report.filters.linkStatuses.includes("openable"));
+    assert.ok(report.filters.linkStatuses.includes("legacy_evidence_only"));
+    assert.ok(report.filters.screenshotStatuses.includes("available"));
     assert.ok(report.dailyDistribution.length > 0);
     assert.ok(report.platformDistribution.some((entry) => entry.platform === "X"));
     assert.equal(report.items.every((item) => item.reportLabel.length > 0), true);
+    assert.equal(report.items.every((item) => item.clientStatusLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-pages/")), true);
     assert.ok(report.items.some((item) => item.originalUrl?.startsWith("https://")));
     assert.equal(report.items.filter((item) => item.extractedOriginalUrl).length, 24);

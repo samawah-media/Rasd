@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { SourceCredibility, SourceType } from "@/lib/types";
-import { getHidayathonClientReportData } from "@/lib/client-report-data";
+import { getPreferredHidayathonClientReportData } from "@/lib/client-report-data";
 import { getLegacyBackfillDataset } from "@/lib/legacy-backfill";
 import { keywordRules } from "@/lib/mock-data";
 import type { LegacyLinkOverrideStatus } from "@/lib/legacy-link-overrides";
@@ -64,8 +64,8 @@ api.get("/admin/persistence", async (c) =>
 
 api.get("/audit-logs", async (c) => c.json(withRequestId(c, { audit_logs: await persistentStore.listAuditLogs() })));
 
-api.get("/client-report/hidayathon", (c) =>
-  c.json(withRequestId(c, { report: getHidayathonClientReportData() })),
+api.get("/client-report/hidayathon", async (c) =>
+  c.json(withRequestId(c, { report: await getPreferredHidayathonClientReportData() })),
 );
 
 api.get("/imports/legacy/status", (c) =>

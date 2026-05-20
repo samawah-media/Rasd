@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImportedReportsDataset, type ImportedReportItem } from "@/lib/imported-reports";
-import { getLegacyLinkOverrides, type LinkOverridesFile } from "@/lib/legacy-link-overrides";
+import { getLegacyLinkOverrides, isOpenableHttpUrl, type LinkOverridesFile } from "@/lib/legacy-link-overrides";
 import type { ReportItemCard, Sentiment, SourceType } from "@/lib/types";
 import { getMergedLegacyLinkOverrides } from "@/server/legacy-link-overrides-store";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
@@ -16,6 +16,7 @@ type LegacyUpsertTable =
   | "report_templates"
   | "reports"
   | "monitoring_items"
+  | "legacy_link_overrides"
   | "captures"
   | "report_items";
 
@@ -39,6 +40,7 @@ export type LegacySupabaseUpsertPlan = {
     openableOriginalUrls: number;
     missingOriginalUrls: number;
     invalidOriginalUrls: number;
+    legacyLinkOverrides: number;
   };
 };
 
@@ -84,6 +86,7 @@ export function buildLegacySupabaseUpsertPlan(
   }));
 
   const monitoringRows = dataset.items.map((item) => monitoringItemRow(item));
+  const legacyLinkOverrideRows = legacyLinkOverrideRowsFromOverrides(overrides);
   const captureRows = dataset.items.map((item) => captureRow(item));
   const reportItemRows = dataset.items.map((item, index) => reportItemRow(item, index));
 
@@ -188,6 +191,11 @@ export function buildLegacySupabaseUpsertPlan(
       rows: monitoringRows,
     },
     {
+      table: "legacy_link_overrides",
+      onConflict: "organization_id,external_id",
+      rows: legacyLinkOverrideRows,
+    },
+    {
       table: "captures",
       onConflict: "id",
       rows: captureRows,
@@ -213,6 +221,7 @@ export function buildLegacySupabaseUpsertPlan(
       openableOriginalUrls: dataset.items.filter((item) => item.originalUrl).length,
       missingOriginalUrls: dataset.items.filter((item) => !item.extractedOriginalUrl).length,
       invalidOriginalUrls: dataset.items.filter((item) => item.extractedOriginalUrl && !item.originalUrl).length,
+      legacyLinkOverrides: legacyLinkOverrideRows.length,
     },
   };
 }
@@ -334,6 +343,28 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
     },
     warning: item.warnings.length ? item.warnings.join("، ") : legacyWarning(item),
   };
+}
+
+function legacyLinkOverrideRowsFromOverrides(overrides: LinkOverridesFile): DbRow[] {
+  return Object.entries(overrides.items)
+    .filter((entry): entry is [string, NonNullable<LinkOverridesFile["items"][string]>] =>
+      isOpenableHttpUrl(entry[1]?.originalUrl),
+    )
+    .map(([externalId, override]) => {
+      const verifiedAt = override.verifiedAt ?? new Date().toISOString();
+
+      return {
+        id: stableUuid(`legacy:hidayathon:link-override:${externalId}`),
+        organization_id: LEGACY_ORGANIZATION_ID,
+        external_id: externalId,
+        original_url: override.originalUrl?.trim(),
+        status: override.status === "needs_review" ? "needs_review" : "verified",
+        note: override.note ?? null,
+        verified_at: verifiedAt,
+        verified_by: override.verifiedBy ?? "legacy-import",
+        updated_at: verifiedAt,
+      };
+    });
 }
 
 function captureRow(item: ImportedReportItem): DbRow {
