@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { LEGACY_ORGANIZATION_NAME, LEGACY_ORGANIZATION_SLUG } from "../src/lib/auth-config";
 import { buildLegacySupabaseUpsertPlan, upsertLegacyReportsToSupabase } from "../src/server/legacy-supabase-import";
 
 async function withEnv<T>(values: Record<string, string | undefined>, run: () => Promise<T>) {
@@ -33,6 +34,9 @@ describe("legacy Supabase import plan", () => {
     assert.equal(plan.summary.missingOriginalUrls, 100);
     assert.equal(plan.summary.invalidOriginalUrls, 0);
     assert.equal(plan.summary.legacyLinkOverrides, 3);
+    const organizationRow = plan.batches.find((batch) => batch.table === "organizations")?.rows[0];
+    assert.equal(organizationRow?.name, LEGACY_ORGANIZATION_NAME);
+    assert.equal(organizationRow?.slug, LEGACY_ORGANIZATION_SLUG);
     assert.equal(
       plan.batches.every((batch) =>
         batch.table === "legacy_link_overrides" ? batch.onConflict === "organization_id,external_id" : batch.onConflict === "id",

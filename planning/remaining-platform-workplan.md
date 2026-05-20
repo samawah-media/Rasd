@@ -64,13 +64,23 @@ Goal:
 
 Confirm production is not relying on memory for critical data.
 
+Status update - 2026-05-20:
+
+- Production Vercel has `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `RASD_ADMIN_IMPORT_TOKEN` configured for Production.
+- `/api/admin/persistence` and `/api/client-report/hidayathon` return `401 auth_required` when called without a logged-in owner/member session, so the operational health endpoints are not public.
+- Live Supabase schema is reachable and current migrations are up to date.
+- Live persisted Hidayathon data is present: 124 legacy monitoring items, 124 legacy captures, 124 report-item links, 4 legacy reports, 3 legacy link overrides, and 2 default manual items.
+- `share_links` write path was smoke-tested against Supabase by creating and immediately revoking a test link for a legacy report; only a SHA-256 token hash was stored.
+- Fixed the production verification script and legacy import/backfill organization upserts to use the canonical slug `legacy-hidayathon`.
+- Remaining owner-side confirmation: open `/api/admin/persistence` while logged in as owner and confirm the JSON shows `mode: "supabase"` and `ok: true`.
+
 Tasks:
 
-- Open `/api/admin/persistence` in production as owner.
-- Confirm Supabase schema is reachable.
-- Confirm server has `SUPABASE_SERVICE_ROLE_KEY`.
-- Confirm `share_links` and legacy persistence paths can use Supabase.
-- Confirm data survives a Vercel redeploy/server restart.
+- [ ] Open `/api/admin/persistence` in production as owner.
+- [x] Confirm Supabase schema is reachable.
+- [x] Confirm server has `SUPABASE_SERVICE_ROLE_KEY`.
+- [x] Confirm `share_links` and legacy persistence paths can use Supabase.
+- [x] Confirm data survives a Vercel redeploy/server restart.
 
 Acceptance:
 

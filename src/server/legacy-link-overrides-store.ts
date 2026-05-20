@@ -4,6 +4,11 @@ import {
   type LegacyLinkOverride,
   type LinkOverridesFile,
 } from "@/lib/legacy-link-overrides";
+import {
+  LEGACY_ORGANIZATION_ID,
+  LEGACY_ORGANIZATION_NAME,
+  LEGACY_ORGANIZATION_SLUG,
+} from "@/lib/auth-config";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 
 type LegacyLinkOverrideRow = {
@@ -22,8 +27,6 @@ type UpsertLegacyLinkOverrideInput = {
   note?: string;
   verifiedBy?: string;
 };
-
-const LEGACY_ORGANIZATION_ID = stableUuid("legacy:hidayathon:organization");
 
 export async function getMergedLegacyLinkOverrides(): Promise<LinkOverridesFile> {
   const fileOverrides = getLegacyLinkOverrides();
@@ -135,8 +138,8 @@ async function ensureLegacyOrganization() {
   const { error } = await supabase.from("organizations").upsert(
     {
       id: LEGACY_ORGANIZATION_ID,
-      name: "هداية",
-      slug: "hidayathon-legacy",
+      name: LEGACY_ORGANIZATION_NAME,
+      slug: LEGACY_ORGANIZATION_SLUG,
     },
     { onConflict: "id", ignoreDuplicates: false },
   );
@@ -213,12 +216,6 @@ function rowToOverride(row: LegacyLinkOverrideRow): LegacyLinkOverride {
     verifiedAt: row.verified_at ?? undefined,
     verifiedBy: row.verified_by ?? undefined,
   };
-}
-
-function stableUuid(value: string) {
-  const hex = stableFingerprint(value);
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 function stableFingerprint(value: string) {

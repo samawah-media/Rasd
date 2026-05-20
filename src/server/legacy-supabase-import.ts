@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getImportedReportsDataset, type ImportedReportItem } from "@/lib/imported-reports";
 import { getLegacyLinkOverrides, isOpenableHttpUrl, type LinkOverridesFile } from "@/lib/legacy-link-overrides";
 import type { ReportItemCard, Sentiment, SourceType } from "@/lib/types";
+import {
+  LEGACY_ORGANIZATION_ID,
+  LEGACY_ORGANIZATION_NAME,
+  LEGACY_ORGANIZATION_SLUG,
+} from "@/lib/auth-config";
 import { getMergedLegacyLinkOverrides } from "@/server/legacy-link-overrides-store";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 
@@ -57,7 +62,6 @@ export type LegacySupabaseUpsertResult = {
   }>;
 };
 
-const LEGACY_ORGANIZATION_ID = stableUuid("legacy:hidayathon:organization");
 const LEGACY_TOPIC_ID = stableUuid("legacy:hidayathon:topic");
 const LEGACY_TEMPLATE_ID = stableUuid("legacy:hidayathon:report-template");
 const LEGACY_PLAN_ID = stableUuid("legacy:hidayathon:plan");
@@ -97,8 +101,8 @@ export function buildLegacySupabaseUpsertPlan(
       rows: [
         {
           id: LEGACY_ORGANIZATION_ID,
-          name: "هداية",
-          slug: "hidayathon-legacy",
+          name: LEGACY_ORGANIZATION_NAME,
+          slug: LEGACY_ORGANIZATION_SLUG,
         },
       ],
     },

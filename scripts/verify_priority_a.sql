@@ -1,7 +1,7 @@
 with legacy_org as (
   select id
   from public.organizations
-  where slug = 'hidayathon-legacy'
+  where slug = 'legacy-hidayathon'
 ),
 default_org as (
   select id
