@@ -89,12 +89,14 @@ function toBackfillItem(item: ImportedReportItem, overrides: LinkOverridesFile):
     item.extractedOriginalUrl && !isOpenableHttpUrl(item.extractedOriginalUrl),
   );
   const pdfUrl = isOpenableHttpUrl(item.extractedOriginalUrl) ? item.extractedOriginalUrl : null;
-  const effectiveOriginalUrl = overrideUrl ?? pdfUrl;
-  const originalUrlSource = overrideUrl ? "override" : pdfUrl ? "pdf" : null;
+  const effectiveOriginalUrl = item.originalUrl ?? overrideUrl ?? pdfUrl;
+  const originalUrlSource = item.originalUrlSource ?? (overrideUrl ? "override" : pdfUrl ? "pdf" : null);
   const hasOriginalUrl = Boolean(effectiveOriginalUrl);
-  const backfillStatus: LegacyBackfillStatus = overrideUrl
-    ? "override_ready"
-    : hasOriginalUrl
+  const backfillStatus: LegacyBackfillStatus = item.originalUrl
+    ? "has_url"
+    : overrideUrl
+      ? "override_ready"
+      : hasOriginalUrl
       ? "has_url"
       : hasInvalidExtractedOriginalUrl
         ? "invalid_url"

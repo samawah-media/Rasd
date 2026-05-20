@@ -65,8 +65,8 @@ Current extraction notes:
 - E01/E02/E03/E04 extract into 124 unique monitoring/report items.
 - The dashboard PDF is mostly images and is better treated as a visual reference unless we add OCR.
 - The extractor renders page-level evidence images for every legacy item into `public/imports/legacy-pages`.
-- Only URLs printed inside the PDFs can be recovered automatically. Current extraction finds 24 `original_url` values; 21 are openable HTTP URLs and 3 are malformed printed links. Most X entries do not include the original post URL in the PDF text, so they use the rendered report page as the evidence asset until we add X API matching or manual URL enrichment.
-- `/imports/backfill` is the current manual enrichment surface. It shows 100 missing original URLs and 3 malformed URLs, keeps the rendered report page as historical evidence, and generates per-item override snippets for `data/imports/hidayathon_link_overrides.json`.
+- The PDFs contain interactive link annotations behind the link icon on content pages. The extractor now reads those annotations and recovers 124 original URLs, including 70 X post permalinks.
+- `/imports/backfill` remains the manual enrichment/correction surface, but the legacy Hidayathon archive no longer has a bulk missing-link gap after annotation extraction.
 - Extracted text should pass through a review screen before becoming final report data, especially for low-confidence pages and sentiment selection.
 - `/imports` is that first review screen and now includes a local import action. Because the old reports are already approved, the import creates 4 published legacy report versions, 124 published monitoring items, report-grade legacy captures, and 124 report-item links in the in-memory workflow store.
 - Re-running the legacy import is safe: deterministic IDs prevent duplicate reports, items, captures, and report-item links.
@@ -88,8 +88,8 @@ The prototype now includes Node test coverage for the most important workflow ru
 - utility checks cover URL canonicalization, keyword match explanations, and budget hard-stop behavior.
 - client-report utility checks cover Arabic legacy date extraction, capture-date extraction, and the enriched Hidayathon report dataset.
 - API checks verify `/api/client-report/hidayathon` serves the interactive report data.
-- backfill utility/API checks verify that missing legacy URLs are not fabricated, malformed PDF links remain blocked, search URLs are generated, and the 24 extracted values are split into 21 openable and 3 malformed links.
-- legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and safe handling of 100 missing plus 3 malformed original URLs.
+- backfill utility/API checks verify that the 124 interactive PDF annotation links are available and that missing legacy URLs are not fabricated.
+- legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and 124 openable original URLs.
 - production persistence checks verify the canonical legacy organization slug `legacy-hidayathon`, live row-count sanity SQL, protected admin persistence endpoint behavior, and owner-confirmed Supabase runtime mode.
 - client-report checks verify that X rows do not present official site links such as `hedayathon.com` as original tweet permalinks; those are exposed separately as content links until true `x.com/.../status/...` links are backfilled.
 
@@ -114,7 +114,7 @@ Never expose `SUPABASE_SERVICE_ROLE_KEY` in the browser.
 
 The server initializes Supabase lazily through `src/server/supabase-admin.ts`, so `next build` does not require database credentials. The current share-link service is the first persistence-ready slice: it uses the in-memory store locally, and switches to the `share_links` table when server Supabase credentials are available.
 
-Legacy persistence is mapped in `src/server/legacy-supabase-import.ts`. It creates deterministic UUIDs for the legacy organization, topic, template, report versions, monitoring items, captures, and report-item links, then upserts by `id` so re-running the import does not duplicate data. Missing or malformed original URLs are not promoted to openable links: the stored `original_url` falls back to a `legacy://` evidence pointer, while `original_url_extracted`, `original_url_status`, `original_url_source`, and `evidence_image_path` preserve what came from the old PDFs. Real writes are additionally protected by `RASD_ADMIN_IMPORT_TOKEN` because the prototype API is not yet behind full Supabase Auth.
+Legacy persistence is mapped in `src/server/legacy-supabase-import.ts`. It creates deterministic UUIDs for the legacy organization, topic, template, report versions, monitoring items, captures, and report-item links, then upserts by `id` so re-running the import does not duplicate data. Original URLs now come from interactive PDF link annotations when present, with printed text URLs retained in `extracted_urls` for review context. Real writes are additionally protected by `RASD_ADMIN_IMPORT_TOKEN` because the prototype API is not yet behind full Supabase Auth.
 
 Supabase changed Data API exposure behavior for newly created tables in 2026, so applying `supabase/schema.sql` should be followed by a deliberate review of Data API exposure and grants. RLS is already enabled on every public table in the schema, but API exposure and RLS are separate controls.
 

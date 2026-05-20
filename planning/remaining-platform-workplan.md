@@ -121,8 +121,8 @@ Tasks:
 - Review counts: 124 monitoring items, 124 captures, 124 report-item links.
 - Run real legacy upsert.
 - Confirm rerun is idempotent and does not duplicate rows.
-- Confirm 100 missing original URLs and 3 malformed URLs remain marked correctly.
-- Confirm 21 openable extracted links are stored as openable.
+- Confirm 124 interactive PDF annotation links are stored as openable.
+- Confirm X rows use real `x.com/.../status/...` post permalinks when available from the PDF link icon.
 
 Acceptance:
 
@@ -168,6 +168,7 @@ Status update - 2026-05-21:
 - Client report now distinguishes true original links from links merely mentioned inside X content.
 - For X items, non-X URLs such as `hedayathon.com` are no longer shown as the original tweet link. They are shown as content links with a note that the tweet permalink still needs backfill.
 - Current local client-report split: 1 true openable original link, 23 content-only links, 100 legacy-evidence-only items, and 0 malformed client links.
+- Follow-up correction: original PDFs contain interactive links behind the link icon. The extractor now reads those annotations; current local split is 124 openable original links, including 70 X post permalinks, with 0 missing legacy links.
 
 Tasks:
 

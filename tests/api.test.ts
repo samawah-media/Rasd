@@ -274,12 +274,12 @@ describe("Hono API acceptance workflow", () => {
 
     assert.equal(response.status, 200);
     assert.equal(json.backfill.totalItems, 124);
-    assert.equal(json.backfill.itemsWithExtractedOriginalUrl, 24);
-    assert.equal(json.backfill.itemsWithOriginalUrl, 24);
-    assert.equal(json.backfill.itemsMissingOriginalUrl, 100);
-    assert.equal(json.backfill.itemsWithoutOpenableOriginalUrl, 100);
+    assert.equal(json.backfill.itemsWithExtractedOriginalUrl, 124);
+    assert.equal(json.backfill.itemsWithOriginalUrl, 124);
+    assert.equal(json.backfill.itemsMissingOriginalUrl, 0);
+    assert.equal(json.backfill.itemsWithoutOpenableOriginalUrl, 0);
     assert.equal(json.backfill.invalidOriginalUrlItems, 0);
-    assert.equal(json.backfill.overrideReadyItems, 3);
+    assert.equal(json.backfill.overrideReadyItems, 0);
     assert.equal(
       json.backfill.items
         .filter((item: { backfillStatus: string }) => item.backfillStatus === "missing_url" || item.backfillStatus === "invalid_url")
@@ -294,7 +294,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(response.status, 200);
     assert.equal(json.supabase_import.summary.reports, 4);
     assert.equal(json.supabase_import.summary.monitoringItems, 124);
-    assert.equal(json.supabase_import.summary.openableOriginalUrls, 24);
+    assert.equal(json.supabase_import.summary.openableOriginalUrls, 124);
     assert.ok(
       json.supabase_import.batches.some(
         (batch: { table: string; rows: number; onConflict: string }) =>

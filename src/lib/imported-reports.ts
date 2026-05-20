@@ -123,10 +123,12 @@ function normalizeItem(report: RawReport, item: RawItem, index: number, override
     item.author_name ?? "unknown",
     index,
   ].join("::");
+  const rawItem = item as RawItem & { link_annotation_urls?: string[] };
+  const annotationUrl = (rawItem.link_annotation_urls ?? []).find(isOpenableHttpUrl) ?? null;
   const extractedOriginalUrl = cleanText(item.original_url) || null;
-  const overrideUrl = getOpenableOverrideUrlFromOverrides(overrides, id);
-  const pdfUrl = isOpenableHttpUrl(extractedOriginalUrl) ? extractedOriginalUrl : null;
-  const originalUrl = overrideUrl ?? pdfUrl;
+  const overrideUrl = annotationUrl ? null : getOpenableOverrideUrlFromOverrides(overrides, id);
+  const pdfUrl = annotationUrl ?? (isOpenableHttpUrl(extractedOriginalUrl) ? extractedOriginalUrl : null);
+  const originalUrl = pdfUrl ?? overrideUrl;
 
   return {
     id,

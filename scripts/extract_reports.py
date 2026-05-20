@@ -80,6 +80,7 @@ class ExtractedItem:
     captured_at_text: str | None
     original_url: str | None
     extracted_urls: list[str]
+    link_annotation_urls: list[str]
     evidence_image_path: str | None
     raw_text: str
     image_count: int
@@ -125,6 +126,22 @@ def extract_urls(text: str) -> list[str]:
         cleaned = match.rstrip(".,،؛:)")
         if cleaned not in urls:
             urls.append(cleaned)
+    return urls
+
+
+def extract_page_link_urls(doc: Any | None, page_number: int) -> list[str]:
+    if doc is None:
+        return []
+
+    urls: list[str] = []
+    try:
+        page = doc.load_page(page_number - 1)
+        for link in page.get_links():
+            uri = (link.get("uri") or "").strip()
+            if uri and uri not in urls:
+                urls.append(uri)
+    except Exception:
+        return urls
     return urls
 
 
@@ -255,7 +272,14 @@ def maybe_title(summary: str) -> str | None:
     return first_line[:120]
 
 
-def extract_item(path: Path, issue: int | None, page_number: int, text: str, image_count: int) -> ExtractedItem | None:
+def extract_item(
+    path: Path,
+    issue: int | None,
+    page_number: int,
+    text: str,
+    image_count: int,
+    link_annotation_urls: list[str],
+) -> ExtractedItem | None:
     if "المحتوى / الملخص" not in text:
         return None
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -267,7 +291,11 @@ def extract_item(path: Path, issue: int | None, page_number: int, text: str, ima
         confidence = "low"
     if len(summary) > 60 and platform != "Unknown" and author:
         confidence = "high"
-    urls = extract_urls(text)
+    text_urls = extract_urls(text)
+    urls = [*link_annotation_urls]
+    for url in text_urls:
+        if url not in urls:
+            urls.append(url)
 
     return ExtractedItem(
         source_pdf=path.name,
@@ -281,8 +309,9 @@ def extract_item(path: Path, issue: int | None, page_number: int, text: str, ima
         sentiment=infer_sentiment(text),
         published_date_text=extract_published_date_text(text),
         captured_at_text=extract_capture_text(text),
-        original_url=urls[0] if urls else None,
+        original_url=link_annotation_urls[0] if link_annotation_urls else text_urls[0] if text_urls else None,
         extracted_urls=urls,
+        link_annotation_urls=link_annotation_urls,
         evidence_image_path=None,
         raw_text=text[:5000],
         image_count=image_count,
@@ -312,7 +341,7 @@ def extract_report(
     seen_hashes.setdefault(digest, path.name)
     render_assets_root = None if duplicate_of else assets_root
     reader = PdfReader(str(path))
-    fitz_doc = fitz.open(str(path)) if fitz is not None and render_assets_root else None
+    fitz_doc = fitz.open(str(path)) if fitz is not None else None
     page_texts: list[str] = []
     page_images: list[int] = []
     for page in reader.pages:
@@ -328,7 +357,14 @@ def extract_report(
 
     items: list[ExtractedItem] = []
     for idx, text in enumerate(page_texts, start=1):
-        item = extract_item(path, issue, idx, text, page_images[idx - 1])
+        item = extract_item(
+            path,
+            issue,
+            idx,
+            text,
+            page_images[idx - 1],
+            extract_page_link_urls(fitz_doc, idx),
+        )
         if item:
             item.evidence_image_path = render_page_image(
                 fitz_doc,

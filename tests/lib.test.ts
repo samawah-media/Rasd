@@ -104,22 +104,23 @@ describe("connector and budget utilities", () => {
     assert.ok(report.filters.dates.length > 0);
     assert.ok(report.filters.sources.length > 0);
     assert.ok(report.filters.linkStatuses.includes("openable"));
-    assert.ok(report.filters.linkStatuses.includes("content_link_only"));
-    assert.ok(report.filters.linkStatuses.includes("legacy_evidence_only"));
+    assert.equal(report.filters.linkStatuses.includes("content_link_only"), false);
+    assert.equal(report.filters.linkStatuses.includes("legacy_evidence_only"), false);
     assert.ok(report.filters.screenshotStatuses.includes("available"));
     assert.ok(report.dailyDistribution.length > 0);
     assert.ok(report.platformDistribution.some((entry) => entry.platform === "X"));
     assert.equal(report.items.every((item) => item.reportLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.clientStatusLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-pages/")), true);
-    assert.ok(report.items.some((item) => item.contentUrl?.startsWith("https://")));
-    assert.equal(report.items.filter((item) => item.extractedOriginalUrl).length, 24);
+    assert.equal(report.items.filter((item) => item.originalUrl).length, 124);
+    assert.equal(report.items.filter((item) => item.extractedOriginalUrl).length, 124);
     assert.equal(
       report.items.filter((item) => item.platform === "X" && item.originalUrl && !item.originalUrl.includes("/status/")).length,
       0,
     );
-    assert.ok(report.items.filter((item) => item.platform === "X" && item.contentUrl).length > 0);
-    assert.equal(report.items.some((item) => item.extractedOriginalUrl?.includes("hedayathon.comسجّل")), true);
+    assert.equal(report.items.filter((item) => item.platform === "X" && item.originalUrl?.includes("/status/")).length, 70);
+    assert.equal(report.items.filter((item) => item.platform === "X" && item.contentUrl).length, 0);
+    assert.equal(report.items.some((item) => item.extractedUrls.some((url) => url.includes("hedayathon.comسجّل"))), true);
     assert.equal(report.items.some((item) => item.originalUrl?.includes("hedayathon.comسجّل")), false);
   });
 
@@ -127,13 +128,13 @@ describe("connector and budget utilities", () => {
     const backfill = getLegacyBackfillDataset();
 
     assert.equal(backfill.totalItems, 124);
-    assert.equal(backfill.itemsWithExtractedOriginalUrl, 24);
-    assert.equal(backfill.itemsWithOriginalUrl, 24);
-    assert.equal(backfill.itemsMissingOriginalUrl, 100);
-    assert.equal(backfill.itemsWithoutOpenableOriginalUrl, 100);
+    assert.equal(backfill.itemsWithExtractedOriginalUrl, 124);
+    assert.equal(backfill.itemsWithOriginalUrl, 124);
+    assert.equal(backfill.itemsMissingOriginalUrl, 0);
+    assert.equal(backfill.itemsWithoutOpenableOriginalUrl, 0);
     assert.equal(backfill.invalidOriginalUrlItems, 0);
-    assert.equal(backfill.overrideReadyItems, 3);
-    assert.ok(backfill.xItemsMissingOriginalUrl > 0);
+    assert.equal(backfill.overrideReadyItems, 0);
+    assert.equal(backfill.xItemsMissingOriginalUrl, 0);
     assert.equal(
       backfill.items
         .filter((item) => item.backfillStatus === "missing_url" || item.backfillStatus === "invalid_url")
