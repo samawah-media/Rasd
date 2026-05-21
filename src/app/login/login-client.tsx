@@ -2,12 +2,10 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { Eye, LockKeyhole, Mail, Radio, ShieldCheck } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
 export function LoginClient({ authError, nextPath }: { authError: string | null; nextPath: string }) {
-  const router = useRouter();
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,8 +28,8 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
       return;
     }
 
-    router.push(`/auth/redirect?next=${encodeURIComponent(nextPath)}`);
-    router.refresh();
+    await supabase.auth.getSession();
+    window.location.assign(`/auth/redirect?next=${encodeURIComponent(nextPath)}`);
   }
 
   async function signInWithGoogle() {
