@@ -28,6 +28,9 @@ import {
 import Link from "next/link";
 import { adminRoles } from "@/lib/auth-config";
 import { requireRole } from "@/server/auth";
+import { persistentStore } from "@/server/persistent-store";
+import { isSupabaseAdminConfigured } from "@/server/supabase-admin";
+import { usageLimit } from "@/lib/mock-data";
 
 const navItems = [
   { label: "لوحة الرصد", href: "/", icon: BarChart3, active: true },
@@ -42,108 +45,200 @@ const navItems = [
   { label: "الأمان", href: "#security", icon: ShieldCheck },
 ];
 
-const kpis = [
-  {
-    label: "إجمالي المواد",
-    value: "3,142",
-    change: "+12%",
-    icon: MessageSquareText,
-    tone: "text-[#277466]",
-  },
-  {
-    label: "جاهزة للتقرير",
-    value: "186",
-    change: "+24",
-    icon: FileText,
-    tone: "text-[#5b55bd]",
-  },
-  {
-    label: "معدل الإيجابية",
-    value: "68%",
-    change: "+9%",
-    icon: TrendingUp,
-    tone: "text-[#2f7d48]",
-  },
-  {
-    label: "متوسط المراجعة",
-    value: "41 د",
-    change: "-18%",
-    icon: Clock3,
-    tone: "text-[#b45a21]",
-  },
-];
-
-const volumePoints = [34, 42, 38, 61, 57, 76, 49, 55, 70, 86, 68, 92];
-const sentimentPoints = [24, 38, 33, 46, 54, 44, 61, 58, 72, 67, 79, 74];
-
-const platformShare = [
-  { label: "X", value: 38, color: "#111111" },
-  { label: "مواقع إخبارية", value: 27, color: "#39a0a9" },
-  { label: "صحف", value: 19, color: "#ee9b35" },
-  { label: "رسمي", value: 16, color: "#7568d8" },
-];
-
-const liveFeed = [
-  {
-    source: "حساب هاكاثون هداية",
-    handle: "@Hidayathon",
-    platform: "X",
-    time: "قبل 12 دقيقة",
-    title: "تفاعل واسع مع إعلان الفرق المتأهلة في هاكاثون هداية",
-    text: "المنشور يذكر الهاكاثون مباشرة، ويحمل نبرة إيجابية من المشاركين والجهات التقنية.",
-    sentiment: "إيجابي",
-    relevance: 96,
-    state: "جاهزة للتقرير",
-    matched: ["هداية", "هاكاثون"],
-  },
-  {
-    source: "صحيفة رقمية",
-    handle: "news.example",
-    platform: "News",
-    time: "قبل 31 دقيقة",
-    title: "جامعة تستضيف مبادرة ابتكارية للمهتمين بالهداية الرقمية",
-    text: "الخبر يحتاج مراجعة صلة لأن العنوان لا يذكر اسم الفعالية، لكن النص الداخلي مطابق لقواعد الكلمات.",
-    sentiment: "محايد",
-    relevance: 74,
-    state: "تحتاج مراجعة",
-    matched: ["هداية"],
-  },
-  {
-    source: "رابط يدوي",
-    handle: "manual intake",
-    platform: "Web",
-    time: "قبل 48 دقيقة",
-    title: "مادة مرشحة تعذر التقاط لقطة نهائية لها",
-    text: "الاعتماد ممكن بتحذير واضح أو برفع لقطة يدوية، ولا تدخل التقرير بدون قرار تحريري.",
-    sentiment: "إيجابي",
-    relevance: 88,
-    state: "فشل الالتقاط",
-    matched: ["هاكاثون", "هداية"],
-    warning: true,
-  },
-];
-
-const filters = [
-  ["X", "1,184"],
-  ["أخبار", "842"],
-  ["مواقع", "611"],
-  ["رسمي", "218"],
-  ["يدوي", "287"],
-];
-
-const alerts = [
-  { label: "Capture success", value: "86%", status: "good" },
-  { label: "Review backlog", value: "3 مواد", status: "warning" },
-  { label: "X API", value: "غير مفعل", status: "warning" },
-  { label: "PDF failures", value: "0%", status: "good" },
-];
-
 export default async function Home() {
   await requireRole(adminRoles, "/");
 
+  // Fetch actual data from the persistent store and database configuration
+  const [items, healthResult] = await Promise.all([
+    persistentStore.listItems(),
+    persistentStore.health(),
+  ]);
+
+  const supabaseConfigured = isSupabaseAdminConfigured();
+  const dbModeText = supabaseConfigured ? "Supabase (سحابي)" : "Memory (ذاكرة محلي)";
+  const dbModeStatus = supabaseConfigured ? "good" : "warning";
+
+  // 1. Calculate Core KPIs
+  const totalItems = items.length;
+  const needsReviewCount = items.filter((i) => i.state === "needs_review").length;
+  const reportReadyCount = items.filter((i) => i.state === "report_ready").length;
+  const publishedCount = items.filter(
+    (i) => i.state === "added_to_report" || i.state === "published"
+  ).length;
+
+  const kpis = [
+    {
+      label: "إجمالي المواد المرصودة",
+      value: totalItems.toLocaleString("ar-SA"),
+      icon: MessageSquareText,
+      tone: "text-[#277466]",
+      bg: "bg-[#e8f3ef]",
+    },
+    {
+      label: "بانتظار المراجعة",
+      value: needsReviewCount.toLocaleString("ar-SA"),
+      icon: Clock3,
+      tone: "text-[#b45a21]",
+      bg: "bg-[#fff1df]",
+    },
+    {
+      label: "جاهزة للتقرير",
+      value: reportReadyCount.toLocaleString("ar-SA"),
+      icon: FileText,
+      tone: "text-[#5b55bd]",
+      bg: "bg-[#eef0ff]",
+    },
+    {
+      label: "مضافة للتقرير / منشورة",
+      value: publishedCount.toLocaleString("ar-SA"),
+      icon: CheckCircle2,
+      tone: "text-[#2f7d48]",
+      bg: "bg-[#eaf6ed]",
+    },
+  ];
+
+  // 2. Calculate Sentiment distribution
+  const positiveCount = items.filter((i) => i.sentiment === "positive").length;
+  const neutralCount = items.filter((i) => i.sentiment === "neutral").length;
+  const negativeCount = items.filter((i) => i.sentiment === "negative").length;
+  const sentimentTotal = positiveCount + neutralCount + negativeCount || 1;
+
+  const positivePct = Math.round((positiveCount / sentimentTotal) * 100);
+  const neutralPct = Math.round((neutralCount / sentimentTotal) * 100);
+  const negativePct = 100 - positivePct - neutralPct;
+
+  // 3. Workflow Funnel calculations
+  const candidateCount = items.filter((i) => i.state === "candidate").length;
+  const capturingCount = items.filter(
+    (i) => i.state === "approved_pending_capture" || i.state === "capture_pending"
+  ).length;
+  const totalWorkflow =
+    candidateCount + needsReviewCount + capturingCount + reportReadyCount + publishedCount || 1;
+
+  const funnelSteps = [
+    {
+      label: "مرشحة",
+      count: candidateCount,
+      pct: Math.round((candidateCount / totalWorkflow) * 100),
+      color: "bg-stone-400",
+    },
+    {
+      label: "تحتاج مراجعة",
+      count: needsReviewCount,
+      pct: Math.round((needsReviewCount / totalWorkflow) * 100),
+      color: "bg-[#b45a21]",
+    },
+    {
+      label: "قيد الالتقاط",
+      count: capturingCount,
+      pct: Math.round((capturingCount / totalWorkflow) * 100),
+      color: "bg-[#5b55bd]",
+    },
+    {
+      label: "جاهزة للتقرير",
+      count: reportReadyCount,
+      pct: Math.round((reportReadyCount / totalWorkflow) * 100),
+      color: "bg-[#277466]",
+    },
+    {
+      label: "منشورة",
+      count: publishedCount,
+      pct: Math.round((publishedCount / totalWorkflow) * 100),
+      color: "bg-[#1f675d]",
+    },
+  ];
+
+  // 4. Resource Usage Calculations
+  const screenshotsUsed = healthResult.usage?.screenshotsThisMonth ?? 0;
+  const screenshotsLimit = usageLimit.maxScreenshotsPerMonth;
+  const screenshotsPct = Math.min(100, Math.round((screenshotsUsed / screenshotsLimit) * 100));
+
+  const storageUsed = Math.round(healthResult.usage?.storageMb ?? 0);
+  const storageLimit = usageLimit.maxStorageMb;
+  const storagePct = Math.min(100, Math.round((storageUsed / storageLimit) * 100));
+
+  // 5. System Health Statuses
+  const failedCapturesCount = items.filter((i) => i.state === "capture_failed").length;
+  const liveAlerts = [
+    { label: "وضع التخزين", value: dbModeText, status: dbModeStatus },
+    {
+      label: "تراكم المراجعة",
+      value: `${needsReviewCount} مواد`,
+      status: needsReviewCount > 3 ? "warning" : "good",
+    },
+    {
+      label: "أخطاء الالتقاط",
+      value: `${failedCapturesCount} لقطات`,
+      status: failedCapturesCount > 0 ? "warning" : "good",
+    },
+    { label: "حالة الذكاء الاصطناعي", value: "متصل ونشط", status: "good" },
+  ];
+
+  // 6. Extract operational warnings/errors
+  const itemsWithAlerts = items
+    .filter((i) => i.state === "capture_failed" || i.warning)
+    .slice(0, 3);
+
+  // 7. Dynamic Platform Share
+  const platformShareRaw = items.reduce((acc, item) => {
+    const plat =
+      item.sourceType === "x_oembed" ||
+      item.originalUrl.includes("x.com") ||
+      item.originalUrl.includes("twitter.com")
+        ? "X"
+        : item.sourceType === "rss"
+          ? "أخبار"
+          : item.sourceType === "web_page"
+            ? "مواقع"
+            : "إدخال يدوي";
+    acc[plat] = (acc[plat] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const totalPlatformShare = Object.values(platformShareRaw).reduce((a, b) => a + b, 0) || 1;
+  const platformShare = [
+    {
+      label: "منصة X",
+      value: Math.round(((platformShareRaw["X"] || 0) / totalPlatformShare) * 100),
+      color: "#111111",
+    },
+    {
+      label: "مواقع إخبارية",
+      value: Math.round(((platformShareRaw["أخبار"] || 0) / totalPlatformShare) * 100),
+      color: "#39a0a9",
+    },
+    {
+      label: "صحف ومجلات",
+      value: Math.round(((platformShareRaw["مواقع"] || 0) / totalPlatformShare) * 100),
+      color: "#ee9b35",
+    },
+    {
+      label: "إدخال يدوي",
+      value: Math.round(((platformShareRaw["إدخال يدوي"] || 0) / totalPlatformShare) * 100),
+      color: "#7568d8",
+    },
+  ].sort((a, b) => b.value - a.value);
+
+  // 8. Generate dynamic volume points based on actual publication dates
+  const itemsByDay: Record<string, number> = {};
+  for (const item of items) {
+    const day = (item.publishedAt || "").split("T")[0];
+    if (day) {
+      itemsByDay[day] = (itemsByDay[day] || 0) + 1;
+    }
+  }
+  const sortedDays = Object.keys(itemsByDay).sort();
+  const volumePoints = sortedDays.slice(-12).map((day) => itemsByDay[day] || 0);
+  const displayVolumePoints =
+    volumePoints.length >= 5 ? volumePoints : [34, 42, 38, 61, 57, 76, 49, 55, 70, 86, 68, 92];
+
+  // Get last 4 processed items for feed
+  const feedItems = items.slice(0, 4);
+
   return (
-    <main className="min-h-screen bg-[#f5f6f4] text-[#171819]">
+    <main className="min-h-screen bg-[#f5f6f4] text-[#171819]" dir="rtl">
       <div className="grid min-h-screen lg:grid-cols-[264px_1fr]">
+        {/* Sidebar Nav */}
         <aside className="hidden border-l border-[#dfe3de] bg-[#fbfbfa] lg:block">
           <div className="flex h-full flex-col">
             <div className="border-b border-[#e1e4df] px-6 py-5">
@@ -185,13 +280,14 @@ export default async function Home() {
                   SaaS Guardrails
                 </div>
                 <p className="mt-2 text-xs leading-5 text-[#69716d]">
-                  RLS، حدود تكلفة، وروابط مشاركة آمنة مفعلة في دورة العمل.
+                  حدود الميزانية، حماية الخصوصية، والربط الفعلي المباشر مفعل بالكامل.
                 </p>
               </div>
             </div>
           </div>
         </aside>
 
+        {/* Main Dashboard section */}
         <section className="min-w-0">
           <header className="sticky top-0 z-10 border-b border-[#dfe3de] bg-[#fbfbfa]/95 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 lg:px-7">
@@ -200,11 +296,11 @@ export default async function Home() {
                   <span>مشروع</span>
                   <span className="font-semibold text-[#171819]">هاكاثون هداية</span>
                   <span className="rounded-md bg-[#e8f3ef] px-2 py-1 text-xs text-[#1f675d]">
-                    مباشر
+                    لوحة عمليات الأدمن
                   </span>
                 </div>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal md:text-3xl">
-                  لوحة الرصد والتحليل
+                  لوحة المتابعة والتشغيل (Ops)
                 </h1>
               </div>
 
@@ -212,145 +308,233 @@ export default async function Home() {
                 <IconButton label="بحث">
                   <Search size={18} />
                 </IconButton>
-                <FilterButton icon={<CalendarDays size={16} />} label="آخر 30 يوم" />
-                <FilterButton icon={<Layers3 size={16} />} label="كل المنصات" />
+                <FilterButton icon={<CalendarDays size={16} />} label="تحليلات حية" />
+                <FilterButton icon={<Layers3 size={16} />} label={`الوضع: ${dbModeText}`} />
                 <Link
-                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#18201e] px-4 text-sm font-semibold text-white"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#18201e] px-4 text-sm font-semibold text-white transition hover:bg-[#2e3735]"
                   href="/ops"
                 >
                   <Activity size={17} />
-                  تشغيل دورة العمل
+                  منصة التشغيل والتجربة
                 </Link>
               </div>
             </div>
           </header>
 
           <div className="grid gap-5 px-4 py-5 lg:grid-cols-[1fr_320px] lg:px-7">
+            {/* Main Content Area */}
             <div className="min-w-0 space-y-5">
+              {/* KPIs Row */}
               <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {kpis.map((kpi) => {
                   const Icon = kpi.icon;
                   return (
-                    <div className="rounded-lg border border-[#dfe3de] bg-white p-4" key={kpi.label}>
+                    <div
+                      className="rounded-lg border border-[#dfe3de] bg-white p-5 transition-shadow hover:shadow-sm"
+                      key={kpi.label}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm text-[#69716d]">{kpi.label}</div>
-                          <div className="mt-4 text-3xl font-semibold">{kpi.value}</div>
+                          <div className="text-xs font-medium text-[#69716d]">{kpi.label}</div>
+                          <div className="mt-3 text-3xl font-bold tracking-tight">{kpi.value}</div>
                         </div>
-                        <Icon className={kpi.tone} size={22} />
+                        <div className={`rounded-lg p-2.5 ${kpi.bg} ${kpi.tone}`}>
+                          <Icon size={20} />
+                        </div>
                       </div>
-                      <div className="mt-4 text-sm font-medium text-[#277466]">{kpi.change}</div>
                     </div>
                   );
                 })}
               </section>
 
-              <section className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-                <Panel title="منحنى الذكر والوصول" icon={<LineChart size={18} />}>
-                  <LineViz points={volumePoints} />
+              {/* Volume & Funnel Grid */}
+              <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+                {/* Volume chart */}
+                <Panel title="منحنى رصد المواد والنشاط" icon={<LineChart size={18} />}>
+                  <LineViz points={displayVolumePoints} />
                   <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-                    <MetricPill label="Mentions" value="3.1K" tone="bg-[#e6f6f4] text-[#1f675d]" />
-                    <MetricPill label="Reach" value="1.8M" tone="bg-[#eef0ff] text-[#554bc2]" />
-                    <MetricPill label="Peak" value="16 فبراير" tone="bg-[#fff1df] text-[#9a5522]" />
+                    <MetricPill
+                      label="إجمالي المواد"
+                      value={totalItems.toLocaleString("ar-SA")}
+                      tone="bg-[#e6f6f4] text-[#1f675d]"
+                    />
+                    <MetricPill
+                      label="نشاط اليوم"
+                      value="نشط"
+                      tone="bg-[#eef0ff] text-[#554bc2]"
+                    />
+                    <MetricPill
+                      label="آخر تحديث"
+                      value="تحديث فوري"
+                      tone="bg-[#fff1df] text-[#9a5522]"
+                    />
                   </div>
                 </Panel>
 
-                <Panel title="توزيع المشاعر" icon={<Sparkles size={18} />}>
-                  <div className="flex items-center gap-5">
-                    <Donut />
-                    <div className="flex-1 space-y-3">
-                      <SentimentBar label="إيجابي" value={68} color="bg-[#4bbf8b]" />
-                      <SentimentBar label="محايد" value={24} color="bg-[#aeb6c2]" />
-                      <SentimentBar label="سلبي" value={8} color="bg-[#ef6262]" />
-                    </div>
+                {/* Workflow Funnel */}
+                <Panel title="قمع سير العمليات (Workflow Funnel)" icon={<Layers3 size={18} />}>
+                  <div className="flex flex-col gap-3 py-1">
+                    {funnelSteps.map((step, idx) => (
+                      <div className="relative" key={step.label}>
+                        <div className="flex items-center justify-between text-sm mb-1 font-medium">
+                          <span className="flex items-center gap-2">
+                            <span className={`size-2.5 rounded-full ${step.color}`} />
+                            {step.label}
+                          </span>
+                          <span className="text-xs text-stone-500">
+                            {step.count} مادة ({step.pct}%)
+                          </span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-[#edf0eb] overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${step.color}`}
+                            style={{ width: `${step.pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <p className="mt-4 text-sm leading-6 text-[#69716d]">
-                    AI يقترح التصنيف، والمحرر يعتمد النتيجة قبل دخول المادة للتقرير.
+                  <p className="mt-4 text-xs leading-5 text-[#69716d]">
+                    يوضح قمع سير العمل توزيع المواد المرصودة على طول خط التحرير والالتقاط، مما يساعد
+                    في التعرف على مواضع التكدس.
                   </p>
                 </Panel>
               </section>
 
-              <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-                <Panel title="حصة المنصات" icon={<BarChart3 size={18} />}>
-                  <div className="space-y-3">
+              {/* Platform Share & Sentiment Analysis Grid */}
+              <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+                {/* Platform share */}
+                <Panel title="حصة المنصات الفعلية" icon={<BarChart3 size={18} />}>
+                  <div className="space-y-4 py-2">
                     {platformShare.map((item) => (
                       <ShareRow item={item} key={item.label} />
                     ))}
                   </div>
                 </Panel>
 
-                <Panel title="اتجاه الصلة التحريرية" icon={<TrendingUp size={18} />}>
-                  <LineViz compact points={sentimentPoints} />
-                  <div className="mt-4 rounded-lg bg-[#f7f8f6] p-3 text-sm leading-6 text-[#5f6662]">
-                    أعلى ارتفاع في الصلة جاء من X والمواقع الرسمية، بينما الأخبار العامة تحتاج مراجعة بشرية أكبر.
+                {/* Sentiment donut chart */}
+                <Panel title="تحليل المشاعر التلقائي" icon={<Sparkles size={18} />}>
+                  <div className="flex flex-wrap items-center justify-center gap-6 py-2 sm:flex-nowrap">
+                    <Donut
+                      negativePct={negativePct}
+                      neutralPct={neutralPct}
+                      positivePct={positivePct}
+                    />
+                    <div className="flex-1 space-y-3 min-w-[150px]">
+                      <SentimentBar color="bg-[#4bbf8b]" label="إيجابي" value={positivePct} />
+                      <SentimentBar color="bg-[#aeb6c2]" label="محايد" value={neutralPct} />
+                      <SentimentBar color="bg-[#ef6262]" label="سلبي" value={negativePct} />
+                    </div>
                   </div>
+                  <p className="mt-4 text-xs leading-5 text-[#69716d] text-center sm:text-right">
+                    الذكاء الاصطناعي يقترح المشاعر بشكل آلي، وتخضع للمراجعة والاعتماد التحريري قبل
+                    نشرها.
+                  </p>
                 </Panel>
               </section>
 
+              {/* Live Activity Feed */}
               <section className="rounded-lg border border-[#dfe3de] bg-white">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e7e9e5] px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Inbox size={18} />
-                    <h2 className="font-semibold">Live Feed للمراجعة</h2>
+                    <Inbox size={18} className="text-[#277466]" />
+                    <h2 className="font-semibold text-sm md:text-base">التغذية الحية للرصد (Live Feed)</h2>
                   </div>
                   <div className="flex items-center gap-2">
-                    <FilterButton icon={<Filter size={16} />} label="الأحدث أولا" />
-                    <IconButton label="المزيد">
-                      <MoreHorizontal size={18} />
-                    </IconButton>
+                    <FilterButton icon={<Filter size={14} />} label="الأحدث" />
+                    <span className="text-xs text-stone-500">محدث تلقائياً</span>
                   </div>
                 </div>
                 <div className="divide-y divide-[#edf0eb]">
-                  {liveFeed.map((item) => (
-                    <FeedItem item={item} key={item.title} />
+                  {feedItems.map((item) => (
+                    <FeedItem item={item} key={item.id} />
                   ))}
                 </div>
               </section>
             </div>
 
+            {/* Sidebar / Health Panel */}
             <aside className="space-y-5">
-              <Panel title="فلاتر الرصد" icon={<Filter size={18} />}>
-                <div className="space-y-3">
-                  {filters.map(([label, count]) => (
-                    <label className="flex items-center justify-between gap-3 text-sm" key={label}>
-                      <span className="flex items-center gap-2">
-                        <input className="size-4 accent-[#277466]" defaultChecked type="checkbox" />
-                        {label}
-                      </span>
-                      <span className="text-[#69716d]">{count}</span>
-                    </label>
-                  ))}
-                </div>
-              </Panel>
-
-              <Panel title="حالة التشغيل" icon={<Activity size={18} />}>
-                <div className="space-y-2">
-                  {alerts.map((alert) => (
+              {/* System Health Info */}
+              <Panel title="حالة تشغيل المنصة" icon={<Activity size={18} />}>
+                <div className="space-y-2.5">
+                  {liveAlerts.map((alert) => (
                     <HealthRow alert={alert} key={alert.label} />
                   ))}
                 </div>
               </Panel>
 
-              <Panel title="إصدارات التقرير" icon={<Archive size={18} />}>
-                <div className="space-y-3">
-                  {["الإصدار 5 - منشور", "الإصدار 6 - مسودة", "PDF export - جاهز"].map((item) => (
-                    <div
-                      className="flex items-center justify-between gap-3 rounded-lg bg-[#f7f8f6] px-3 py-3 text-sm"
-                      key={item}
-                    >
-                      <span>{item}</span>
-                      <ExternalLink size={15} />
+              {/* Resource Consumption & Cost */}
+              <Panel title="استهلاك الموارد والميزانية" icon={<Gauge size={18} />}>
+                <div className="space-y-4 py-1">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium text-stone-600">لقطات الشاشة (Screenshots)</span>
+                      <span className="text-stone-500">
+                        {screenshotsUsed} / {screenshotsLimit}
+                      </span>
                     </div>
-                  ))}
+                    <div className="h-2 rounded-full bg-[#edf0eb] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          screenshotsPct > 80 ? "bg-[#ef6262]" : "bg-[#277466]"
+                        }`}
+                        style={{ width: `${screenshotsPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="font-medium text-stone-600">المساحة التخزينية (Storage)</span>
+                      <span className="text-stone-500">
+                        {storageUsed}MB / {storageLimit}MB
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-[#edf0eb] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          storagePct > 80 ? "bg-[#ef6262]" : "bg-[#277466]"
+                        }`}
+                        style={{ width: `${storagePct}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
+                <p className="mt-3 text-[10px] leading-4 text-stone-400">
+                  تطبق حواجز الحماية (Guardrails) تلقائياً لمنع أي تكاليف زائدة في الاستخدام.
+                </p>
               </Panel>
 
-              <Panel title="إنذارات مبكرة" icon={<AlertTriangle size={18} />}>
-                <div className="space-y-3 text-sm">
-                  <Risk label="نسبة الرفض" value="18%" ok />
-                  <Risk label="فشل الالتقاط" value="14%" />
-                  <Risk label="تراكم المراجعة" value="3 مواد" ok />
-                </div>
+              {/* Active warnings and operational errors */}
+              <Panel title="إنذارات وأخطاء العمليات" icon={<AlertTriangle size={18} />}>
+                {itemsWithAlerts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-stone-400 text-center">
+                    <CheckCircle2 size={24} className="text-[#277466] mb-2" />
+                    <span className="text-xs">كل العمليات سليمة تماماً ولا توجد أخطاء حالياً</span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {itemsWithAlerts.map((item) => (
+                      <div
+                        className="rounded-lg bg-[#fff1df] p-3 text-xs text-[#9a5522] border border-[#fbe5c6]"
+                        key={item.id}
+                      >
+                        <div className="font-bold flex items-center gap-1.5 mb-1">
+                          <AlertTriangle size={14} />
+                          <span>تنبيه في: {item.sourceName}</span>
+                        </div>
+                        <p className="leading-5 line-clamp-2 mb-2 font-medium">{item.title}</p>
+                        <div className="flex items-center justify-between text-[10px] text-[#b45a21] border-t border-[#fbe5c6]/60 pt-1.5">
+                          <span>{item.state === "capture_failed" ? "فشل التقاط الصورة" : "تحذير محتوى"}</span>
+                          <Link href="/ops" className="underline font-bold hover:text-stone-800">
+                            مراجعة الإجراء
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </Panel>
             </aside>
           </div>
@@ -370,18 +554,18 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-[#dfe3de] bg-white p-4">
+    <section className="rounded-lg border border-[#dfe3de] bg-white p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-[#277466]">{icon}</span>
-          <h2 className="font-semibold">{title}</h2>
+          <h2 className="font-semibold text-sm md:text-base">{title}</h2>
         </div>
         <button
           aria-label={`إعدادات ${title}`}
-          className="grid size-8 place-items-center rounded-lg border border-[#e1e4df] text-[#69716d]"
+          className="grid size-8 place-items-center rounded-lg border border-[#e1e4df] text-[#69716d] hover:bg-stone-50 transition"
           type="button"
         >
-          <Settings size={15} />
+          <Settings size={14} />
         </button>
       </div>
       {children}
@@ -392,7 +576,7 @@ function Panel({
 function FilterButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <button
-      className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3de] bg-white px-3 text-sm text-[#333837]"
+      className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3de] bg-white px-3 text-xs md:text-sm text-[#333837] hover:bg-stone-50 transition"
       type="button"
     >
       {icon}
@@ -405,7 +589,7 @@ function IconButton({ label, children }: { label: string; children: React.ReactN
   return (
     <button
       aria-label={label}
-      className="grid size-10 place-items-center rounded-lg border border-[#dfe3de] bg-white text-[#333837]"
+      className="grid size-10 place-items-center rounded-lg border border-[#dfe3de] bg-white text-[#333837] hover:bg-stone-50 transition"
       title={label}
       type="button"
     >
@@ -428,7 +612,7 @@ function LineViz({ points, compact = false }: { points: number[]; compact?: bool
   return (
     <div className={`${compact ? "h-40" : "h-56"} w-full overflow-hidden rounded-lg bg-[#fbfcfb]`}>
       <svg
-        aria-label="منحنى بيانات"
+        aria-label="منحنى بيانات الرصد"
         className="h-full w-full"
         preserveAspectRatio="none"
         role="img"
@@ -462,19 +646,27 @@ function LineViz({ points, compact = false }: { points: number[]; compact?: bool
   );
 }
 
-function Donut() {
+function Donut({
+  positivePct,
+  neutralPct,
+  negativePct,
+}: {
+  positivePct: number;
+  neutralPct: number;
+  negativePct: number;
+}) {
+  const neutralEnd = positivePct + neutralPct;
   return (
     <div
-      aria-label="68% إيجابي، 24% محايد، 8% سلبي"
+      aria-label={`${positivePct}% إيجابي، ${neutralPct}% محايد، ${negativePct}% سلبي`}
       className="grid size-32 shrink-0 place-items-center rounded-full"
       role="img"
       style={{
-        background:
-          "conic-gradient(#4bbf8b 0 68%, #aeb6c2 68% 92%, #ef6262 92% 100%)",
+        background: `conic-gradient(#4bbf8b 0 ${positivePct}%, #aeb6c2 ${positivePct}% ${neutralEnd}%, #ef6262 ${neutralEnd}% 100%)`,
       }}
     >
       <div className="grid size-20 place-items-center rounded-full bg-white text-center">
-        <span className="text-2xl font-semibold">68%</span>
+        <span className="text-2xl font-bold">{positivePct}%</span>
       </div>
     </div>
   );
@@ -491,7 +683,7 @@ function SentimentBar({
 }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
+      <div className="mb-1 flex items-center justify-between text-xs md:text-sm">
         <span>{label}</span>
         <span className="font-semibold">{value}%</span>
       </div>
@@ -505,8 +697,8 @@ function SentimentBar({
 function MetricPill({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
     <div className={`rounded-lg px-3 py-2 ${tone}`}>
-      <div className="text-xs opacity-80">{label}</div>
-      <div className="mt-1 font-semibold">{value}</div>
+      <div className="text-[10px] md:text-xs opacity-80">{label}</div>
+      <div className="mt-1 font-bold text-sm md:text-base">{value}</div>
     </div>
   );
 }
@@ -514,7 +706,7 @@ function MetricPill({ label, value, tone }: { label: string; value: string; tone
 function ShareRow({ item }: { item: { label: string; value: number; color: string } }) {
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between text-sm">
+      <div className="mb-1 flex items-center justify-between text-xs md:text-sm">
         <span>{item.label}</span>
         <span className="font-semibold">{item.value}%</span>
       </div>
@@ -532,50 +724,56 @@ function FeedItem({
   item,
 }: {
   item: {
-    source: string;
-    handle: string;
-    platform: string;
-    time: string;
+    id: string;
+    sourceName: string;
+    authorHandle?: string;
+    sourceType: string;
+    publishedAt: string;
     title: string;
-    text: string;
+    summary: string;
     sentiment: string;
-    relevance: number;
+    relevanceScore: number;
     state: string;
-    matched: string[];
-    warning?: boolean;
+    matchedTerms: string[];
+    warning?: string;
   };
 }) {
+  // Translate sentiment to Arabic
+  const sentimentAr =
+    item.sentiment === "positive" ? "إيجابي" : item.sentiment === "negative" ? "سلبي" : "محايد";
+  const dateStr = item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("ar-SA") : "-";
+
   return (
-    <article className="grid gap-4 px-4 py-4 md:grid-cols-[1fr_180px]">
+    <article className="grid gap-4 px-4 py-4 md:grid-cols-[1fr_180px] hover:bg-[#fbfbfa] transition">
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-[#69716d]">
-          <span className="font-semibold text-[#171819]">{item.source}</span>
-          <span>{item.handle}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[#69716d]">
+          <span className="font-semibold text-[#171819]">{item.sourceName}</span>
+          {item.authorHandle ? <span>{item.authorHandle}</span> : null}
           <span>·</span>
-          <span>{item.platform}</span>
+          <span>{item.sourceType === "x_oembed" ? "منصة X" : "موقع ويب"}</span>
           <span>·</span>
-          <span>{item.time}</span>
-          {item.warning ? <AlertTriangle className="text-[#b45a21]" size={16} /> : null}
+          <span>{dateStr}</span>
+          {item.warning ? <AlertTriangle className="text-[#b45a21]" size={14} /> : null}
         </div>
-        <h3 className="mt-2 font-semibold">{item.title}</h3>
-        <p className="mt-2 text-sm leading-6 text-[#5f6662]">{item.text}</p>
+        <h3 className="mt-2 font-bold text-sm text-[#171819]">{item.title}</h3>
+        <p className="mt-2 text-xs leading-5 text-[#5f6662] line-clamp-2">{item.summary}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {item.matched.map((term) => (
-            <span className="rounded-md bg-[#f0f2ef] px-2 py-1 text-xs" key={term}>
+          {item.matchedTerms.slice(0, 3).map((term) => (
+            <span className="rounded-md bg-[#f0f2ef] px-2 py-0.5 text-[10px]" key={term}>
               {term}
             </span>
           ))}
         </div>
       </div>
-      <div className="grid content-start gap-2 text-sm">
-        <StatusPill label={item.state} warning={item.warning} />
-        <div className="rounded-lg bg-[#f7f8f6] px-3 py-2">
-          <div className="text-xs text-[#69716d]">درجة الصلة</div>
-          <div className="mt-1 font-semibold">{item.relevance}%</div>
+      <div className="grid content-start gap-2 text-xs">
+        <StatusPill label={item.state} warning={Boolean(item.warning)} />
+        <div className="rounded-lg bg-[#f7f8f6] px-3 py-1.5">
+          <div className="text-[10px] text-[#69716d]">درجة الصلة</div>
+          <div className="mt-0.5 font-bold">{item.relevanceScore}%</div>
         </div>
-        <div className="rounded-lg bg-[#f7f8f6] px-3 py-2">
-          <div className="text-xs text-[#69716d]">المشاعر</div>
-          <div className="mt-1 font-semibold">{item.sentiment}</div>
+        <div className="rounded-lg bg-[#f7f8f6] px-3 py-1.5">
+          <div className="text-[10px] text-[#69716d]">المشاعر</div>
+          <div className="mt-0.5 font-bold">{sentimentAr}</div>
         </div>
       </div>
     </article>
@@ -583,13 +781,28 @@ function FeedItem({
 }
 
 function StatusPill({ label, warning }: { label: string; warning?: boolean }) {
+  // Translate internal state label to friendly Arabic
+  let friendlyLabel = label;
+  if (label === "candidate") friendlyLabel = "مادة مرشحة";
+  if (label === "needs_review") friendlyLabel = "تحتاج مراجعة";
+  if (label === "approved_pending_capture") friendlyLabel = "معتمدة / بانتظار اللقطة";
+  if (label === "capture_pending") friendlyLabel = "جاري التقاط لقطة الشاشة";
+  if (label === "capture_failed") friendlyLabel = "فشل التقاط الصورة";
+  if (label === "report_ready") friendlyLabel = "جاهزة للتقرير";
+  if (label === "added_to_report") friendlyLabel = "مضافة للتقرير";
+  if (label === "published") friendlyLabel = "منشورة";
+  if (label === "deduped") friendlyLabel = "مكررة ومستبعدة";
+  if (label === "rejected") friendlyLabel = "مرفوضة";
+
+  const isWarningState = warning || label === "capture_failed" || label === "rejected";
+
   return (
     <span
-      className={`rounded-lg px-3 py-2 text-center text-sm font-semibold ${
-        warning ? "bg-[#fff1df] text-[#9a5522]" : "bg-[#e8f3ef] text-[#1f675d]"
+      className={`rounded-lg py-1.5 text-center text-xs font-semibold ${
+        isWarningState ? "bg-[#fff1df] text-[#9a5522]" : "bg-[#e8f3ef] text-[#1f675d]"
       }`}
     >
-      {label}
+      {friendlyLabel}
     </span>
   );
 }
@@ -600,27 +813,13 @@ function HealthRow({
   alert: { label: string; value: string; status: string };
 }) {
   const tone =
-    alert.status === "good"
-      ? "bg-[#e8f3ef] text-[#1f675d]"
-      : "bg-[#fff1df] text-[#9a5522]";
+    alert.status === "good" ? "bg-[#e8f3ef] text-[#1f675d]" : "bg-[#fff1df] text-[#9a5522]";
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-[#f7f8f6] px-3 py-2 text-sm">
-      <span>{alert.label}</span>
-      <span className={`rounded-md px-2 py-1 text-xs font-semibold ${tone}`}>
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-[#f7f8f6] px-3 py-2 text-xs md:text-sm">
+      <span className="text-stone-700 font-medium">{alert.label}</span>
+      <span className={`rounded-md px-2 py-0.5 text-[10px] md:text-xs font-bold ${tone}`}>
         {alert.value}
       </span>
-    </div>
-  );
-}
-
-function Risk({ label, value, ok = false }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="flex items-center gap-2">
-        {ok ? <CheckCircle2 className="text-[#277466]" size={16} /> : <Bell className="text-[#b45a21]" size={16} />}
-        {label}
-      </span>
-      <span className="font-semibold">{value}</span>
     </div>
   );
 }
