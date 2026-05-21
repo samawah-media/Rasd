@@ -490,19 +490,32 @@ Status: simplified on 2026-05-21. The team decided not to expose share-link mana
 
 These tasks move from manual/legacy testing into actual monitoring.
 
+Detailed execution plan: [priority-c-real-source-integrations-plan.md](priority-c-real-source-integrations-plan.md)
+
 ### C1. RSS/News Sources
 
-- Add source registry for news/RSS.
-- Poll configured sources.
-- Normalize articles into monitoring items.
-- Dedupe by canonical URL.
-- Mark source reliability.
+Status: planned on 2026-05-21. Start small with source registry and manual polling before cron.
+
+- [ ] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
+- [ ] Use the existing `source_credibility` enum instead of adding a second reliability model.
+- [ ] Build RSS fetch/normalize utility with safe URL checks and timeout.
+- [ ] Dedupe by canonical URL and source item ID.
+- [ ] Add owner/editor manual polling endpoint before scheduled cron.
+- [ ] Add scheduled cron only after confirming Vercel plan limits and `CRON_SECRET`.
+- [ ] Keep initial official/media items in review flow; avoid broad auto-approve until real QA passes.
 
 ### C2. Manual Web Extraction
 
-- Given a URL, extract title, text, author, date, image, and canonical URL.
-- Store raw extraction separately from client-safe fields.
-- Allow editor correction.
+Status: planned on 2026-05-21. Improve the current extractor and correction workflow without adding unnecessary DB fields.
+
+- [ ] Use existing `monitoring_items.raw_response` for compact internal extraction details.
+- [ ] Do not add a new `raw_data` column now.
+- [ ] Improve URL extraction for title, summary, author, date, image, and canonical URL.
+- [ ] Keep X oEmbed behavior unchanged.
+- [ ] Add editor correction endpoint for title, summary, author, date, and original URL.
+- [ ] Preserve old extracted values in `raw_response` and audit logs.
+- [ ] Add Readability later only after manual/RSS extraction is stable.
+- [ ] Keep external fallback services optional and env-gated.
 
 ### C3. X/Twitter Workflow
 
