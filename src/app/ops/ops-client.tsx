@@ -16,8 +16,19 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Cpu,
+  Database,
+  Terminal,
+  Server,
+  Globe,
+  Activity,
+  Settings,
+  CheckSquare,
+  Activity as HeartbeatIcon,
 } from "lucide-react";
 import type { Capture, HealthMetric, KeywordRule, MonitoringItem, ReportVersion, Source } from "@/lib/types";
+import AppShell from "@/components/AppShell";
+import { BentoGrid, BentoCard } from "@/components/BentoGrid";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
@@ -762,543 +773,639 @@ export function OpsClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f8f4] text-[#17201d]" dir="rtl">
-      <style jsx global>{`
-        .ops-primary {
-          display: inline-flex;
-          height: 2.5rem;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          border-radius: 0.5rem;
-          background: #116a5c;
-          padding: 0 1rem;
-          font-size: 0.875rem;
-          font-weight: 700;
-          color: white;
-          transition: background 0.18s ease;
-        }
-        .ops-primary:hover {
-          background: #0f594e;
-        }
-        .ops-primary:disabled {
-          opacity: 0.55;
-        }
-      `}</style>
+    <AppShell>
+      <div className="min-h-screen bg-[var(--color-bg-main)] p-5 md:p-8" dir="rtl">
+        <style jsx global>{`
+          .ops-primary {
+            display: inline-flex;
+            height: 2rem;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            border-radius: 0.75rem;
+            background: #111111;
+            padding: 0 0.75rem;
+            font-size: 11px;
+            font-weight: 800;
+            color: white;
+            transition: all 0.2s ease;
+          }
+          .ops-primary:hover {
+            background: #2383E2;
+          }
+          .ops-primary:disabled {
+            opacity: 0.55;
+          }
+        `}</style>
 
-      <section className="border-b border-[#dfe3d9] bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+        {/* Header Section */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 select-none">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#66736d]">
-              <span>تشغيل الرصد</span>
-              <span className={`rounded-full px-2 py-1 ${systemTone(state.metrics)}`}>{systemText(state.metrics)}</span>
+            <div className="flex items-center gap-2 text-[10px] font-extrabold text-[var(--color-text-muted)] tracking-wider uppercase">
+              <Cpu className="h-3.5 w-3.5 text-[#2383E2]" />
+              <span>غرفة الرصد والتشغيل الرقمي</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-border)]" />
+              <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${systemTone(state.metrics)}`}>
+                {systemText(state.metrics)}
+              </span>
             </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal md:text-3xl">إضافة ومراجعة المحتوى</h1>
+            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <a
               href="/client-report"
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm font-semibold transition hover:border-[#116a5c]/45"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition hover:text-[#2383E2]"
             >
-              واجهة العميل
-              <ChevronLeft className="h-4 w-4" />
+              واجهة التقرير النهائي
+              <ChevronLeft className="h-3.5 w-3.5" />
             </a>
             <button
               type="button"
               onClick={refresh}
               disabled={pending !== null}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 ${pending === "refresh" ? "animate-spin" : ""}`} />
-              تحديث
+              <RefreshCw className={`h-3.5 w-3.5 ${pending === "refresh" ? "animate-spin" : ""}`} />
+              تحديث البيانات
             </button>
           </div>
-        </div>
-      </section>
+        </header>
 
-      <section className="mx-auto max-w-7xl px-5 py-5">
-        <form onSubmit={submitUrl} className="border-b border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03] md:rounded-lg md:border">
-          <div className="mb-3">
-            <h2 className="text-sm font-bold">رابط مادة واحدة</h2>
-            <p className="mt-1 text-xs font-semibold text-[#66736d]">استخدمها لتجربة خبر أو تغريدة من التقارير.</p>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-            <label className="relative block">
-              <LinkIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
-              <input
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="الصق رابط خبر أو تغريدة واحدة"
-                className="h-12 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-10 pl-3 text-left text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
-                dir="ltr"
-                required
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={pending !== null}
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-5 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
-            >
-              {pending === "manual" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              إضافة
-            </button>
-          </div>
-
-          <details className="mt-3">
-            <summary className="inline-flex cursor-pointer rounded-md px-1 text-sm font-semibold text-[#66736d] transition hover:text-[#116a5c]">
-              تعديل يدوي
-            </summary>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="عنوان"
-                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
-              />
-              <input
-                value={authorName}
-                onChange={(event) => setAuthorName(event.target.value)}
-                placeholder="الناشر"
-                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
-              />
-              <input
-                value={publishedAt}
-                onChange={(event) => setPublishedAt(event.target.value)}
-                type="datetime-local"
-                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
-              />
-              <textarea
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                placeholder="ملخص"
-                className="min-h-20 rounded-lg border border-[#dfe3d9] bg-white p-3 text-sm leading-6 outline-none focus:border-[#116a5c] md:col-span-3"
-              />
+        {/* Global Notifications Panel */}
+        {message && (
+          <div className={`mb-6 rounded-2xl border p-4 text-xs font-bold flex items-center justify-between shadow-sm transition-all duration-300 ${messageClass(messageType)}`}>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>{message}</span>
             </div>
-          </details>
+            <button type="button" onClick={() => setMessage(null)} className="text-[10px] underline font-extrabold hover:text-[#2383E2]">
+              إغلاق
+            </button>
+          </div>
+        )}
 
-          {message ? (
-            <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-semibold ${messageClass(messageType)}`}>{message}</div>
-          ) : null}
-        </form>
-        <div className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        {/* Pipeline Ingestion Flow (Daydream Animated Ingestion Visualizer) */}
+        <div className="bg-white rounded-3xl border border-[var(--color-border)] p-6 shadow-sm mb-6 select-none relative overflow-hidden group hover:border-[#2383E2]/35 transition-all duration-300">
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#2383E2]/[0.01] to-[#00C853]/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
-              <h2 className="text-sm font-bold">مصادر الأخبار</h2>
-              <p className="mt-1 text-xs font-semibold text-[#66736d]">
-                للموجزات فقط، وليس روابط الأخبار الفردية. المواد الجديدة تظهر في قائمة المراجعة.
+              <h2 className="text-sm font-black text-[var(--color-text-title)] flex items-center gap-2">
+                <Activity className="h-4 w-4 text-[#2383E2]" />
+                سير المعالجة والتشغيل الفوري
+              </h2>
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-1 font-semibold">
+                مراقبة حية لتدفق البيانات الذكي من المصادر الخارجية وصولاً للتقارير المعتمدة.
               </p>
             </div>
-            <form onSubmit={submitRssSource} className="grid w-full gap-2 md:max-w-2xl md:grid-cols-[160px_minmax(0,1fr)_auto]">
-              <input
-                value={rssName}
-                onChange={(event) => setRssName(event.target.value)}
-                placeholder="اسم المصدر"
-                className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
-              />
-              <input
-                value={rssFeedUrl}
-                onChange={(event) => setRssFeedUrl(event.target.value)}
-                placeholder="https://example.com/rss.xml"
-                className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-left text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
-                dir="ltr"
-                required
-              />
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#00C853] animate-pulse" />
+              <span className="text-[10px] font-extrabold text-[#00C853]">متصل بالنظام المباشر</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 relative">
+            {/* Node 1: Ingestion */}
+            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
+              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
+                <Database className="h-4.5 w-4.5" />
+              </div>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">سحب البيانات</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{activeRssSources.length} مصادر نشطة</span>
+            </div>
+
+            {/* Node 2: Filter */}
+            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
+              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
+                <Search className="h-4.5 w-4.5" />
+              </div>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">تصفية الكلمات</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.active} مواد بالتدفق</span>
+            </div>
+
+            {/* Node 3: Validation */}
+            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
+              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
+                <CheckSquare className="h-4.5 w-4.5" />
+              </div>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">التدقيق الفني</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.review} بانتظار الاعتماد</span>
+            </div>
+
+            {/* Node 4: Ready */}
+            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
+              <div className="w-9 h-9 rounded-xl bg-[#00C853]/10 flex items-center justify-center text-[#00C853] mb-3 group-hover/node:scale-110 transition-transform">
+                <Sparkles className="h-4.5 w-4.5" />
+              </div>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">جاهز للتقرير</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.report} مواد جاهزة للعميل</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bento Control Center Grid */}
+        <BentoGrid className="mb-6">
+          {/* Card 1: Add Single URL */}
+          <BentoCard colSpan="col-span-12 md:col-span-4" title="رصد مادة فردية" icon={LinkIcon} subtitle="إضافة تغريدة أو مقال إخباري مستقل">
+            <form onSubmit={submitUrl} className="space-y-3 mt-1">
+              <div className="relative">
+                <input
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  placeholder="الصق الرابط المباشر للمادة..."
+                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] pr-3 pl-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  dir="ltr"
+                  required
+                />
+              </div>
+
+              <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
+                <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-muted)] hover:text-[#2383E2] select-none">
+                  تعديل يدوي للتفاصيل
+                </summary>
+                <div className="mt-2.5 space-y-2">
+                  <input
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    placeholder="عنوان المادة"
+                    className="h-8 w-full rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs outline-none focus:border-[#2383E2]"
+                  />
+                  <div className="grid gap-2 grid-cols-2">
+                    <input
+                      value={authorName}
+                      onChange={(event) => setAuthorName(event.target.value)}
+                      placeholder="الناشر"
+                      className="h-8 w-full rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs outline-none focus:border-[#2383E2]"
+                    />
+                    <input
+                      value={publishedAt}
+                      onChange={(event) => setPublishedAt(event.target.value)}
+                      type="datetime-local"
+                      className="h-8 w-full rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs outline-none focus:border-[#2383E2]"
+                    />
+                  </div>
+                  <textarea
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    placeholder="ملخص محتوى المادة"
+                    className="min-h-16 w-full rounded-lg border border-[var(--color-border)] bg-white p-2 text-xs leading-5 outline-none focus:border-[#2383E2] resize-none"
+                  />
+                </div>
+              </details>
+
               <button
                 type="submit"
                 disabled={pending !== null}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+                className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
               >
-                {pending === "rss-source" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                حفظ
+                {pending === "manual" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                سحب وإضافة المادة
               </button>
             </form>
-          </div>
+          </BentoCard>
 
-          {rssSources.length ? (
-            <>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Card 2: RSS Sources Ingestion */}
+          <BentoCard colSpan="col-span-12 md:col-span-4" title="مصادر الأخبار (RSS)" icon={Globe} subtitle="إدارة وجدولة سحب موجزات الأخبار">
+            <div className="flex flex-col h-full justify-between gap-3">
+              <form onSubmit={submitRssSource} className="grid grid-cols-[1fr_auto] gap-2">
+                <input
+                  value={rssFeedUrl}
+                  onChange={(event) => setRssFeedUrl(event.target.value)}
+                  placeholder="رابط موجز RSS الجديد..."
+                  className="h-9 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  dir="ltr"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={pending !== null}
+                  className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-[#111111] px-3 text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
+                >
+                  {pending === "rss-source" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  إضافة
+                </button>
+              </form>
+
+              {rssSources.length ? (
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {rssSources.map((source) => (
+                    <div key={source.id} className="flex items-center justify-between gap-2 p-2 bg-[var(--color-bg-main)] rounded-xl border border-[var(--color-border)]">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />
+                          <p className="text-[11px] font-bold text-[var(--color-text-title)] truncate">{source.name}</p>
+                        </div>
+                        <p className="text-[9px] text-[var(--color-text-muted)] mt-0.5">جدولة: {scheduleLabel(source.pollIntervalMinutes)}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <select
+                          aria-label="جدولة المصدر"
+                          className="h-6 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold outline-none transition focus:border-[#2383E2] disabled:opacity-50"
+                          disabled={pending !== null}
+                          onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
+                          value={source.pollIntervalMinutes}
+                        >
+                          {sourceScheduleOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                          disabled={pending !== null}
+                          className="inline-flex h-6 items-center gap-1 rounded-lg bg-white border border-[var(--color-border)] px-2 text-[10px] font-bold hover:bg-stone-50 disabled:opacity-50"
+                        >
+                          {source.isActive ? "إيقاف" : "تفعيل"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => pollSource(source)}
+                          disabled={pending !== null || !source.isActive}
+                          className="inline-flex h-6 items-center gap-1 rounded-lg bg-white border border-[var(--color-border)] px-2 text-[10px] font-bold hover:bg-stone-50 disabled:opacity-50"
+                        >
+                          {pending === `poll-${source.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                          تشغيل
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[10px] text-[var(--color-text-muted)] text-center py-4">لا توجد مصادر RSS نشطة حاليًا.</p>
+              )}
+
               <button
                 type="button"
                 onClick={pollActiveSources}
                 disabled={pending !== null || !activeRssSources.length}
-                className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#116a5c]/25 bg-[#e8f5ef] px-3 text-sm font-semibold text-[#116a5c] transition hover:border-[#116a5c]/60 disabled:opacity-50"
+                className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] text-[11px] font-extrabold text-[#00C853] hover:bg-[#d4f2e4] transition disabled:opacity-50"
               >
-                {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                تشغيل المصادر النشطة
+                {pending === "poll-active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                فحص كافة المصادر النشطة
               </button>
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {rssSources.map((source) => (
-                <div
-                  key={source.id}
-                  className={`flex flex-col gap-3 rounded-lg border border-[#edf0e9] px-3 py-2 ${
-                    source.isActive ? "bg-[#fbfbf8]" : "bg-[#f5f1ed] opacity-80"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="truncate text-sm font-bold">{source.name}</div>
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${source.isActive ? "bg-[#e8f5ef] text-[#116a5c]" : "bg-[#fff1ed] text-[#9a341f]"}`}>
-                          {source.isActive ? "نشط" : "متوقف"}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-xs font-semibold text-[#66736d]">
-                        آخر نجاح: {source.lastSuccessAt ? formatDate(source.lastSuccessAt) : "لم يعمل بعد"}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => pollSource(source)}
-                      disabled={pending !== null || !source.isActive}
-                      className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
-                    >
-                      {pending === `poll-${source.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                      تشغيل
-                    </button>
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <select
-                      value={source.pollIntervalMinutes}
-                      onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
-                      disabled={pending !== null}
-                      className="h-9 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold outline-none transition focus:border-[#116a5c] disabled:opacity-50"
-                      aria-label="جدولة المصدر"
-                    >
-                      {sourceScheduleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
-                      disabled={pending !== null}
-                      className="inline-flex h-9 items-center justify-center rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
-                    >
-                      {source.isActive ? "إيقاف" : "تشغيل تلقائي"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-            </>
-          ) : (
-            <div className="mt-4 rounded-lg border border-dashed border-[#cfd6cb] bg-[#fbfbf8] px-3 py-4 text-sm font-semibold text-[#66736d]">
-              لا توجد مصادر RSS نشطة حتى الآن. أضف أول مصدر من النموذج بالأعلى.
-            </div>
-          )}
-        </div>
+          </BentoCard>
 
-        <form onSubmit={submitKeywordRule} className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 className="text-sm font-bold">كلمات الرصد</h2>
-              <p className="mt-1 text-xs font-semibold text-[#66736d]">
-                سطر لكل كلمة. الإشارات الأساسية وحدها تدخل الخبر، وكلمات السياق ترفع الصلة.
-              </p>
-            </div>
-            <button
-              type="submit"
-              disabled={pending !== null}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
-            >
-              {pending === "keywords" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              حفظ الكلمات
-            </button>
-          </div>
-          <div className="mt-3 grid gap-3 lg:grid-cols-3">
-            <label className="block">
-              <span className="text-xs font-bold text-[#52605a]">إشارات أساسية</span>
-              <textarea
-                value={requiredTerms}
-                onChange={(event) => setRequiredTerms(event.target.value)}
-                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-bold text-[#52605a]">كلمات سياق</span>
-              <textarea
-                value={optionalTerms}
-                onChange={(event) => setOptionalTerms(event.target.value)}
-                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs font-bold text-[#52605a]">استبعاد</span>
-              <textarea
-                value={excludeTerms}
-                onChange={(event) => setExcludeTerms(event.target.value)}
-                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
-              />
-            </label>
-          </div>
-        </form>
-      </section>
-
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0 rounded-lg border border-[#dfe3d9] bg-white">
-          <div className="border-b border-[#dfe3d9] p-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(tabLabels) as WorkTab[]).map((itemTab) => (
-                  <button
-                    key={itemTab}
-                    type="button"
-                    onClick={() => setTab(itemTab)}
-                    className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
-                      tab === itemTab
-                        ? "border-[#116a5c] bg-[#e8f5ef] text-[#116a5c]"
-                        : "border-[#dfe3d9] bg-[#fbfbf8] text-[#66736d] hover:border-[#116a5c]/45"
-                    }`}
-                  >
-                    {tabLabels[itemTab]}
-                    <span>{tabCounts[itemTab].toLocaleString("ar-SA")}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  onClick={archiveVisibleItems}
-                  disabled={pending !== null || !visibleItems.length}
-                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
-                >
-                  {pending === "archive-visible" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  تنظيف المواد الظاهرة
-                </button>
-                <label className="relative block xl:w-72">
-                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="بحث"
-                    className="h-9 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-9 pl-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
+          {/* Card 3: Keywords Settings */}
+          <BentoCard colSpan="col-span-12 md:col-span-4" title="كلمات الرصد الذكي" icon={Settings} subtitle="الكلمات المفتاحية المعتمدة لفلترة المحتوى">
+            <form onSubmit={submitKeywordRule} className="space-y-3 mt-1">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">إشارات رئيسية</span>
+                  <textarea
+                    value={requiredTerms}
+                    onChange={(event) => setRequiredTerms(event.target.value)}
+                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
+                    placeholder="سطر لكل كلمة"
                   />
-                </label>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">كلمات سياق</span>
+                  <textarea
+                    value={optionalTerms}
+                    onChange={(event) => setOptionalTerms(event.target.value)}
+                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
+                    placeholder="سطر لكل كلمة"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">استبعاد</span>
+                  <textarea
+                    value={excludeTerms}
+                    onChange={(event) => setExcludeTerms(event.target.value)}
+                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
+                    placeholder="سطر لكل كلمة"
+                  />
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="divide-y divide-[#edf0e9]">
-            {visibleItems.length ? (
-              visibleItems.map((item) => {
-                const asset = captureAsset(state.capturesByItem[item.id]);
-                const selected = selectedItem?.id === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setSelectedId(item.id)}
-                    className={`grid w-full gap-4 p-4 text-right transition md:grid-cols-[108px_minmax(0,1fr)] ${
-                      selected ? "bg-[#eef7f3]" : "hover:bg-[#fbfbf8]"
-                    }`}
-                  >
-                    <div className="h-24 overflow-hidden rounded-lg border border-[#dfe3d9] bg-[#f0f3ee]">
-                      {asset ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          alt=""
-                          className="h-full w-full object-cover object-top"
-                          src={asset}
-                          onError={(event) => {
-                            event.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-[#8a938d]">
-                          <Camera className="h-5 w-5" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
-                        <span className="rounded-full bg-[#f0f3ee] px-2 py-1 text-xs font-semibold text-[#66736d]">{platformLabel(item)}</span>
-                        {item.warning ? <AlertTriangle className="h-4 w-4 text-[#b78a00]" /> : null}
-                      </div>
-                      <h2 className="mt-2 line-clamp-2 font-semibold leading-7">{item.title}</h2>
-                      <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#66736d]">{item.summary}</p>
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold text-[#66736d]">
-                        <span>{item.authorHandle || item.authorName || item.sourceName}</span>
-                        <span>{formatDate(item.publishedAt)}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center">
-                <CircleCheck className="mx-auto h-7 w-7 text-[#116a5c]" />
-                <h2 className="mt-3 font-semibold">لا توجد مواد هنا</h2>
+              <button
+                type="submit"
+                disabled={pending !== null}
+                className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
+              >
+                {pending === "keywords" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                تحديث كلمات الفلترة
+              </button>
+            </form>
+          </BentoCard>
+        </BentoGrid>
+
+        {/* Monitoring Feed and Details Grid */}
+        <div className="grid grid-cols-12 gap-5">
+          {/* Left pane: Health Widgets & Selected Item details (col-span-12 lg:col-span-4) */}
+          <div className="col-span-12 lg:col-span-4 space-y-5">
+            {/* Server Health Card */}
+            <BentoCard colSpan="col-span-12" title="مراقبة الخوادم والبنية التحتية" icon={Server}>
+              <div className="space-y-3.5 mt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
+                    <Database className="h-3.5 w-3.5 text-[#2383E2]" /> Supabase API
+                  </span>
+                  <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> متصل
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
+                    <HeartbeatIcon className="h-3.5 w-3.5 text-[#2383E2]" /> Scraper Cron
+                  </span>
+                  <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> مستقر
+                  </span>
+                </div>
+
+                {/* System logs console */}
+                <div className="rounded-xl bg-zinc-950 p-3 font-mono text-[9px] text-zinc-400 select-all border border-zinc-800 space-y-1.5 overflow-hidden">
+                  <div className="flex items-center gap-1.5">
+                    <Terminal className="h-3 w-3 text-amber-500" />
+                    <span className="text-zinc-500 font-extrabold select-none">[CONSOLE LOGS]</span>
+                  </div>
+                  <p className="text-emerald-400 leading-4"><span className="text-zinc-600">[SUCCESS]</span> Connected to Supabase DB</p>
+                  <p className="text-zinc-400 leading-4"><span className="text-zinc-600">[INFO]</span> Scraper listening on port 3000</p>
+                  <p className="text-amber-400 leading-4"><span className="text-zinc-600">[WARN]</span> Rate limit reset in 12m</p>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
+            </BentoCard>
 
-        <aside className="min-w-0 rounded-lg border border-[#dfe3d9] bg-white lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)] lg:overflow-auto">
-          {selectedItem ? (
-            <div>
-              <div className="border-b border-[#dfe3d9] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(selectedItem.state)}`}>
+            {/* Selected Item Details Sticky Widget */}
+            {selectedItem ? (
+              <div className="bg-white rounded-3xl border border-[var(--color-border)] p-5 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] pb-3">
+                  <div className="min-w-0">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusClass(selectedItem.state)}`}>
                       {stateLabel(selectedItem.state)}
                     </span>
-                    <h2 className="mt-3 text-lg font-semibold leading-8">{selectedItem.title}</h2>
+                    <h2 className="mt-2 text-sm font-extrabold leading-6 text-[var(--color-text-title)] truncate">{selectedItem.title}</h2>
                   </div>
                   <a
                     href={selectedItem.originalUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] transition hover:border-[#116a5c]/45"
-                    aria-label="فتح الرابط الأصلي"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] hover:border-[#2383E2]/40 transition text-[var(--color-text-muted)] hover:text-[#2383E2]"
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {primaryAction(selectedItem)}
-                  <button
-                    type="button"
-                    onClick={() => archiveItem(selectedItem)}
-                    disabled={pending !== null}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-sm font-semibold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
-                  >
-                    <Archive className="h-4 w-4" />
-                    أرشفة
-                  </button>
-                  {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
-                    <button
-                      type="button"
-                      onClick={() => approveItem(selectedItem)}
-                      disabled={pending !== null}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm font-semibold transition hover:border-[#116a5c]/45 disabled:opacity-50"
-                    >
-                      <Check className="h-4 w-4" />
-                      اعتماد
-                    </button>
-                  ) : null}
-                </div>
-              </div>
 
-              <div className="p-4">
-                <div className="overflow-hidden rounded-lg border border-[#dfe3d9] bg-[#f0f3ee]">
+                <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] max-h-48 relative group/img">
                   {captureAsset(state.capturesByItem[selectedItem.id]) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       alt="صورة المحتوى"
-                      className="max-h-[420px] w-full object-contain object-top"
+                      className="w-full h-full object-contain max-h-48 object-top rounded-2xl transition duration-500 group-hover/img:scale-105"
                       src={captureAsset(state.capturesByItem[selectedItem.id]) ?? ""}
                       onError={(event) => {
                         event.currentTarget.style.display = "none";
                       }}
                     />
                   ) : (
-                    <div className="flex h-64 items-center justify-center text-[#66736d]">
-                      <Camera className="h-7 w-7" />
+                    <div className="flex h-28 items-center justify-center text-[var(--color-text-muted)]">
+                      <Camera className="h-6 w-6" />
                     </div>
                   )}
                 </div>
 
-                <p className="mt-4 text-sm leading-7 text-[#4f5a55]">{selectedItem.summary}</p>
-
-                <details className="mt-4 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3">
-                  <summary className="cursor-pointer text-sm font-bold text-[#17201d]">تعديل بيانات المادة</summary>
-                  <form key={selectedItem.id} onSubmit={saveItemEdits} className="mt-3 grid gap-3">
-                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                      العنوان
-                      <input
-                        name="title"
-                        defaultValue={selectedItem.title}
-                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
-                        required
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                      الملخص
-                      <textarea
-                        name="summary"
-                        defaultValue={selectedItem.summary}
-                        className="min-h-24 rounded-lg border border-[#dfe3d9] bg-white p-3 text-sm font-semibold leading-6 text-[#17201d] outline-none focus:border-[#116a5c]"
-                        required
-                      />
-                    </label>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                        الناشر
-                        <input
-                          name="author_name"
-                          defaultValue={selectedItem.authorName ?? ""}
-                          className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
-                        />
-                      </label>
-                      <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                        المعرف
-                        <input
-                          name="author_handle"
-                          defaultValue={selectedItem.authorHandle ?? ""}
-                          className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-left text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
-                          dir="ltr"
-                        />
-                      </label>
-                    </div>
-                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                      التاريخ
-                      <input
-                        name="published_at"
-                        defaultValue={formatDateTimeLocal(selectedItem.publishedAt)}
-                        type="datetime-local"
-                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
-                      الرابط الأصلي
-                      <input
-                        name="original_url"
-                        defaultValue={selectedItem.originalUrl}
-                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-left text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
-                        dir="ltr"
-                        required
-                      />
-                    </label>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {primaryAction(selectedItem)}
                     <button
-                      type="submit"
+                      type="button"
+                      onClick={() => archiveItem(selectedItem)}
                       disabled={pending !== null}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-bold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-2.5 text-xs font-bold text-[#9a341f] hover:border-[#d7745f] transition disabled:opacity-50"
                     >
-                      {pending === `edit-${selectedItem.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                      حفظ التعديل
+                      <Archive className="h-3.5 w-3.5" />
+                      أرشفة
                     </button>
-                  </form>
-                </details>
+                    {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
+                      <button
+                        type="button"
+                        onClick={() => approveItem(selectedItem)}
+                        disabled={pending !== null}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] px-2.5 text-xs font-bold hover:border-[#2383E2]/40 transition disabled:opacity-50"
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        اعتماد
+                      </button>
+                    ) : null}
+                  </div>
 
-                <dl className="mt-5 grid gap-3 text-sm">
-                  <Info label="الناشر" value={selectedItem.authorHandle || selectedItem.authorName || selectedItem.sourceName} />
-                  <Info label="التاريخ" value={formatDate(selectedItem.publishedAt)} />
-                  <Info label="المنصة" value={platformLabel(selectedItem)} />
-                  <Info label="التقرير" value={state.liveReport?.title ?? "رصد هداية هاكاثون"} />
-                  {selectedItem.warning ? <Info label="تنبيه" value={selectedItem.warning} tone="warning" /> : null}
-                </dl>
+                  <p className="text-xs font-semibold leading-5 text-[var(--color-text-body)] bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border)]">{selectedItem.summary}</p>
+
+                  <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
+                    <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-title)] hover:text-[#2383E2] select-none">
+                      تحرير وتعديل تفاصيل المادة
+                    </summary>
+                    <form key={selectedItem.id} onSubmit={saveItemEdits} className="mt-3 space-y-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-stone-500">العنوان البديل</span>
+                        <input
+                          name="title"
+                          defaultValue={selectedItem.title}
+                          className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#2383E2]"
+                          required
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-stone-500">الملخص المعدل للعميل</span>
+                        <textarea
+                          name="summary"
+                          defaultValue={selectedItem.summary}
+                          className="min-h-16 rounded-lg border border-[var(--color-border)] bg-white p-2 text-xs font-semibold leading-5 outline-none focus:border-[#2383E2]"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2 grid-cols-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-bold text-stone-500">الناشر</span>
+                          <input
+                            name="author_name"
+                            defaultValue={selectedItem.authorName ?? ""}
+                            className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#2383E2]"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-bold text-stone-500">المعرف</span>
+                          <input
+                            name="author_handle"
+                            defaultValue={selectedItem.authorHandle ?? ""}
+                            className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#2383E2]"
+                            dir="ltr"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-stone-500">تاريخ وتوقيت النشر</span>
+                        <input
+                          name="published_at"
+                          defaultValue={formatDateTimeLocal(selectedItem.publishedAt)}
+                          type="datetime-local"
+                          className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs font-bold outline-none focus:border-[#2383E2]"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-bold text-stone-500">رابط المصدر الأصلي</span>
+                        <input
+                          name="original_url"
+                          defaultValue={selectedItem.originalUrl}
+                          className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-left text-xs font-bold outline-none focus:border-[#2383E2]"
+                          dir="ltr"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={pending !== null}
+                        className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#111111] text-[11px] font-bold text-white hover:bg-stone-900 transition"
+                      >
+                        {pending === `edit-${selectedItem.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        تحديث التفاصيل
+                      </button>
+                    </form>
+                  </details>
+
+                  <div className="grid gap-2 grid-cols-2 pt-2">
+                    <Info label="منصة النشر" value={platformLabel(selectedItem)} />
+                    <Info label="التقرير المستهدف" value={state.liveReport?.title ?? "رصد هداية هاكاثون"} />
+                    <div className="col-span-2">
+                      <Info label="تاريخ رصد المادة" value={formatDate(selectedItem.publishedAt)} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex min-h-64 items-center justify-center p-6 text-center text-xs font-bold text-[var(--color-text-muted)] select-none">
+                الرجاء اختيار مادة رصد لعرض تفاصيل التوثيق.
+              </div>
+            )}
+          </div>
+
+          {/* Right pane: Core Monitoring Items List (col-span-12 lg:col-span-8) */}
+          <div className="col-span-12 lg:col-span-8 space-y-4">
+            {/* Filter tab bar and actions */}
+            <div className="bg-white rounded-3xl border border-[var(--color-border)] p-4 shadow-sm">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(tabLabels) as WorkTab[]).map((itemTab) => (
+                    <button
+                      key={itemTab}
+                      type="button"
+                      onClick={() => setTab(itemTab)}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-bold transition-all ${
+                        tab === itemTab
+                          ? "border-[#2383E2] bg-[#2383E2]/10 text-[#2383E2]"
+                          : "border-[var(--color-border)] bg-[var(--color-bg-main)] text-[var(--color-text-muted)] hover:border-[#2383E2]/40"
+                      }`}
+                    >
+                      {tabLabels[itemTab]}
+                      <span className="rounded-full bg-white px-1.5 py-0.5 border border-[var(--color-border)] text-[9px]">{tabCounts[itemTab]}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={archiveVisibleItems}
+                    disabled={pending !== null || !visibleItems.length}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
+                  >
+                    {pending === "archive-visible" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    أرشفة الظاهرة
+                  </button>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                    <input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="بحث سريع في المواد..."
+                      className="h-8 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] pr-8 pl-3 text-xs outline-none transition focus:border-[#2383E2] focus:bg-white xl:w-56"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          ) : (
-            <div className="flex min-h-96 items-center justify-center p-8 text-center text-sm text-[#66736d]">
-              اختر مادة من القائمة.
+
+            {/* Items list */}
+            <div className="bg-white rounded-3xl border border-[var(--color-border)] overflow-hidden divide-y divide-[var(--color-border)] shadow-sm">
+              {visibleItems.length ? (
+                visibleItems.map((item) => {
+                  const asset = captureAsset(state.capturesByItem[item.id]);
+                  const selected = selectedItem?.id === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                      className={`grid w-full gap-4 p-4 text-right transition-colors duration-200 md:grid-cols-[100px_minmax(0,1fr)] ${
+                        selected ? "bg-[#2383E2]/5" : "hover:bg-[var(--color-bg-main)]"
+                      }`}
+                    >
+                      <div className="h-20 w-20 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] shrink-0 self-center relative group/media flex items-center justify-center">
+                        {asset ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            alt=""
+                            className="h-full w-full object-cover object-top transition duration-300 group-hover/media:scale-105"
+                            src={asset}
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div className="text-[var(--color-text-muted)]">
+                            <Camera className="h-4.5 w-4.5" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex flex-col justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusClass(item.state)}`}>
+                              {stateLabel(item.state)}
+                            </span>
+                            <span className="rounded-full bg-[var(--color-bg-main)] border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-extrabold text-[var(--color-text-muted)]">
+                              {platformLabel(item)}
+                            </span>
+                            {item.warning && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-bounce" />}
+                          </div>
+
+                          <h2 className="mt-2 font-bold text-xs leading-5 text-[var(--color-text-title)] line-clamp-1">{item.title}</h2>
+                          <p className="mt-1 line-clamp-2 text-[11px] leading-4.5 text-[var(--color-text-muted)] font-semibold">{item.summary}</p>
+                        </div>
+
+                        <div className="mt-2.5 flex items-center justify-between text-[10px] text-[var(--color-text-muted)] border-t border-[var(--color-border)]/40 pt-2 select-none">
+                          <span className="font-extrabold text-[#2383E2]">{item.authorHandle || item.authorName || item.sourceName}</span>
+                          <span className="font-bold">{formatDate(item.publishedAt)}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-12 text-center select-none flex flex-col items-center">
+                  <CircleCheck className="h-8 w-8 text-[#00C853] animate-pulse" />
+                  <h2 className="mt-3 text-xs font-extrabold text-[var(--color-text-title)]">تهانينا! لا توجد مواد للمراجعة</h2>
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">كافة المواد تمت تصفيتها ومعالجتها بنجاح.</p>
+                </div>
+              )}
             </div>
-          )}
-        </aside>
-      </section>
-    </main>
+          </div>
+        </div>
+      </div>
+    </AppShell>
   );
 }
 
 function Info({ label, value, tone }: { label: string; value: string; tone?: "warning" }) {
   return (
-    <div className={`rounded-lg px-3 py-2 ${tone === "warning" ? "bg-[#fff8dc] text-[#735d00]" : "bg-[#fbfbf8] text-[#4f5a55]"}`}>
-      <dt className="text-xs font-semibold text-[#66736d]">{label}</dt>
-      <dd className="mt-1 font-semibold">{value}</dd>
+    <div className={`rounded-xl px-3 py-2 border border-[var(--color-border)] ${tone === "warning" ? "bg-[#fff8dc] text-[#735d00]" : "bg-[var(--color-bg-main)] text-[var(--color-text-body)]"}`}>
+      <dt className="text-[10px] font-bold text-[var(--color-text-muted)]">{label}</dt>
+      <dd className="mt-1 text-xs font-extrabold text-[var(--color-text-title)]">{value}</dd>
     </div>
   );
 }

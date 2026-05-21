@@ -1,37 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap');
+
 @import "tailwindcss";
 
 :root {
-  --background: #f7f5f0;
-  --foreground: #171512;
+  --background: #F7F7F5; /* Notion Warm Surface */
+  --foreground: #37352F; /* Notion Soft Dark Text */
+
+  --color-primary: #2383E2;
+  --color-primary-hover: #1b6ec4;
+  --color-success: #00C853;
+  --color-warning: #FFAB00;
+
+  --color-bg-main: #F7F7F5;
+  --color-bg-card: #FFFFFF;
+  --color-bg-hover: #EFEFED;
+
+  --color-border: #E6E6E6;
+
+  --color-text-title: #111111;
+  --color-text-body: #37352F;
+  --color-text-muted: #737373;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #f7f5f0;
-    --foreground: #171512;
-  }
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+
+  --color-bg-main: var(--color-bg-main);
+  --color-bg-card: var(--color-bg-card);
+  --color-bg-hover: var(--color-bg-hover);
+
+  --color-border: var(--color-border);
+
+  --color-text-title: var(--color-text-title);
+  --color-text-body: var(--color-text-body);
+  --color-text-muted: var(--color-text-muted);
+
+  --font-sans: 'IBM Plex Sans Arabic', sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family:
-    "Segoe UI",
-    Tahoma,
-    Arial,
-    sans-serif;
+  font-family: 'IBM Plex Sans Arabic', "Segoe UI", sans-serif;
+  line-height: 1.6;
 }
 
 @media print {
   body {
     background: #fff;
+    color: #000;
   }
 
   a {
