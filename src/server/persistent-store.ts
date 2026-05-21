@@ -26,7 +26,6 @@ import {
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
-import { isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -256,6 +255,7 @@ async function toItems(supabase: SupabaseClient, rows: DbItemRow[]): Promise<Mon
     dedupeKey: row.canonical_url_hash ?? row.source_item_id ?? row.id,
     hasReportGradeCapture: captureIds.has(row.id),
     warning: row.warning ?? undefined,
+    sourceItemId: row.source_item_id ?? undefined,
   }));
 }
 
@@ -396,11 +396,7 @@ async function refreshSupabaseManualDuplicate(
   platform: string,
 ) {
   const patch: DbRow = {};
-  let screenshotUrl = evidenceCardUrl(row.id);
-  const targetUrl = canonicalUrl || row.original_url;
-  if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
-    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
-  }
+  const screenshotUrl = evidenceCardUrl(row.id);
 
   if (input.title && (isWeakManualTitle(row) || input.title.length > (row.title ?? "").length)) {
     patch.title = input.title;
@@ -810,10 +806,7 @@ export const persistentStore = {
     if (error) throw error;
 
     const insertedRow = row as DbItemRow;
-    let screenshotUrl = evidenceCardUrl(insertedRow.id);
-    if (insertedRow.original_url && isSafePublicHttpUrl(insertedRow.original_url)) {
-      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(insertedRow.original_url)}&screenshot=true&embed=screenshot.url`;
-    }
+    const screenshotUrl = evidenceCardUrl(insertedRow.id);
     const { data: hydratedRow, error: hydrationError } = await supabase
       .from("monitoring_items")
       .update({
@@ -894,16 +887,13 @@ export const persistentStore = {
     if (!shouldUseSupabase()) return store.requestCapture(id, kind, shouldFail);
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
-    const item = await getItemOrThrow(supabase, id);
+    await getItemOrThrow(supabase, id);
     const usage = await getUsageSnapshot(supabase);
     const budget = checkBudget(usageLimit, usage, { type: "screenshot", units: 1 });
     if (!budget.allowed) return { allowed: false as const, budget };
 
     await supabase.from("monitoring_items").update({ state: "capture_pending" }).eq("id", id);
-    let screenshotUrl = evidenceCardUrl(id);
-    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
-      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
-    }
+    const screenshotUrl = evidenceCardUrl(id);
 
     const captureInput: DbRow = shouldFail
       ? {

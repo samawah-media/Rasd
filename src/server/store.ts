@@ -444,6 +444,7 @@ export const store = {
             : legacyItem.originalUrl
               ? undefined
               : "لا يوجد رابط أصلي داخل التقرير القديم؛ الدليل المتاح هو صورة صفحة التقرير.",
+          sourceItemId: legacyItem.id,
         };
         items.push(monitoringItem);
         itemsCreated += 1;

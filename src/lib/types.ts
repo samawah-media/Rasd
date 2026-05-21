@@ -92,6 +92,7 @@ export type MonitoringItem = {
   dedupeKey: string;
   hasReportGradeCapture: boolean;
   warning?: string;
+  sourceItemId?: string;
 };
 
 export type Capture = {
