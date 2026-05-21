@@ -61,10 +61,12 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 11. Paste one fresh public X or news URL without filling optional manual fields.
 12. Confirm the new item appears immediately at the top of `/ops` with readable title/summary, publisher, platform, date when available, and the original link.
 13. Confirm private/internal URLs such as `http://127.0.0.1/admin` are rejected.
-14. Confirm the same URL submitted again is detected as a duplicate after canonicalization.
-15. Approve the item, run report-grade capture, and add it to the live Hidayathon report.
-16. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, and report status.
-17. Confirm admin tools are visible only while logged in as owner/editor.
+14. Confirm X URLs with `?lang=...` or tracking parameters dedupe to the clean `https://x.com/.../status/...` URL.
+15. If a duplicate was previously saved without tweet metadata, submit it again and confirm the same item is refreshed with tweet text, publisher, handle, and date.
+16. Approve the item, run report-grade capture, and confirm `/ops` shows a content evidence image for the item.
+17. Add it to the live Hidayathon report.
+18. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, report status, and a content image.
+19. Confirm admin tools are visible only while logged in as owner/editor.
 
 ## Content Screenshot Pipeline Smoke Test
 
@@ -109,3 +111,4 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.
 - Real live screenshot capture is not implemented yet; current capture workflow must not be treated as proof of a successful browser screenshot until the new pipeline replaces the placeholder behavior.
+- Live manual captures currently generate a rendered evidence image from the fetched tweet/page metadata, not a browser screenshot of the live X page. This prevents blank placeholders while the real browser-capture service remains a separate pipeline task.

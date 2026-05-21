@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
+import Image from "next/image";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
 
 type ApiState = {
@@ -92,6 +93,11 @@ function nextStepLabel(item: MonitoringItem) {
   if (item.state === "added_to_report" || item.state === "published") return "المادة موجودة في تقرير العميل";
   if (item.state === "rejected") return "المادة مرفوضة";
   return "المادة محفوظة";
+}
+
+function captureAsset(captures: Capture[] | undefined) {
+  return captures?.find((capture) => capture.kind === "report_grade" && capture.status === "success" && capture.assetUrl)
+    ?.assetUrl;
 }
 
 export function OpsClient() {
@@ -384,6 +390,18 @@ export function OpsClient() {
               </div>
               <h2 className="mt-4 text-xl font-bold leading-8">{lastItem.title}</h2>
               <p className="mt-2 text-sm leading-7 text-stone-600">{lastItem.summary}</p>
+              {captureAsset(state.capturesByItem[lastItem.id]) ? (
+                <div className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
+                  <Image
+                    alt="صورة المحتوى"
+                    className="h-auto w-full"
+                    height={720}
+                    src={captureAsset(state.capturesByItem[lastItem.id]) ?? ""}
+                    unoptimized
+                    width={900}
+                  />
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
                 <span>{lastItem.authorName ?? "ناشر غير محدد"}</span>
                 <span>{lastItem.sourceName}</span>
@@ -412,6 +430,16 @@ export function OpsClient() {
                         </span>
                         <h3 className="mt-3 font-bold leading-7">{item.title}</h3>
                         <p className="mt-1 line-clamp-2 text-sm leading-6 text-stone-600">{item.summary}</p>
+                        {captureAsset(state.capturesByItem[item.id]) ? (
+                          <Image
+                            alt="صورة المحتوى"
+                            className="mt-3 h-24 w-40 rounded-md border border-stone-200 object-cover object-top"
+                            height={144}
+                            src={captureAsset(state.capturesByItem[item.id]) ?? ""}
+                            unoptimized
+                            width={240}
+                          />
+                        ) : null}
                       </div>
                       {itemActions(item, true)}
                     </div>

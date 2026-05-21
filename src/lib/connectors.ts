@@ -44,8 +44,22 @@ export function makeDedupeKey(item: IngestedItem, sourceType: SourceType) {
 export function canonicalizeUrl(url: string) {
   try {
     const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (
+      (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) &&
+      /\/status\/\d+/u.test(parsed.pathname)
+    ) {
+      parsed.protocol = "https:";
+      parsed.hostname = "x.com";
+      parsed.search = "";
+      parsed.hash = "";
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+      return parsed.toString().replace(/\/$/, "");
+    }
+
     parsed.hash = "";
-    ["utm_source", "utm_medium", "utm_campaign", "utm_term"].forEach((key) =>
+    ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].forEach((key) =>
       parsed.searchParams.delete(key),
     );
     if (parsed.pathname.length > 1) {

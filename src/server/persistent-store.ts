@@ -25,6 +25,7 @@ import {
 } from "@/lib/auth-config";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
+import { evidenceCardUrl } from "@/server/evidence-card";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -60,6 +61,7 @@ type DbItemRow = {
   matched_terms: string[] | null;
   canonical_url_hash: string | null;
   source_item_id: string | null;
+  raw_response?: unknown;
   warning: string | null;
   created_at: string;
   sources?: { name: string | null } | null;
@@ -155,6 +157,28 @@ function platformFromUrl(value: string) {
   } catch {
     return "Unknown";
   }
+}
+
+function xStatusIdFromUrl(value: string) {
+  try {
+    return new URL(value).pathname.match(/\/status\/(\d+)/u)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isWeakManualTitle(row: DbItemRow) {
+  const title = row.title ?? "";
+  return title === row.original_url || title.startsWith("http") || title.includes("رابط يدوي");
+}
+
+function isWeakManualSummary(row: DbItemRow) {
+  const summary = row.summary ?? "";
+  return summary === row.original_url || summary.startsWith("تم حفظ الرابط");
+}
+
+function rawObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function toReport(row: DbReportRow): ReportVersion {
@@ -360,6 +384,133 @@ async function audit(
     metadata,
     createdAt: (data as { created_at: string }).created_at,
   };
+}
+
+async function refreshSupabaseManualDuplicate(
+  supabase: SupabaseClient,
+  row: DbItemRow,
+  input: ManualUrlInput,
+  canonicalUrl: string,
+  canonicalHash: string,
+  platform: string,
+) {
+  const patch: DbRow = {};
+  const cardUrl = evidenceCardUrl(row.id);
+
+  if (input.title && (isWeakManualTitle(row) || input.title.length > (row.title ?? "").length)) {
+    patch.title = input.title;
+  }
+  if (input.text && (isWeakManualSummary(row) || input.text.length > (row.summary ?? "").length)) {
+    patch.summary = input.text;
+    patch.summary_source_text = input.text;
+    patch.normalized_text_hash = await sha256(input.text);
+  }
+  if (input.authorName && (!row.author_name || row.author_name === "غير محدد")) {
+    patch.author_name = input.authorName;
+  }
+  if (input.authorHandle && !row.author_handle) {
+    patch.author_handle = input.authorHandle;
+  }
+  if (input.publishedAt) {
+    patch.published_at = input.publishedAt;
+  }
+
+  const existingStatusId = xStatusIdFromUrl(row.original_url);
+  const incomingStatusId = xStatusIdFromUrl(canonicalUrl);
+  if (row.original_url !== canonicalUrl && existingStatusId && existingStatusId === incomingStatusId) {
+    patch.original_url = canonicalUrl;
+  }
+  if (row.canonical_url_hash !== canonicalHash) {
+    patch.canonical_url_hash = canonicalHash;
+    patch.source_item_id = canonicalHash;
+  }
+
+  const title = String(patch.title ?? row.title ?? "");
+  const summary = String(patch.summary ?? row.summary ?? "");
+  const rule = keywordRules[0];
+  const match = explainKeywordMatch(`${title} ${summary} ${canonicalUrl}`, rule);
+  if (match.score > (row.relevance_score ?? 0)) {
+    patch.relevance_score = match.score;
+    patch.relevance_reason = match.reason;
+    patch.matched_terms = match.matchedTerms;
+    patch.sentiment = estimateSentiment(match.score);
+    patch.sentiment_confidence = Math.max(50, Math.min(95, match.score));
+    if (row.state === "candidate") patch.state = "needs_review";
+  }
+
+  patch.evidence_image_path = cardUrl;
+  patch.raw_response = {
+    ...rawObject(row.raw_response),
+    manual: true,
+    platform,
+    sourcePdf: "live-hidayathon",
+    publishedDateText: String(patch.published_at ?? row.published_at ?? now()),
+    extractedUrls: Array.from(new Set([canonicalUrl, row.original_url].filter(Boolean))),
+    input: {
+      ...rawObject(rawObject(row.raw_response).input),
+      ...input,
+    },
+    contentImagePath: cardUrl,
+    sourceEvidenceImagePath: cardUrl,
+  };
+
+  const { data, error } = await supabase
+    .from("monitoring_items")
+    .update(patch)
+    .eq("id", row.id)
+    .select("*, sources(name)")
+    .single();
+  if (error) throw error;
+
+  const { data: staleCaptures, error: staleCaptureError } = await supabase
+    .from("captures")
+    .select("id, asset_url")
+    .eq("monitoring_item_id", row.id)
+    .eq("status", "success");
+  if (staleCaptureError) throw staleCaptureError;
+
+  const staleCaptureIds = ((staleCaptures ?? []) as Array<{ id: string; asset_url: string | null }>)
+    .filter((capture) => !capture.asset_url || capture.asset_url === "/window.svg")
+    .map((capture) => capture.id);
+
+  if (staleCaptureIds.length) {
+    const { error: captureUpdateError } = await supabase
+      .from("captures")
+      .update({ asset_url: cardUrl })
+      .in("id", staleCaptureIds);
+    if (captureUpdateError) throw captureUpdateError;
+  }
+
+  const { data: reportItems, error: reportItemsError } = await supabase
+    .from("report_items")
+    .select("id, card_data")
+    .eq("monitoring_item_id", row.id);
+  if (reportItemsError) throw reportItemsError;
+
+  for (const reportItem of (reportItems ?? []) as Array<{ id: string; card_data: Record<string, unknown> | null }>) {
+    const { error: reportItemError } = await supabase
+      .from("report_items")
+      .update({
+        card_data: {
+          ...(reportItem.card_data ?? {}),
+          title: patch.title ?? row.title,
+          summary: patch.summary ?? row.summary,
+          original_url: patch.original_url ?? row.original_url,
+          source_name: input.authorName ?? row.author_name ?? sourceLabel(row.source_type),
+          screenshot_url: cardUrl,
+          content_image_url: cardUrl,
+        },
+      })
+      .eq("id", reportItem.id);
+    if (reportItemError) throw reportItemError;
+  }
+
+  await audit(supabase, "item.metadata_refreshed", "monitoring_item", row.id, {
+    sourceType: "manual_url",
+    metadataSource: platform,
+  });
+
+  return (await toItems(supabase, [data as DbItemRow]))[0];
 }
 
 async function getUsageSnapshot(supabase: SupabaseClient): Promise<UsageSnapshot> {
@@ -571,8 +722,23 @@ export const persistentStore = {
       .eq("canonical_url_hash", canonicalHash)
       .maybeSingle();
     if (duplicateError) throw duplicateError;
-    if (duplicate) {
-      const item = (await toItems(supabase, [duplicate as DbItemRow]))[0];
+
+    let duplicateRow = duplicate as DbItemRow | null;
+    const statusId = xStatusIdFromUrl(canonicalUrl);
+    if (!duplicateRow && statusId) {
+      const { data: statusMatches, error: statusMatchError } = await supabase
+        .from("monitoring_items")
+        .select("*, sources(name)")
+        .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+        .eq("source_type", "manual_url")
+        .like("original_url", `%/status/${statusId}%`)
+        .limit(1);
+      if (statusMatchError) throw statusMatchError;
+      duplicateRow = ((statusMatches ?? []) as DbItemRow[])[0] ?? null;
+    }
+
+    if (duplicateRow) {
+      const item = await refreshSupabaseManualDuplicate(supabase, duplicateRow, input, canonicalUrl, canonicalHash, platform);
       await audit(supabase, "item.duplicate_detected", "monitoring_item", item.id, { dedupeKey });
       return { item, duplicate: true };
     }
@@ -615,7 +781,24 @@ export const persistentStore = {
       .single();
     if (error) throw error;
 
-    const item = (await toItems(supabase, [row as DbItemRow]))[0];
+    const insertedRow = row as DbItemRow;
+    const cardUrl = evidenceCardUrl(insertedRow.id);
+    const { data: hydratedRow, error: hydrationError } = await supabase
+      .from("monitoring_items")
+      .update({
+        evidence_image_path: cardUrl,
+        raw_response: {
+          ...rawObject(insertedRow.raw_response),
+          contentImagePath: cardUrl,
+          sourceEvidenceImagePath: cardUrl,
+        },
+      })
+      .eq("id", insertedRow.id)
+      .select("*, sources(name)")
+      .single();
+    if (hydrationError) throw hydrationError;
+
+    const item = (await toItems(supabase, [hydratedRow as DbItemRow]))[0];
     const { data: captureRow, error: captureError } = await supabase
       .from("captures")
       .insert({
@@ -624,6 +807,7 @@ export const persistentStore = {
         kind: "evidence_lite",
         status: "success",
         captured_at: now(),
+        asset_url: cardUrl,
       })
       .select("*")
       .single();
@@ -701,7 +885,7 @@ export const persistentStore = {
           kind,
           status: "success",
           captured_at: now(),
-          asset_url: "/window.svg",
+          asset_url: evidenceCardUrl(id),
           failure_reason: null,
         };
     const { data: captureRow, error: captureError } = await supabase.from("captures").insert(captureInput).select("*").single();
@@ -710,7 +894,7 @@ export const persistentStore = {
     const capture = toCapture(captureRow as DbCaptureRow);
     const nextPatch =
       capture.status === "success" && kind === "report_grade"
-        ? { state: "report_ready", warning: null }
+        ? { state: "report_ready", warning: null, evidence_image_path: capture.assetUrl ?? evidenceCardUrl(id) }
         : capture.status === "failed"
           ? { state: "capture_failed", warning: "فشل الالتقاط. يمكن إعادة المحاولة أو رفع لقطة يدويًا." }
           : {};
@@ -791,6 +975,8 @@ export const persistentStore = {
           sentiment: item.sentiment,
           original_url: item.originalUrl,
           source_name: item.sourceName,
+          screenshot_url: item.hasReportGradeCapture ? evidenceCardUrl(item.id) : undefined,
+          content_image_url: item.hasReportGradeCapture ? evidenceCardUrl(item.id) : undefined,
           warning: warningAccepted ? item.warning : undefined,
         },
         warning: warningAccepted ? item.warning ?? "تمت الموافقة مع التحذير." : null,

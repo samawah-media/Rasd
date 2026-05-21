@@ -18,6 +18,13 @@ describe("connector and budget utilities", () => {
     assert.equal(canonical, "https://example.com/news/story?id=42");
   });
 
+  it("canonicalizes X status URLs across language and tracking variants", () => {
+    assert.equal(
+      canonicalizeUrl("https://twitter.com/UOfjeddah/status/2013613302509699235?lang=en&utm_source=test#ignored"),
+      "https://x.com/UOfjeddah/status/2013613302509699235",
+    );
+  });
+
   it("prefers source item IDs over URLs in dedupe keys", () => {
     const key = makeDedupeKey(
       {

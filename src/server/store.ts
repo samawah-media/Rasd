@@ -11,6 +11,7 @@ import {
   usageLimit,
 } from "@/lib/mock-data";
 import { getPersistenceMode } from "@/server/supabase-admin";
+import { evidenceCardUrl } from "@/server/evidence-card";
 import type {
   Capture,
   CaptureKind,
@@ -206,9 +207,83 @@ function createEvidenceLiteCapture(itemId: string): Capture {
     kind: "evidence_lite",
     status: "success",
     capturedAt: now(),
+    assetUrl: evidenceCardUrl(itemId),
   };
   captures.unshift(capture);
   return capture;
+}
+
+function xStatusIdFromUrl(value: string) {
+  try {
+    return new URL(value).pathname.match(/\/status\/(\d+)/u)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isSameManualUrl(item: MonitoringItem, dedupeKey: string, canonicalUrl: string) {
+  if (item.dedupeKey === dedupeKey) return true;
+  const incomingStatusId = xStatusIdFromUrl(canonicalUrl);
+  return Boolean(incomingStatusId && incomingStatusId === xStatusIdFromUrl(item.originalUrl));
+}
+
+function isWeakManualTitle(item: MonitoringItem) {
+  return item.title === item.originalUrl || item.title.startsWith("http") || item.title.includes("رابط يدوي");
+}
+
+function isWeakManualSummary(item: MonitoringItem) {
+  return item.summary === item.originalUrl || item.summary.startsWith("تم حفظ الرابط");
+}
+
+function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, canonicalUrl: string) {
+  let changed = false;
+
+  if (input.title && (isWeakManualTitle(item) || input.title.length > item.title.length)) {
+    item.title = input.title;
+    changed = true;
+  }
+  if (input.text && (isWeakManualSummary(item) || input.text.length > item.summary.length)) {
+    item.summary = input.text;
+    item.summarySourceText = input.text;
+    changed = true;
+  }
+  if (input.authorName && (!item.authorName || item.authorName === "غير محدد")) {
+    item.authorName = input.authorName;
+    changed = true;
+  }
+  if (input.authorHandle && !item.authorHandle) {
+    item.authorHandle = input.authorHandle;
+    changed = true;
+  }
+  if (input.publishedAt) {
+    item.publishedAt = input.publishedAt;
+    changed = true;
+  }
+  if (item.originalUrl !== canonicalUrl && xStatusIdFromUrl(item.originalUrl) === xStatusIdFromUrl(canonicalUrl)) {
+    item.originalUrl = canonicalUrl;
+    changed = true;
+  }
+
+  const rule = keywordRules[0];
+  const match = explainKeywordMatch(`${item.title} ${item.summary} ${canonicalUrl}`, rule);
+  if (match.score > item.relevanceScore) {
+    item.relevanceScore = match.score;
+    item.relevanceReason = match.reason;
+    item.matchedTerms = match.matchedTerms;
+    item.sentiment = estimateSentiment(match.score);
+    item.sentimentConfidence = Math.max(50, Math.min(95, match.score));
+    if (item.state === "candidate") item.state = "needs_review";
+    changed = true;
+  }
+
+  for (const capture of captures) {
+    if (capture.itemId === item.id && capture.status === "success" && (!capture.assetUrl || capture.assetUrl === "/window.svg")) {
+      capture.assetUrl = evidenceCardUrl(item.id);
+      changed = true;
+    }
+  }
+
+  return changed;
 }
 
 function getItemOrThrow(id: string) {
@@ -456,9 +531,11 @@ export const store = {
       },
       "manual_url",
     );
-    const duplicate = items.find((entry) => entry.dedupeKey === dedupeKey);
+    const duplicate = items.find((entry) => entry.sourceType === "manual_url" && isSameManualUrl(entry, dedupeKey, canonicalUrl));
     if (duplicate) {
+      const refreshed = refreshManualDuplicate(duplicate, input, canonicalUrl);
       audit("item.duplicate_detected", duplicate.id, { dedupeKey });
+      if (refreshed) audit("item.metadata_refreshed", duplicate.id, { dedupeKey });
       return { item: duplicate, duplicate: true };
     }
 
@@ -546,7 +623,7 @@ export const store = {
           kind,
           status: "success",
           capturedAt: now(),
-          assetUrl: "/window.svg",
+          assetUrl: evidenceCardUrl(id),
         };
 
     captures.unshift(capture);

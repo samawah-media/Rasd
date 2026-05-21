@@ -11,6 +11,7 @@ type ApiRule = {
 const apiRules: ApiRule[] = [
   { methods: ["GET"], pattern: /^\/api\/share-links\/[^/]+$/, roles: "public" },
   { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon$/, roles: memberRoles },
+  { methods: ["GET"], pattern: /^\/api\/items\/[^/]+\/evidence-card\.svg$/, roles: memberRoles },
   { pattern: /^\/api\/admin(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/audit-logs$/, roles: adminRoles },
   { pattern: /^\/api\/imports(?:\/|$)/, roles: adminRoles },

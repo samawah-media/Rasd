@@ -32,6 +32,7 @@ describe("monitoring workflow store", () => {
     assert.equal(capture.allowed, true);
     assert.equal(capture.item.state, "report_ready");
     assert.equal(capture.item.hasReportGradeCapture, true);
+    assert.match(capture.capture.assetUrl ?? "", /^\/api\/items\/item-2\/evidence-card\.svg$/);
   });
 
   it("blocks report insertion for items that are not report-ready", () => {

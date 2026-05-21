@@ -18,6 +18,12 @@ async function requestJson(path: string, init?: RequestInit) {
   return { response, json };
 }
 
+async function requestText(path: string, init?: RequestInit) {
+  const response = await api.fetch(new Request(`http://rasd.test${path}`, init));
+  const text = await response.text();
+  return { response, text };
+}
+
 describe("Hono API acceptance workflow", () => {
   beforeEach(() => {
     store.resetForTest();
@@ -159,6 +165,43 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("refreshes stale duplicate X items with newly available metadata", async () => {
+    const stale = store.ingestManualUrl({
+      url: "https://x.com/UOfjeddah/status/2013613302509699235?lang=en",
+    });
+    assert.equal(stale.item.summary.startsWith("تم حفظ الرابط"), true);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          author_name: "جامعة جدة",
+          author_url: "https://twitter.com/UOfjeddah",
+          html:
+            '<blockquote><p lang="ar" dir="rtl">هاكثون هداية | من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.</p>&mdash; جامعة جدة (@UOfjeddah) <a href="https://twitter.com/UOfjeddah/status/2013613302509699235">January 20, 2026</a></blockquote>',
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+
+    try {
+      const duplicate = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://x.com/UOfjeddah/status/2013613302509699235" }),
+      });
+
+      assert.equal(duplicate.response.status, 200);
+      assert.equal(duplicate.json.duplicate, true);
+      assert.equal(duplicate.json.item.id, stale.item.id);
+      assert.equal(duplicate.json.item.title, "هاكثون هداية | من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.");
+      assert.equal(duplicate.json.item.summary, "هاكثون هداية | من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.");
+      assert.equal(duplicate.json.item.authorName, "جامعة جدة");
+      assert.equal(duplicate.json.item.authorHandle, "@UOfjeddah");
+      assert.equal(duplicate.json.item.originalUrl, "https://x.com/UOfjeddah/status/2013613302509699235");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("runs the manual intake to report insertion lifecycle", async () => {
     const liveReport = await requestJson("/api/reports/hidayathon-live");
     assert.equal(liveReport.response.status, 200);
@@ -179,6 +222,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manual.response.status, 201);
     assert.equal(manual.json.item.state, "needs_review");
     assert.equal(manual.json.evidence.kind, "evidence_lite");
+    assert.match(manual.json.evidence.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$/);
     assert.equal(manual.json.item.authorName, "فريق اختبار رصد");
     assert.equal(manual.json.item.authorHandle, "@rasd_test");
     assert.equal(manual.json.item.publishedAt, "2026-05-20T10:30:00.000Z");
@@ -220,7 +264,13 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(captured.response.status, 200);
     assert.equal(captured.json.item.state, "report_ready");
     assert.equal(captured.json.capture.status, "success");
-    assert.equal(captured.json.fallback, "external_playwright_worker");
+    assert.match(captured.json.capture.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$/);
+    assert.equal(captured.json.capture_source, "rendered_evidence_card");
+
+    const evidenceSvg = await requestText(captured.json.capture.assetUrl);
+    assert.equal(evidenceSvg.response.status, 200);
+    assert.match(evidenceSvg.response.headers.get("content-type") ?? "", /image\/svg\+xml/);
+    assert.match(evidenceSvg.text, /متابعة/);
 
     const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
       method: "POST",
@@ -242,6 +292,8 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manualReportItem.reportLabel, "الرصد الحي");
     assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456789");
     assert.equal(manualReportItem.linkStatus, "openable");
+    assert.equal(manualReportItem.screenshotStatus, "available");
+    assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$/);
   });
 
   it("preserves warning gates for failed captures", async () => {

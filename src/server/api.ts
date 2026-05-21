@@ -21,6 +21,7 @@ import {
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
+import { renderEvidenceCardSvg } from "@/server/evidence-card";
 
 type AppBindings = {
   Variables: {
@@ -291,6 +292,18 @@ api.post("/items/manual-url", async (c) => {
   );
 });
 
+api.get("/items/:id/evidence-card.svg", async (c) => {
+  const item = (await persistentStore.listItems()).find((entry) => entry.id === c.req.param("id"));
+  if (!item) return c.text("not_found", 404);
+
+  return new Response(renderEvidenceCardSvg(item), {
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "private, max-age=60",
+    },
+  });
+});
+
 api.post("/connectors/:type/run", async (c) => {
   const type = c.req.param("type") as SourceType;
   const result = await persistentStore.runConnector(type);
@@ -346,7 +359,7 @@ api.post("/items/:id/capture-report-grade", async (c) => {
   try {
     const result = await persistentStore.requestCapture(c.req.param("id"), "report_grade", body.fail === true);
     if (!result.allowed) return c.json(withRequestId(c, { error: "budget_exceeded", budget: result.budget }), 402);
-    return c.json(withRequestId(c, { ...result, fallback: "external_playwright_worker" }));
+    return c.json(withRequestId(c, { ...result, capture_source: "rendered_evidence_card" }));
   } catch {
     return c.json(withRequestId(c, { error: "item_not_found" }), 404);
   }
