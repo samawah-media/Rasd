@@ -483,6 +483,7 @@ Status: simplified on 2026-05-21. The team decided not to expose share-link mana
 - [x] Remove visible share-link management from `/ops` to reduce operational clutter.
 - [x] Keep share-link backend/security tests as a dormant fallback, not a primary product path.
 - [x] Add a clean Viewer/user access management screen outside the content review flow.
+- [x] Move email-password login through a server-side auth route with a timeout and clear Arabic errors, so the login button does not stay stuck on verification.
 - [ ] Validate a newly created email/password Viewer account can open `/client-report` and is blocked from `/`, `/ops`, `/imports`, and `/reports/*`.
 
 ## Priority C - Real Source Integrations

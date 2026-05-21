@@ -34,6 +34,7 @@ Open `http://localhost:3000`.
 - `/api/client-report/hidayathon` serves the enriched client report dataset from Supabase when configured, combining approved legacy data with manual items that have been added to the live Hidayathon report.
 - `/api/client-report/hidayathon/export-pdf` serves a client-safe printable Arabic export for the currently selected/filtered items, capped at 50 items.
 - `/api/access/client-viewers` lists and creates/updates Viewer accounts through Supabase Admin. It is owner-only and assigns Viewer memberships for both the active Hidayathon organization and the legacy Hidayathon archive.
+- `/auth/password` handles email-password login server-side so Viewer accounts receive Supabase session cookies reliably before redirecting to `/client-report`.
 - `/api/imports/legacy/status` returns legacy import counts.
 - `/api/imports/legacy/backfill` returns link-backfill counts, status, search URLs, and override templates for legacy items.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.

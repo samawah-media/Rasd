@@ -5,6 +5,21 @@ import { Eye, LockKeyhole, Mail, Radio, ShieldCheck } from "lucide-react";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 
+type AuthResponse = {
+  ok?: boolean;
+  error?: string;
+};
+
+const authErrorMessages: Record<string, string> = {
+  email_password_required: "اكتب البريد وكلمة المرور.",
+  invalid_login: "تعذر الدخول. تأكد من البريد وكلمة المرور أو أعد حفظ حساب العميل من صفحة حسابات العملاء.",
+  request_timeout: "تأخر التحقق أكثر من المتوقع. حدّث الصفحة وجرب مرة أخرى.",
+  signup_disabled: "هذا البريد لم تتم دعوته بعد.",
+  signup_not_allowed: "هذا البريد لم تتم دعوته بعد.",
+  access_denied: "تم رفض الدخول من مزود تسجيل الدخول. جرّب بريدًا تمت دعوته للمنصة.",
+  auth_callback_failed: "عاد مزود الدخول بدون جلسة صالحة. راجع روابط Redirect ثم جرّب مرة أخرى.",
+};
+
 export function LoginClient({ authError, nextPath }: { authError: string | null; nextPath: string }) {
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const [email, setEmail] = useState("");
@@ -17,19 +32,25 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
     setIsSubmitting(true);
     setError(null);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const response = await fetchWithTimeout("/auth/password", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as AuthResponse;
 
-    if (signInError) {
-      setError("تعذر الدخول. تأكد من البريد وكلمة المرور أو من أن الحساب تمت دعوته.");
+      if (!response.ok || !payload.ok) {
+        setError(describeAuthError(payload.error ?? "invalid_login"));
+        setIsSubmitting(false);
+        return;
+      }
+
+      window.location.assign(`/auth/redirect?next=${encodeURIComponent(nextPath)}`);
+    } catch (caught) {
+      setError(caught instanceof Error ? describeAuthError(caught.message) : describeAuthError("request_timeout"));
       setIsSubmitting(false);
-      return;
     }
-
-    await supabase.auth.getSession();
-    window.location.assign(`/auth/redirect?next=${encodeURIComponent(nextPath)}`);
   }
 
   async function signInWithGoogle() {
@@ -49,7 +70,7 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[#f5f6f4] px-4 py-10 text-[#171819]">
+    <main className="grid min-h-screen place-items-center bg-[#f5f6f4] px-4 py-10 text-[#171819]" dir="rtl">
       <section className="grid w-full max-w-5xl overflow-hidden rounded-lg border border-[#dfe3de] bg-white shadow-sm lg:grid-cols-[0.95fr_1.05fr]">
         <div className="bg-[#17201d] p-8 text-white">
           <div className="flex items-center gap-3">
@@ -57,7 +78,7 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
               <Radio size={21} />
             </div>
             <div>
-              <div className="text-xl font-semibold">رصد هداية هاكثون</div>
+              <div className="text-xl font-semibold">رصد هداية هاكاثون</div>
               <div className="text-sm text-white/65">بوابة خاصة بالأعضاء المدعوين</div>
             </div>
           </div>
@@ -66,9 +87,9 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
             <div className="flex items-start gap-3 rounded-lg bg-white/8 p-4">
               <ShieldCheck className="mt-1 text-[#8fe2ca]" size={19} />
               <div>
-                <h2 className="font-semibold">صلاحيات فعلية</h2>
+                <h2 className="font-semibold">صلاحيات واضحة</h2>
                 <p className="mt-1 text-sm leading-6 text-white/68">
-                  المالك والمحرر يديران دورة الرصد، والعميل يرى منصة العرض فقط بدون أدوات الإدارة.
+                  المالك والمحرر يديران الرصد، والعميل يرى تقريره فقط بدون أدوات الإدارة.
                 </p>
               </div>
             </div>
@@ -77,7 +98,7 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
               <div>
                 <h2 className="font-semibold">واجهة عميل حية</h2>
                 <p className="mt-1 text-sm leading-6 text-white/68">
-                  الفلاتر والإحصائيات والروابط واللقطات تبقى متاحة للعميل داخل مساحته.
+                  الفلاتر والإحصائيات والروابط واللقطات متاحة للعميل داخل مساحته.
                 </p>
               </div>
             </div>
@@ -91,7 +112,7 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
           </div>
           <h1 className="mt-5 text-2xl font-semibold md:text-3xl">تسجيل الدخول</h1>
           <p className="mt-2 text-sm leading-6 text-[#69716d]">
-            استخدم بريدًا تمت دعوته للمنصة. الحسابات غير المرتبطة بعضوية ستظهر لها صفحة غير مصرح.
+            استخدم بريدًا تمت إضافته للمنصة. حساب العميل يفتح تقرير العميل فقط.
           </p>
 
           <button
@@ -163,16 +184,23 @@ export function LoginClient({ authError, nextPath }: { authError: string | null;
   );
 }
 
-function describeAuthError(error: string | null) {
-  switch (error) {
-    case "signup_disabled":
-    case "signup_not_allowed":
-      return "هذا البريد لم تتم دعوته بعد. افتح Supabase > Auth > Users ثم أرسل Invite user لنفس بريد Google الذي اخترته.";
-    case "access_denied":
-      return "تم رفض الدخول من مزود تسجيل الدخول. جرّب مرة أخرى أو اختر بريدًا تمت دعوته للمنصة.";
-    case "auth_callback_failed":
-      return "عاد Google بدون جلسة صالحة. تأكد من روابط Redirect في Supabase وGoogle ثم جرّب مرة أخرى.";
-    default:
-      return error ? `تعذر إكمال تسجيل الدخول: ${error}` : null;
+async function fetchWithTimeout(url: string, init: RequestInit) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(new Error("request_timeout")), 12000);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("request_timeout");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
   }
+}
+
+function describeAuthError(error: string | null) {
+  if (!error) return null;
+  return authErrorMessages[error] ?? `تعذر إكمال تسجيل الدخول: ${error}`;
 }
