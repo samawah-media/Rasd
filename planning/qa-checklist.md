@@ -7,8 +7,18 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-Post-A10 stabilization and quality gate
+Post-cleanup production smoke after deploy
 ```
+
+## Post-A10 Local Quality Gate
+
+Status: passed on 2026-05-21.
+
+- `npm run lint` passed after cleaning unused imports/variables in the new `/imports` work and admin home page.
+- `npm run typecheck` passed.
+- `npm run test` passed: 75 tests, 0 failures.
+- `npm run build` passed.
+- `npm audit --audit-level=moderate` reports a moderate advisory through `next` -> `postcss`; npm's suggested force fix would downgrade Next to an old incompatible version, so this remains a tracked dependency follow-up.
 
 ## Production Persistence
 
@@ -151,4 +161,5 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 - Share-link API/RLS security passed production checks, but the product still needs a visible admin UI for generating/revoking share links.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.
-- `npm run lint` currently fails in the new `/imports` work and should be the next cleanup task before new feature work.
+- `npm audit --audit-level=moderate` currently reports a `postcss` advisory via Next. Do not run `npm audit fix --force`; wait for a compatible Next/PostCSS patch path.
+- After the cleanup deploy, production `/client-report`, `/ops`, `/imports`, and Viewer restrictions need one quick smoke pass on `https://rasd-gamma.vercel.app`.

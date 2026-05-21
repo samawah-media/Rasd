@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { type SyntheticEvent, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BadgeCheck,
-  CheckCircle2,
   ChevronDown,
   CircleDot,
   Database,
-  FileText,
   Filter,
   Layers3,
   RefreshCw,
@@ -20,13 +18,11 @@ import {
   Check,
   ExternalLink,
   ArrowRight,
-  HelpCircle,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import type {
-  ImportedReportItem,
   ImportedReportsDataset,
   ImportReviewState,
 } from "@/lib/imported-reports";
@@ -83,12 +79,6 @@ type PersistenceStatus = {
   missing?: {
     serviceRoleKey?: boolean;
   };
-};
-
-const reviewStateLabels: Record<ImportReviewState, string> = {
-  ready: "جاهزة للمراجعة",
-  needs_cleaning: "تحتاج تنظيف",
-  approved: "معتمدة للاستيراد",
 };
 
 const confidenceLabels: Record<string, string> = {
@@ -275,7 +265,7 @@ export function ImportsClient({ dataset }: { dataset: ImportedReportsDataset }) 
     }
   };
 
-  const toggleSelectRow = (id: string, e: React.MouseEvent) => {
+  const toggleSelectRow = (id: string, e: SyntheticEvent) => {
     e.stopPropagation();
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -770,7 +760,7 @@ export function ImportsClient({ dataset }: { dataset: ImportedReportsDataset }) 
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={(e) => toggleSelectRow(item.id, e as any)}
+                            onChange={(e) => toggleSelectRow(item.id, e)}
                             className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
                           />
                         </td>

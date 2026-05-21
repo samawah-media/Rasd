@@ -402,14 +402,22 @@ Stabilize the codebase after parallel work before starting the next feature spri
 
 Tasks:
 
-- [ ] Resolve the remaining `npm run lint` failure in `src/app/imports/imports-client.tsx`.
-- [ ] Re-run `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
+- [x] Resolve the remaining `npm run lint` failure in `src/app/imports/imports-client.tsx`.
+- [x] Re-run `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
 - [ ] Re-check production `/client-report`, `/ops`, `/imports`, and Viewer restrictions after the cleanup deploy.
-- [ ] Update this workplan and `planning/qa-checklist.md` with the final post-A10 quality result.
+- [x] Update this workplan and `planning/qa-checklist.md` with the local post-A10 quality result.
+
+Local quality result - 2026-05-21:
+
+- `npm run lint` passed after removing unused imports/variables from `/imports` and the admin home page.
+- `npm run typecheck` passed.
+- `npm run test` passed: 75 tests, 0 failures.
+- `npm run build` passed with Next.js production build.
+- `npm audit --audit-level=moderate` still reports a moderate `postcss` advisory through Next; npm suggests a breaking force fix, so this is tracked as a dependency follow-up instead of being applied.
 
 Acceptance:
 
-- The repository passes the standard local quality gate.
+- [x] The repository passes the standard local quality gate.
 - Production remains usable for Owner and Viewer after the cleanup deploy.
 - Priority B work can continue without carrying known lint/type/build debt.
 
@@ -419,7 +427,7 @@ These tasks make the platform usable by the team day to day.
 
 ### B1. Admin Operations Dashboard
 
-Status: first pass implemented by parallel agent on 2026-05-21; pending quality gate and owner UX review.
+Status: first pass implemented by parallel agent on 2026-05-21; local quality gate passed, pending owner UX review.
 
 - Show data mode: Supabase vs memory.
 - Show last import time.
@@ -429,7 +437,7 @@ Status: first pass implemented by parallel agent on 2026-05-21; pending quality 
 
 ### B2. Improve `/imports`
 
-Status: first pass implemented by parallel agent on 2026-05-21; currently has the known lint cleanup item in the post-A10 quality gate.
+Status: first pass implemented by parallel agent on 2026-05-21; lint cleanup completed and local quality gate passed.
 
 - Make review faster with table + detail drawer.
 - Bulk approve legacy batches.

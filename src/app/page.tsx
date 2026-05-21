@@ -1,13 +1,10 @@
 import {
   Activity,
   AlertTriangle,
-  Archive,
   BarChart3,
-  Bell,
   CalendarDays,
   CheckCircle2,
   Clock3,
-  ExternalLink,
   FileText,
   Filter,
   Gauge,
@@ -17,13 +14,11 @@ import {
   LineChart,
   LockKeyhole,
   MessageSquareText,
-  MoreHorizontal,
   Radio,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { adminRoles } from "@/lib/auth-config";
@@ -374,7 +369,7 @@ export default async function Home() {
                 {/* Workflow Funnel */}
                 <Panel title="قمع سير العمليات (Workflow Funnel)" icon={<Layers3 size={18} />}>
                   <div className="flex flex-col gap-3 py-1">
-                    {funnelSteps.map((step, idx) => (
+                    {funnelSteps.map((step) => (
                       <div className="relative" key={step.label}>
                         <div className="flex items-center justify-between text-sm mb-1 font-medium">
                           <span className="flex items-center gap-2">
