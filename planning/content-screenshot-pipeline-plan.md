@@ -191,7 +191,8 @@ Replace the placeholder capture behavior with a real capture pipeline.
 
 Status:
 
-- Partially completed on 2026-05-22 for persistence: successful live/manual captures now attempt to store image bytes in private Supabase Storage and serve them through `/api/captures/:id/asset`.
+- Partially completed and deployed on 2026-05-22 for persistence: successful live/manual captures now attempt to store image bytes in private Supabase Storage and serve them through `/api/captures/:id/asset`.
+- Signed-out access to the stored-asset proxy is blocked by the member API guard.
 - Still pending: a dedicated browser capture worker/service that produces the image bytes directly instead of relying on the current screenshot source URL.
 
 Tasks:

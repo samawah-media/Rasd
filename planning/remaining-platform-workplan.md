@@ -7,7 +7,7 @@ This file lists the remaining work needed to make the platform operate efficient
 Current priority:
 
 ```text
-Production smoke test for Supabase Storage evidence persistence
+Owner/editor live capture smoke for Supabase Storage evidence persistence
 ```
 
 Immediate prerequisite:
@@ -597,13 +597,14 @@ Later:
 
 ### C4. Screenshot And Evidence Pipeline
 
-Status: C4.1 evidence storage foundation implemented locally on 2026-05-22; pending production smoke.
+Status: C4.1 evidence storage foundation deployed on 2026-05-22; authenticated live capture smoke pending.
 
 - [x] Decide first storage target: Supabase Storage, because the app already uses Supabase service-role server runtime and membership-protected APIs.
 - [x] Add private evidence storage helper with stable object paths.
 - [x] Persist live/manual capture images into Supabase Storage when available.
 - [x] Keep `captures.asset_url` client-safe through `/api/captures/:id/asset`.
 - [x] Keep fallback behavior when storage is unavailable.
+- [x] Deploy storage foundation to production and confirm signed-out asset access is blocked.
 - [ ] Store report-page evidence for future legacy imports in Storage instead of repository public assets.
 - [ ] Capture preview evidence for review.
 - [ ] Capture report-grade screenshots only for approved/report items from a real browser capture worker.

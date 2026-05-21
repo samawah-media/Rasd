@@ -7,7 +7,7 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-Authenticated production smoke after Supabase Storage evidence persistence
+Owner/editor live capture smoke for Supabase Storage evidence persistence
 ```
 
 ## Premium UI Refresh Quality Gate
@@ -54,7 +54,7 @@ Local checks passed:
 
 ## Evidence Storage Quality Gate
 
-Status: local checks passed on 2026-05-22; production smoke pending after deploy.
+Status: deployed on 2026-05-22; unauthenticated asset-route guard passed; owner/editor live capture smoke pending.
 
 - New live/manual capture assets can be uploaded into private Supabase Storage.
 - Private stored assets are served through `/api/captures/:id/asset` for authenticated members.
@@ -68,6 +68,11 @@ Local checks passed:
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
+
+Production checks passed:
+
+- Vercel deployment `rasd-cne1lh12g-samawahs-projects.vercel.app` is Ready and aliased to `rasd-gamma.vercel.app`.
+- Signed-out request to `/api/captures/not-real/asset` returns `401 auth_required`.
 
 ## Post-A10 Local Quality Gate
 
