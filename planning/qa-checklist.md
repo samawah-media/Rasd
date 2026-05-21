@@ -145,10 +145,10 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 - Viewer-role behavior still needs a real viewer account or invite flow test.
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
-- The redesigned production client report still needs owner-side visual acceptance after the 2026-05-21 deploy.
+- The redesigned production client report has owner-side acceptance for the refreshed data/filter/export flow, but the latest manual item still needs confirmation after the screenshot worker fix lands.
 - Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.
 - X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
-- Share links need a browser-level production test after the report/share UI is polished.
+- Share-link API/RLS security passed production checks, but share links still need a browser-level production test with a newly generated token.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.
 - Real live screenshot capture is not implemented yet; current capture workflow must not be treated as proof of a successful browser screenshot until the new pipeline replaces the placeholder behavior.

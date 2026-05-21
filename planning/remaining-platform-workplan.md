@@ -346,16 +346,19 @@ This is the first task that proves the deployed system is actually usable end to
 
 Tasks:
 
-- [ ] Owner login.
-- Create/import item.
-- Review item.
-- Add/fix original link.
-- Confirm client report shows item.
-- Confirm client report metrics, heatmap, filters, item details, content image, publisher image, original link, and filtered export work.
-- Confirm viewer cannot access admin routes.
-- Confirm share link works, is noindexed/read-only, has no automatic expiry by default, and can be revoked.
-- Confirm owner/editor can manage share links while viewer cannot.
-- Confirm Vercel redeploy does not lose data.
+- [x] Owner login.
+- [x] Create/import item.
+- [x] Review item.
+- [x] Add/fix original link.
+- [x] Confirm client report shows item.
+- [x] Confirm client report metrics, heatmap, filters, item details, publisher image, original link, and filtered export work.
+- [ ] Confirm production live screenshot/content image for the latest manual item after the screenshot worker fix lands.
+- [x] Confirm unauthenticated users cannot access admin/client API routes.
+- [ ] Confirm viewer cannot access admin routes with a real viewer account.
+- [x] Confirm share-link API security: create/revoke is owner/editor-only, public resolve is read-only, invalid/revoked links do not expose data, and pages are noindexed.
+- [ ] Confirm share link works end to end in the browser with a newly generated production token.
+- [x] Confirm owner/editor can manage share links while viewer is blocked by live RLS.
+- [x] Confirm Vercel redeploy does not lose persisted legacy/client-report data.
 
 Acceptance:
 
@@ -375,6 +378,14 @@ Status update - 2026-05-21:
 - Owner chose to remove the old test artifact. Production cleanup deleted the `https://hedayathon.com` test monitoring item, its report link, and two old captures.
 - Post-cleanup state should show 125 client report items after refresh: 124 legacy archive items plus 1 live X report item.
 - Owner confirmed the refreshed client report works: expected item count, valid first item, clickable day filtering, and filtered PDF export. Export quality polish remains a later D2 task, not a blocker for A10.
+- Additional production security check on 2026-05-21:
+  - Unauthenticated production checks passed for `/`, `/ops`, `/imports`, `/feed`, `/reports/report-5`, and `/client-report`; page routes redirect to `/login`.
+  - Unauthenticated API checks passed for `/api/admin/persistence`, `/api/client-report/hidayathon`, `/api/client-report/hidayathon/export-pdf`, `/api/items/:id/evidence-card.svg`, `/api/reports/:id/share-link`, and `/api/share-links/:token/revoke`; all return `401 auth_required`.
+  - Public share-link resolve is intentionally public, but an invalid token returns `share_link_not_found`, and `/share/not-a-real-token` renders a private noindex "link unavailable" page with no admin tools.
+  - Live Supabase `share_links` RLS was rechecked: only `owner` and `editor` satisfy the management policy; `viewer` is excluded.
+  - `npm run test` passed with 75 tests, including share-link token privacy, view limits, revocation, expiry, client export guardrails, auth routing, and Supabase RLS/schema checks.
+  - `npm run typecheck` passed.
+  - `npm run lint` is currently blocked by the in-progress `/imports` work from the parallel agent (`src/app/imports/imports-client.tsx`), so it is not treated as an A10 regression until that work is merged/fixed.
 
 ## Priority B - Needed For Efficient Operations
 
