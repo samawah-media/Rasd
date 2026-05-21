@@ -11,7 +11,6 @@ import {
   ExternalLink,
   Link as LinkIcon,
   Loader2,
-  Plus,
   RefreshCw,
   Search,
   Sparkles,
@@ -20,13 +19,11 @@ import {
   Database,
   Terminal,
   Server,
-  Globe,
   Activity,
-  Settings,
   CheckSquare,
   Activity as HeartbeatIcon,
 } from "lucide-react";
-import type { Capture, HealthMetric, KeywordRule, MonitoringItem, ReportVersion, Source } from "@/lib/types";
+import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { BentoGrid, BentoCard } from "@/components/BentoGrid";
 
@@ -37,7 +34,6 @@ type ApiState = {
   items: MonitoringItem[];
   sources: Source[];
   metrics: HealthMetric[];
-  keywordRules: KeywordRule[];
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
 };
@@ -50,24 +46,6 @@ type IntakeResponse = {
     source: "x_oembed" | "html_metadata" | "url_only";
     warning?: string;
   } | null;
-};
-
-type SourcePollResponse = {
-  poll: {
-    source?: Source;
-    sources?: number;
-    fetched: number;
-    created: number;
-    duplicates: number;
-    skipped?: number;
-    failed: number;
-    items?: MonitoringItem[];
-  };
-};
-
-type SourceCreateResponse = {
-  source: Source;
-  duplicate?: boolean;
 };
 
 type WorkflowCleanupResponse = {
@@ -83,7 +61,6 @@ const emptyState: ApiState = {
   items: [],
   sources: [],
   metrics: [],
-  keywordRules: [],
   capturesByItem: {},
   liveReport: null,
 };
@@ -260,32 +237,6 @@ function systemText(metrics: HealthMetric[]) {
   return "مستقرة";
 }
 
-function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
-  const fetched = poll.fetched.toLocaleString("ar-SA");
-  const created = poll.created.toLocaleString("ar-SA");
-  const duplicates = poll.duplicates.toLocaleString("ar-SA");
-  const skipped = (poll.skipped ?? 0).toLocaleString("ar-SA");
-  const failed = poll.failed.toLocaleString("ar-SA");
-  const base = `${prefix}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، غير مطابق ${skipped}، متعثر ${failed}.`;
-
-  if (poll.fetched > 0 && poll.created === 0 && (poll.skipped ?? 0) > 0 && poll.failed === 0) {
-    return `${base} لم تدخل مواد جديدة لأن الأخبار لا تطابق كلمات الرصد الحالية.`;
-  }
-
-  return base;
-}
-
-const sourceScheduleOptions = [
-  { label: "كل 3 أيام", value: 4320 },
-  { label: "كل يومين", value: 2880 },
-  { label: "يوميًا", value: 1440 },
-  { label: "أسبوعيًا", value: 10080 },
-] as const;
-
-function scheduleLabel(minutes: number) {
-  return sourceScheduleOptions.find((option) => option.value === minutes)?.label ?? `كل ${minutes.toLocaleString("ar-SA")} دقيقة`;
-}
-
 function latestWorkflowItems(items: MonitoringItem[], limit = 48) {
   return items
     .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss")
@@ -301,11 +252,6 @@ export function OpsClient() {
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
-  const [rssName, setRssName] = useState("");
-  const [rssFeedUrl, setRssFeedUrl] = useState("");
-  const [requiredTerms, setRequiredTerms] = useState("");
-  const [optionalTerms, setOptionalTerms] = useState("");
-  const [excludeTerms, setExcludeTerms] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -324,13 +270,6 @@ export function OpsClient() {
     () => state.sources.filter((source) => source.type === "rss" && source.isActive && source.feedUrl),
     [state.sources],
   );
-
-  const rssSources = useMemo(
-    () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
-    [state.sources],
-  );
-
-  const activeKeywordRule = state.keywordRules[0] ?? null;
 
   const tabCounts = useMemo(() => {
     const counts: Record<WorkTab, number> = {
@@ -368,10 +307,9 @@ export function OpsClient() {
   );
 
   async function fetchSnapshot(): Promise<ApiState> {
-    const [itemsData, sourcesData, keywordRulesData, healthData, liveReportData] = await Promise.all([
+    const [itemsData, sourcesData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ sources: Source[] }>("/api/sources"),
-      apiJson<{ keyword_rules: KeywordRule[] }>("/api/keyword-rules"),
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
@@ -388,7 +326,6 @@ export function OpsClient() {
     return {
       items: itemsData.items,
       sources: sourcesData.sources,
-      keywordRules: keywordRulesData.keyword_rules,
       metrics: healthData.metrics,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
@@ -417,12 +354,6 @@ export function OpsClient() {
       .then((snapshot) => {
         if (!active) return;
         setState(snapshot);
-        const rule = snapshot.keywordRules[0];
-        if (rule) {
-          setRequiredTerms(rule.requiredTerms.join("\n"));
-          setOptionalTerms(rule.optionalTerms.join("\n"));
-          setExcludeTerms(rule.excludeTerms.join("\n"));
-        }
         setSelectedId((current) => current ?? latestWorkflowItems(snapshot.items)[0]?.id ?? null);
       })
       .catch((error) => {
@@ -463,8 +394,12 @@ export function OpsClient() {
       await refreshSilently();
 
       if (result.duplicate) {
-        setMessage(result.duplicateType === "content" ? "محتوى مكرر، تم تحديث المادة الموجودة." : "الرابط موجود، تم تحديث بياناته.");
-        setMessageType(result.duplicateType === "content" ? "warning" : "success");
+        setMessage(
+          result.duplicateType === "content"
+            ? "المحتوى موجود مسبقًا. حدّثنا المادة الموجودة وفتحناها لك في القائمة، ويمكنك اعتمادها أو التقاط صورة جديدة أو إضافتها للتقرير."
+            : "الرابط موجود مسبقًا. حدّثنا بياناته وفتحناه لك في القائمة، ويمكنك متابعة الاعتماد أو اللقطة أو إضافته للتقرير من تفاصيل المادة.",
+        );
+        setMessageType("info");
       } else {
         setMessage(sourceLabel(result.metadata));
         setMessageType("success");
@@ -514,150 +449,6 @@ export function OpsClient() {
         }),
       "تم تحديث بيانات المادة.",
     );
-  }
-
-  async function submitRssSource(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const feedUrl = rssFeedUrl.trim();
-    const existingSource = state.sources.find((source) => source.type === "rss" && source.feedUrl === feedUrl);
-
-    if (existingSource) {
-      setMessage(`المصدر موجود بالفعل: ${existingSource.name}.`);
-      setMessageType("info");
-      setRssName("");
-      setRssFeedUrl("");
-      return;
-    }
-
-    setPending("rss-source");
-    setMessage("جاري حفظ مصدر RSS...");
-    setMessageType("info");
-
-    try {
-      const result = await apiJson<SourceCreateResponse>("/api/sources", {
-        method: "POST",
-        body: JSON.stringify({
-          name: rssName || "مصدر أخبار",
-          type: "rss",
-          url: feedUrl,
-          feed_url: feedUrl,
-          credibility: "media",
-          poll_interval_minutes: 4320,
-        }),
-      });
-
-      await refreshSilently();
-      setRssName("");
-      setRssFeedUrl("");
-      setMessage(result.duplicate ? `المصدر موجود بالفعل: ${result.source.name}.` : `تم حفظ المصدر: ${result.source.name}.`);
-      setMessageType(result.duplicate ? "info" : "success");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر حفظ مصدر RSS.");
-      setMessageType("error");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function submitKeywordRule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setPending("keywords");
-    setMessage("جاري حفظ كلمات الرصد...");
-    setMessageType("info");
-
-    try {
-      const result = await apiJson<{ keyword_rule: KeywordRule }>("/api/keyword-rules", {
-        method: "POST",
-        body: JSON.stringify({
-          id: activeKeywordRule?.id,
-          requiredTerms,
-          optionalTerms,
-          excludeTerms,
-          language: activeKeywordRule?.language ?? "mixed",
-          priority: activeKeywordRule?.priority ?? 100,
-        }),
-      });
-      await refreshSilently();
-      setRequiredTerms(result.keyword_rule.requiredTerms.join("\n"));
-      setOptionalTerms(result.keyword_rule.optionalTerms.join("\n"));
-      setExcludeTerms(result.keyword_rule.excludeTerms.join("\n"));
-      setMessage("تم تحديث كلمات الرصد.");
-      setMessageType("success");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر حفظ كلمات الرصد.");
-      setMessageType("error");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function pollSource(source: Source) {
-    setPending(`poll-${source.id}`);
-    setMessage("جاري تشغيل المصدر...");
-    setMessageType("info");
-
-    try {
-      const result = await apiJson<SourcePollResponse>(`/api/sources/${source.id}/poll`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await refreshSilently();
-      setMessage(rssPollMessage(`تم تشغيل ${source.name}`, result.poll));
-      setMessageType(result.poll.failed > 0 || (result.poll.created === 0 && (result.poll.skipped ?? 0) > 0) ? "warning" : "success");
-      setSelectedId(result.poll.items?.[0]?.id ?? selectedId);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصدر.");
-      setMessageType("error");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function updateSourceSchedule(source: Source, input: { isActive?: boolean; pollIntervalMinutes?: number }) {
-    setPending(`source-schedule-${source.id}`);
-    setMessage("جاري تحديث جدولة المصدر...");
-    setMessageType("info");
-
-    try {
-      const result = await apiJson<{ source: Source }>(`/api/sources/${source.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          is_active: input.isActive,
-          poll_interval_minutes: input.pollIntervalMinutes,
-        }),
-      });
-      await refreshSilently();
-      setMessage(
-        `${result.source.name}: ${result.source.isActive ? "نشط" : "متوقف"}، الجدولة ${scheduleLabel(result.source.pollIntervalMinutes)}.`,
-      );
-      setMessageType("success");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر تحديث جدولة المصدر.");
-      setMessageType("error");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function pollActiveSources() {
-    setPending("poll-active");
-    setMessage("جاري تشغيل مصادر RSS النشطة...");
-    setMessageType("info");
-
-    try {
-      const result = await apiJson<SourcePollResponse>("/api/sources/poll-active", {
-        method: "POST",
-        body: JSON.stringify({ limit: 5 }),
-      });
-      await refreshSilently();
-      setMessage(rssPollMessage(`تم فحص ${(result.poll.sources ?? 0).toLocaleString("ar-SA")} مصدر`, result.poll));
-      setMessageType(result.poll.failed > 0 || (result.poll.created === 0 && (result.poll.skipped ?? 0) > 0) ? "warning" : "success");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
-      setMessageType("error");
-    } finally {
-      setPending(null);
-    }
   }
 
   function approveItem(item: MonitoringItem) {
@@ -905,7 +696,7 @@ export function OpsClient() {
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12 md:col-span-4" title="رصد مادة فردية" icon={LinkIcon} subtitle="إضافة تغريدة أو مقال إخباري مستقل">
+          <BentoCard colSpan="col-span-12 md:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="إضافة تغريدة أو مقال إخباري مستقل">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
               <div className="relative">
                 <input
@@ -963,132 +754,22 @@ export function OpsClient() {
             </form>
           </BentoCard>
 
-          {/* Card 2: RSS Sources Ingestion */}
-          <BentoCard colSpan="col-span-12 md:col-span-4" title="مصادر الأخبار (RSS)" icon={Globe} subtitle="إدارة وجدولة سحب موجزات الأخبار">
-            <div className="flex flex-col h-full justify-between gap-3">
-              <form onSubmit={submitRssSource} className="grid grid-cols-[1fr_auto] gap-2">
-                <input
-                  value={rssFeedUrl}
-                  onChange={(event) => setRssFeedUrl(event.target.value)}
-                  placeholder="رابط موجز RSS الجديد..."
-                  className="h-9 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
-                  dir="ltr"
-                  required
-                />
-                <button
-                  type="submit"
-                  disabled={pending !== null}
-                  className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-[#111111] px-3 text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
-                >
-                  {pending === "rss-source" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  إضافة
-                </button>
-              </form>
-
-              {rssSources.length ? (
-                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                  {rssSources.map((source) => (
-                    <div key={source.id} className="flex items-center justify-between gap-2 p-2 bg-[var(--color-bg-main)] rounded-xl border border-[var(--color-border)]">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />
-                          <p className="text-[11px] font-bold text-[var(--color-text-title)] truncate">{source.name}</p>
-                        </div>
-                        <p className="text-[9px] text-[var(--color-text-muted)] mt-0.5">جدولة: {scheduleLabel(source.pollIntervalMinutes)}</p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <select
-                          aria-label="جدولة المصدر"
-                          className="h-6 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold outline-none transition focus:border-[#2383E2] disabled:opacity-50"
-                          disabled={pending !== null}
-                          onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
-                          value={source.pollIntervalMinutes}
-                        >
-                          {sourceScheduleOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
-                          disabled={pending !== null}
-                          className="inline-flex h-6 items-center gap-1 rounded-lg bg-white border border-[var(--color-border)] px-2 text-[10px] font-bold hover:bg-stone-50 disabled:opacity-50"
-                        >
-                          {source.isActive ? "إيقاف" : "تفعيل"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => pollSource(source)}
-                          disabled={pending !== null || !source.isActive}
-                          className="inline-flex h-6 items-center gap-1 rounded-lg bg-white border border-[var(--color-border)] px-2 text-[10px] font-bold hover:bg-stone-50 disabled:opacity-50"
-                        >
-                          {pending === `poll-${source.id}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                          تشغيل
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[10px] text-[var(--color-text-muted)] text-center py-4">لا توجد مصادر RSS نشطة حاليًا.</p>
-              )}
-
-              <button
-                type="button"
-                onClick={pollActiveSources}
-                disabled={pending !== null || !activeRssSources.length}
-                className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] text-[11px] font-extrabold text-[#00C853] hover:bg-[#d4f2e4] transition disabled:opacity-50"
-              >
-                {pending === "poll-active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                فحص كافة المصادر النشطة
-              </button>
-            </div>
-          </BentoCard>
-
-          {/* Card 3: Keywords Settings */}
-          <BentoCard colSpan="col-span-12 md:col-span-4" title="كلمات الرصد الذكي" icon={Settings} subtitle="الكلمات المفتاحية المعتمدة لفلترة المحتوى">
-            <form onSubmit={submitKeywordRule} className="space-y-3 mt-1">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">إشارات رئيسية</span>
-                  <textarea
-                    value={requiredTerms}
-                    onChange={(event) => setRequiredTerms(event.target.value)}
-                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
-                    placeholder="سطر لكل كلمة"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">كلمات سياق</span>
-                  <textarea
-                    value={optionalTerms}
-                    onChange={(event) => setOptionalTerms(event.target.value)}
-                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
-                    placeholder="سطر لكل كلمة"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-[var(--color-text-muted)]">استبعاد</span>
-                  <textarea
-                    value={excludeTerms}
-                    onChange={(event) => setExcludeTerms(event.target.value)}
-                    className="h-20 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-2 text-[10px] leading-4 outline-none focus:border-[#2383E2] resize-none focus:bg-white"
-                    placeholder="سطر لكل كلمة"
-                  />
-                </div>
+          {/* Card 2: Sources Shortcut */}
+          <BentoCard colSpan="col-span-12 md:col-span-6" title="المصادر والكلمات الدالة" icon={Database} subtitle="إدارة RSS والجدولة والاستيراد القديم في صفحة منفصلة">
+            <div className="flex h-full flex-col justify-between gap-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Info label="مصادر نشطة" value={activeRssSources.length.toLocaleString("ar-SA")} />
+                <Info label="مركز الكلمات" value="منفصل" />
+                <Info label="استيراد قديم" value="أداة متقدمة" />
               </div>
-
-              <button
-                type="submit"
-                disabled={pending !== null}
-                className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
+              <a
+                href="/sources"
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#111111] px-4 text-xs font-bold text-white transition hover:bg-stone-900"
               >
-                {pending === "keywords" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                تحديث كلمات الفلترة
-              </button>
-            </form>
+                فتح صفحة المصادر
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </a>
+            </div>
           </BentoCard>
         </BentoGrid>
 

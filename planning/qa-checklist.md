@@ -7,7 +7,7 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-Authenticated production smoke after premium UI refresh
+Authenticated production smoke after /ops and /sources simplification
 ```
 
 ## Premium UI Refresh Quality Gate
@@ -28,10 +28,26 @@ Status: passed on 2026-05-22.
 Current owner-side smoke target:
 
 1. Open `https://rasd-gamma.vercel.app` as owner.
-2. Confirm `/overview`, `/ops`, `/client-report`, `/directory`, and `/access` render cleanly after login.
+2. Confirm `/ops`, `/client-report`, `/sources`, `/access`, and `/settings` render cleanly after login.
 3. Run one fresh `/ops` URL through intake, review, capture, live report insertion, and `/client-report` visibility.
-4. Confirm RSS source schedule controls remain visible and usable in `/ops`.
+4. Confirm RSS source schedule controls and keyword rules are visible and usable in `/sources`.
 5. Confirm Viewer still lands on `/client-report` and remains blocked from admin routes.
+
+## Operations Simplification Quality Gate
+
+Status: local implementation passed on 2026-05-22; pending deploy/production owner smoke.
+
+- `/ops` is the daily content workbench: manual URL intake, duplicate feedback, review, capture, report insertion, and workflow cleanup.
+- `/sources` is the source hub: RSS sources, source schedules, active/inactive state, manual polling, keyword rules, and advanced links to legacy import/backfill tools.
+- Main navigation is intentionally reduced to: لوحة التشغيل، تقرير العميل، المصادر، المستخدمين، الإعدادات.
+- Duplicate URL submissions now explain that the existing item was updated and opened for review, instead of only saying the URL exists.
+
+Local checks passed:
+
+- `npm run test`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
 
 ## Post-A10 Local Quality Gate
 
@@ -115,7 +131,7 @@ Partial run on 2026-05-21:
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
 
-0. Open `https://rasd-gamma.vercel.app/overview` and `https://rasd-gamma.vercel.app/directory`; confirm both pages render after login and use the refreshed shell.
+0. Open `https://rasd-gamma.vercel.app/ops`, `/sources`, `/client-report`, `/access`, and `/settings`; confirm all render after login and use the refreshed shell.
 
 1. Open `https://rasd-gamma.vercel.app/api/admin/persistence`.
 2. Confirm the JSON matches the Production Persistence expectations above.
@@ -185,14 +201,14 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 Use this after C1.2 deploy:
 
-- As owner/editor, open `https://rasd-gamma.vercel.app/ops`.
-- For one article/tweet from legacy reports, use `رابط مادة واحدة`; do not paste article URLs into the RSS source form.
-- If no source exists, add one from `/ops` using a public RSS feed URL and confirm the source appears without opening Supabase.
+- As owner/editor, open `https://rasd-gamma.vercel.app/sources`.
+- For one article/tweet from legacy reports, use `رابط مادة واحدة` in `/ops`; do not paste article URLs into the RSS source form.
+- If no source exists, add one from `/sources` using a public RSS feed URL and confirm the source appears without opening Supabase.
 - Add the same RSS feed again and confirm the UI reports that the source already exists rather than creating another active source.
 - Confirm the `مصادر الأخبار` block shows active RSS sources.
 - Click `تشغيل` for one RSS source and confirm the response message shows fetched, created, duplicate, and failed counts.
 - For a generic source such as Okaz, confirm unrelated items are counted as `غير مطابق` and do not appear in the review list.
-- Update `كلمات الرصد` from `/ops`, save, and confirm the next RSS run uses the new terms.
+- Update `كلمات الرصد` from `/sources`, save, and confirm the next RSS run uses the new terms.
 - Confirm new RSS materials appear in the same review list as manual URL items.
 - Re-run the same source and confirm duplicates increase while created stays 0 for the same feed entries.
 - Confirm the new RSS item can be approved, captured, and added to the live Hidayathon report like manual items.

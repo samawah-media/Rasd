@@ -7,7 +7,7 @@ This file lists the remaining work needed to make the platform operate efficient
 Current priority:
 
 ```text
-Production owner smoke test after premium UI refresh
+Production smoke test for simplified /ops and new /sources split
 ```
 
 Immediate prerequisite:
@@ -428,6 +428,15 @@ Production UI refresh quality result - 2026-05-22:
 - `/overview` and `/directory` are now production routes behind role protection.
 - `npm audit --audit-level=moderate` still reports the known Next/PostCSS advisory; the suggested force fix is breaking and remains deferred.
 
+Operations simplification update - 2026-05-22:
+
+- `/ops` was reduced back toward a daily operations center: paste URL, review, capture, add to report, and inspect the current workflow.
+- RSS source management, polling schedules, keyword rules, and legacy import entry points moved into a dedicated admin page: `/sources`.
+- Main navigation is now intentionally short: `/ops`, `/client-report`, `/sources`, `/access`, and `/settings`.
+- Legacy import/backfill pages remain available but are no longer first-level navigation items; they are linked from `/sources` as advanced archive tools.
+- Duplicate manual URL feedback is now explicit: when a URL/content already exists, the UI says the existing item was updated and opens it for review/capture/report actions.
+- Local quality checks passed after the split: `npm run test` (99 tests), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
 Acceptance:
 
 - [x] The repository passes the standard local quality gate.
@@ -470,15 +479,27 @@ Status: deferred on 2026-05-21. Current legacy report links are good enough for 
 
 ### B4. Improve `/ops`
 
-Status: premium first pass deployed on 2026-05-22; pending production review with the owner account.
+Status: premium first pass deployed on 2026-05-22, then simplified locally on 2026-05-22 so `/ops` is a daily operations center instead of a mixed settings/source page. Local checks passed; pending production deploy/review.
 
 - [x] Convert `/ops` into a focused inbox-style workbench.
 - [x] Keep the main flow visible: paste link, review, capture, add to report.
 - [x] Replace heavy explanatory side panels with compact filters and a detail inspector.
 - [x] Use the current green/yellow RASD direction with Vercel/Linear-style spacing and controls.
 - [x] Preserve the existing API workflow and role protection.
-- [x] Keep RSS source schedule controls visible in the refreshed `/ops` UI.
+- [x] Preserve RSS source schedule controls, then relocate them to `/sources` when `/ops` was simplified.
+- [x] Move RSS source controls and keyword tuning out of `/ops` into `/sources`.
+- [x] Add clearer duplicate-link feedback after manual intake.
 - [ ] Validate on production with owner login after deploy.
+
+### B4.1. Sources And Keywords Hub
+
+Status: implemented locally on 2026-05-22 with tests/typecheck/lint/build passing; pending production deploy/review.
+
+- [x] Add `/sources` as the admin hub for RSS sources, polling schedule, active/inactive state, manual source polling, and active-source batch polling.
+- [x] Move keyword rule editing into `/sources`.
+- [x] Keep legacy report import and legacy backfill as advanced links inside `/sources`.
+- [x] Protect `/sources` as owner/editor only.
+- [ ] Validate in production that owner/editor can add/run a source and update keywords from `/sources`.
 
 ### B5. Improve `/feed`
 
@@ -509,7 +530,7 @@ Detailed execution plan: [priority-c-real-source-integrations-plan.md](priority-
 
 ### C1. RSS/News Sources
 
-Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron that respects each source schedule. Next: C2 extraction/correction cleanup.
+Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron that respects each source schedule. On 2026-05-22 the source controls moved from `/ops` to `/sources` to keep operations simpler. Next: production smoke of the new `/sources` hub, then C4 evidence storage planning.
 
 - [x] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
 - [x] Use the existing `source_credibility` enum instead of adding a second reliability model.
@@ -520,14 +541,14 @@ Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron
 - [x] Dedupe by canonical URL and source item ID.
 - [x] Add RSS parsing, malformed feed, missing field, and duplicate ingestion tests.
 - [x] Add owner/editor manual polling endpoint before scheduled cron.
-- [x] Add `/ops` controls to run one active RSS source or a capped active-source batch.
-- [x] Add `/ops` controls to create the first RSS source from the admin UI and avoid duplicate feed rows.
+- [x] Add admin controls to run one active RSS source or a capped active-source batch.
+- [x] Add admin controls to create the first RSS source from the UI and avoid duplicate feed rows.
 - [x] Filter RSS entries by the active Hidayathon keyword rule and count unrelated entries as skipped.
-- [x] Add owner/editor keyword tuning for RSS relevance from `/ops`.
+- [x] Add owner/editor keyword tuning for RSS relevance from `/sources`.
 - [x] Add `/ops` cleanup for visible live workflow items so test manual/RSS content can be removed safely.
 - [x] Verify API auth rules keep RSS polling owner/editor-only and block Viewer.
 - [x] Add scheduled cron with `CRON_SECRET`; Vercel calls daily and the app only polls due sources.
-- [x] Add admin schedule controls per RSS source: daily, every 2 days, every 3 days, weekly, plus active/inactive.
+- [x] Add admin schedule controls per RSS source in `/sources`: daily, every 2 days, every 3 days, weekly, plus active/inactive.
 - [ ] Keep initial official/media items in review flow; avoid broad auto-approve until real QA passes.
 
 ### C2. Manual Web Extraction
@@ -689,4 +710,4 @@ Authenticated production smoke test for the refreshed UI
 
 Concrete first step:
 
-Open `https://rasd-gamma.vercel.app` as owner, then verify `/overview`, `/ops`, `/client-report`, `/directory`, and `/access`. After the visual pass, use `/ops` with one fresh public X/news URL and follow the item through review, capture, live report insertion, client report visibility, and filtered export.
+Open `https://rasd-gamma.vercel.app` as owner after deploy, then verify `/ops`, `/client-report`, `/sources`, `/access`, and `/settings`. After the visual pass, use `/ops` with one fresh public X/news URL and follow the item through review, capture, live report insertion, client report visibility, and filtered export. Then use `/sources` to confirm RSS schedules and keyword edits still work.

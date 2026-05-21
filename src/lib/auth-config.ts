@@ -46,6 +46,10 @@ export function isAdminPath(pathname: string) {
     pathname.startsWith("/feed/") ||
     pathname === "/ops" ||
     pathname.startsWith("/ops/") ||
+    pathname === "/sources" ||
+    pathname.startsWith("/sources/") ||
+    pathname === "/settings" ||
+    pathname.startsWith("/settings/") ||
     pathname === "/access" ||
     pathname.startsWith("/access/") ||
     pathname === "/imports" ||

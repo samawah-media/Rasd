@@ -215,10 +215,11 @@ Implementation notes:
 
 - `/api/sources/:id/poll` runs one RSS source and returns created/duplicate/failed counts plus created review items.
 - `/api/sources/poll-active` runs active RSS sources with a capped batch limit.
-- `/ops` now lets owner/editor add an RSS source, shows active RSS sources, and can trigger either one source or the active batch.
+- `/sources` now lets owner/editor add an RSS source, shows active RSS sources, and can trigger either one source or the active batch.
+- `/ops` stays focused on daily content intake and review; it links to `/sources` instead of showing source and keyword controls inline.
 - `/api/items/archive-workflow` archives the currently visible workflow items, removes report-item links if present, and intentionally does not hard-delete or archive legacy imported report items.
 - RSS-created items appear in the same review/capture/report workflow as manual URL items.
-- Cron remains intentionally unimplemented until Phase C1.3.
+- Scheduled polling is handled in Phase C1.3 through the protected cron route and per-source schedules.
 
 ## Phase C1.3 - Scheduled Polling
 
@@ -229,7 +230,7 @@ Tasks:
 - [x] Add `/api/cron/poll-sources`.
 - [x] Protect with `CRON_SECRET`.
 - [x] Add `vercel.json` with a daily production cron.
-- [x] Let owner/editor control each RSS source schedule from `/ops`.
+- [x] Let owner/editor control each RSS source schedule from `/sources`.
 - [x] Default new RSS sources to every 3 days, with admin options for daily, every 2 days, every 3 days, and weekly.
 - [x] Cron only runs sources that are due according to `last_checked_at` and `poll_interval_minutes`.
 - [x] Start daily if on Hobby.
@@ -322,6 +323,24 @@ Implementation notes:
 - Manual intake keeps compact extraction evidence in `raw_response.input.extraction` instead of storing full HTML.
 - Production build verification passed on 2026-05-22 after the premium UI refresh: `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build` all passed.
 
+## Phase C1 UI Simplification - Sources Hub
+
+Outcome: source management is useful without making the daily `/ops` page noisy.
+
+Tasks:
+
+- [x] Move RSS source management out of `/ops` into `/sources`.
+- [x] Move keyword rule tuning out of `/ops` into `/sources`.
+- [x] Keep legacy import/backfill reachable from `/sources` as advanced archive tools.
+- [x] Keep `/sources` owner/editor protected.
+- [x] Keep `/ops` focused on manual intake, review, capture, and report insertion.
+
+Acceptance checks:
+
+- `/ops` can still add and process one manual URL.
+- `/sources` can still add/run RSS sources, update schedules, and save keyword rules.
+- Legacy import tools remain reachable without being first-level daily navigation.
+
 ## Phase C2.4 - Optional External Fallback
 
 Outcome: blocked sites can use a fallback service only when explicitly configured.
@@ -348,7 +367,7 @@ First real test path:
 
 1. Add one official/media RSS source.
 2. Run manual poll.
-3. Confirm items appear in `/ops`.
+3. Confirm source management happens in `/sources` and created items appear in `/ops`.
 4. Approve one item.
 5. Capture report-grade evidence.
 6. Add to live report.

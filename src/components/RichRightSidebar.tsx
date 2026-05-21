@@ -4,17 +4,14 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  TrendingUp,
-  Inbox,
   Database,
   Cpu,
   FileText,
-  Link2,
   UserRound,
   Menu,
   X,
   LockKeyhole,
-  Video
+  Settings
 } from "lucide-react";
 
 // Beautiful SVG logo placeholder for Samawah
@@ -61,52 +58,34 @@ export default function RichRightSidebar() {
 
   const menuItems = [
     {
-      title: "لوحة الرصد",
-      subtitle: "خلاصة الإحصائيات الفورية",
-      path: "/overview",
-      icon: TrendingUp,
-    },
-    {
-      title: "غرفة التحكم البصري",
-      subtitle: "دليل الكاميرات التفاعلي",
-      path: "/directory",
-      icon: Video,
-    },
-    {
-      title: "التغذية الحية",
-      subtitle: "تدفق البيانات الفوري",
-      path: "/feed",
-      icon: Inbox,
-    },
-    {
-      title: "استيراد التقارير",
-      subtitle: "استيراد ومعالجة الروابط",
-      path: "/imports",
-      icon: Database,
-    },
-    {
-      title: "استكمال الروابط",
-      subtitle: "الالتقاط التلقائي للصور",
-      path: "/imports/backfill",
-      icon: Link2,
-    },
-    {
-      title: "منصة التشغيل",
-      subtitle: "صحة ومراقبة الخوادم",
+      title: "لوحة التشغيل",
+      subtitle: "إضافة ومراجعة المحتوى",
       path: "/ops",
       icon: Cpu,
     },
     {
-      title: "التقرير التنفيذي",
-      subtitle: "توليد ومشاركة التقارير",
+      title: "تقرير العميل",
+      subtitle: "الواجهة النهائية للعميل",
       path: "/client-report",
       icon: FileText,
     },
     {
-      title: "حسابات العملاء",
-      subtitle: "إدارة الصلاحيات والوصول",
+      title: "المصادر",
+      subtitle: "RSS والكلمات الدالة",
+      path: "/sources",
+      icon: Database,
+    },
+    {
+      title: "المستخدمين",
+      subtitle: "الأدوار والوصول",
       path: "/access",
       icon: UserRound,
+    },
+    {
+      title: "الإعدادات",
+      subtitle: "إعدادات المنصة",
+      path: "/settings",
+      icon: Settings,
     },
   ];
 
@@ -161,7 +140,7 @@ export default function RichRightSidebar() {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.path;
+            const isActive = pathname === item.path || Boolean(pathname?.startsWith(`${item.path}/`));
 
             return (
               <Link

@@ -151,7 +151,7 @@ export default async function Home() {
             </div>
 
             <Link
-              href="/directory"
+              href="/ops"
               className="relative z-10 w-full h-12 rounded-2xl bg-[#2383E2] hover:bg-[#1b6ec4] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all"
             >
               <span>دخول غرفة الرصد والعمليات</span>
