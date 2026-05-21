@@ -19,7 +19,7 @@ const apiRules: ApiRule[] = [
   { pattern: /^\/api\/imports(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/items(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/connectors(?:\/|$)/, roles: adminRoles },
-  { pattern: /^\/api\/sources$/, roles: adminRoles },
+  { pattern: /^\/api\/sources(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/source-rules$/, roles: adminRoles },
   { pattern: /^\/api\/keyword-rules$/, roles: adminRoles },
   { pattern: /^\/api\/reports\/[^/]+\/share-link$/, roles: adminRoles },
@@ -33,11 +33,7 @@ const apiRules: ApiRule[] = [
 export async function authorizeApiRequest(request: Request) {
   if (process.env.NODE_ENV === "test") return null;
 
-  const url = new URL(request.url);
-  const rule = apiRules.find((entry) => {
-    const methodMatches = !entry.methods || entry.methods.includes(request.method);
-    return methodMatches && entry.pattern.test(url.pathname);
-  });
+  const rule = findApiRule(request.method, new URL(request.url).pathname);
 
   if (!rule) {
     return jsonError("api_route_not_found_or_not_authorized", 404);
@@ -55,6 +51,17 @@ export async function authorizeApiRequest(request: Request) {
   }
 
   return null;
+}
+
+export function getApiRouteRolesForTest(method: string, pathname: string) {
+  return findApiRule(method, pathname)?.roles ?? null;
+}
+
+function findApiRule(method: string, pathname: string) {
+  return apiRules.find((entry) => {
+    const methodMatches = !entry.methods || entry.methods.includes(method);
+    return methodMatches && entry.pattern.test(pathname);
+  });
 }
 
 function jsonError(error: string, status: number) {

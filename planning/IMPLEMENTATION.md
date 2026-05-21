@@ -45,6 +45,8 @@ Open `http://localhost:3000`.
 - `/api/admin/health` connector and system health.
 - `/api/admin/persistence` runtime storage mode and Supabase schema reachability.
 - `/api/items/manual-url` manual URL intake endpoint.
+- `/api/sources/:id/poll` runs one configured RSS source and returns fetched, created, duplicate, and failed counts.
+- `/api/sources/poll-active` runs a capped batch of active RSS sources for owner/editor manual monitoring.
 - `/api/reports/hidayathon-live` returns the current live Hidayathon report id so production UI does not depend on the local `report-5` seed id.
 - `/api/items/:id/review` approve/reject review endpoint.
 - `/api/items/:id/capture-report-grade` guarded report-grade capture endpoint.
@@ -95,6 +97,7 @@ The prototype now includes Node test coverage for the most important workflow ru
 - client-report utility checks cover Arabic legacy date extraction, capture-date extraction, and the enriched Hidayathon report dataset.
 - API checks verify `/api/client-report/hidayathon` serves the interactive report data.
 - API checks verify `/api/client-report/hidayathon/export-pdf` returns a printable client-safe export and rejects exports above 50 items.
+- API checks verify manual RSS polling creates review items once, deduplicates re-runs, returns controlled JSON errors, and keeps polling endpoints owner/editor-only in auth rules.
 - backfill utility/API checks verify that the 124 interactive PDF annotation links are available and that missing legacy URLs are not fabricated.
 - legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and 124 openable original URLs.
 - production persistence checks verify the canonical legacy organization slug `legacy-hidayathon`, live row-count sanity SQL, protected admin persistence endpoint behavior, and owner-confirmed Supabase runtime mode.
@@ -128,7 +131,7 @@ Supabase changed Data API exposure behavior for newly created tables in 2026, so
 
 ## Current Implementation Boundary
 
-This is a production-shaped foundation, not the full external integration layer yet. X API, Browser Run, R2 uploads, and AI summaries are represented by interfaces, API contracts, and guarded job placeholders so they can be connected without changing the product shape.
+This is a production-shaped foundation, not the full external integration layer yet. Manual RSS polling is now connected for owner/editor use, while scheduled cron, X API, Browser Run, R2 uploads, and AI summaries remain guarded future integrations.
 
 ## Supabase Activation Details
 

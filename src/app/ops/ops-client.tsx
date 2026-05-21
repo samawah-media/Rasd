@@ -15,13 +15,14 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
+import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
 
 type ApiState = {
   items: MonitoringItem[];
+  sources: Source[];
   metrics: HealthMetric[];
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
@@ -37,8 +38,21 @@ type IntakeResponse = {
   } | null;
 };
 
+type SourcePollResponse = {
+  poll: {
+    source?: Source;
+    sources?: number;
+    fetched: number;
+    created: number;
+    duplicates: number;
+    failed: number;
+    items?: MonitoringItem[];
+  };
+};
+
 const emptyState: ApiState = {
   items: [],
+  sources: [],
   metrics: [],
   capturesByItem: {},
   liveReport: null,
@@ -53,6 +67,14 @@ const arabicApiErrors: Record<string, string> = {
   item_not_report_ready: "المادة ليست جاهزة للتقرير بعد.",
   report_not_found: "التقرير غير موجود.",
   budget_exceeded: "تم تجاوز حد الاستخدام المسموح.",
+  source_not_found: "المصدر غير موجود.",
+  source_not_rss: "هذا المصدر ليس مصدر RSS.",
+  source_poll_failed: "تعذر تشغيل المصدر.",
+  rss_fetch_failed: "تعذر جلب موجز RSS.",
+  rss_fetch_timeout: "انتهت مهلة جلب موجز RSS.",
+  rss_parse_failed: "تعذر قراءة موجز RSS.",
+  rss_feed_empty: "موجز RSS فارغ.",
+  rss_feed_too_large: "موجز RSS كبير جدًا.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
   archive_failed: "تعذرت أرشفة المادة.",
 };
@@ -66,6 +88,7 @@ const tabLabels: Record<WorkTab, string> = {
 };
 
 function arabicError(key: string): string {
+  if (key.startsWith("rss_fetch_failed")) return arabicApiErrors.rss_fetch_failed;
   return arabicApiErrors[key] ?? key;
 }
 
@@ -195,9 +218,9 @@ function systemText(metrics: HealthMetric[]) {
   return "مستقرة";
 }
 
-function latestManualItems(items: MonitoringItem[], limit = 32) {
+function latestWorkflowItems(items: MonitoringItem[], limit = 48) {
   return items
-    .filter((item) => item.sourceType === "manual_url")
+    .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss")
     .filter((item) => item.state !== "archived")
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
     .slice(0, limit);
@@ -219,29 +242,34 @@ export function OpsClient() {
 
   const liveReportId = state.liveReport?.id ?? "report-5";
 
-  const manualItems = useMemo(
-    () => latestManualItems(state.items),
+  const workflowItems = useMemo(
+    () => latestWorkflowItems(state.items),
     [state.items],
+  );
+
+  const activeRssSources = useMemo(
+    () => state.sources.filter((source) => source.type === "rss" && source.isActive && source.feedUrl),
+    [state.sources],
   );
 
   const tabCounts = useMemo(() => {
     const counts: Record<WorkTab, number> = {
-      active: manualItems.length,
+      active: workflowItems.length,
       review: 0,
       capture: 0,
       report: 0,
       done: 0,
     };
-    manualItems.forEach((item) => {
+    workflowItems.forEach((item) => {
       const itemTab = tabForItem(item);
       if (itemTab !== "active") counts[itemTab] += 1;
     });
     return counts;
-  }, [manualItems]);
+  }, [workflowItems]);
 
   const visibleItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return manualItems.filter((item) => {
+    return workflowItems.filter((item) => {
       const matchesTab = tab === "active" || tabForItem(item) === tab;
       const matchesQuery =
         !normalizedQuery ||
@@ -252,24 +280,25 @@ export function OpsClient() {
           .includes(normalizedQuery);
       return matchesTab && matchesQuery;
     });
-  }, [manualItems, query, tab]);
+  }, [workflowItems, query, tab]);
 
   const selectedItem = useMemo(
-    () => visibleItems.find((item) => item.id === selectedId) ?? manualItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null,
-    [manualItems, selectedId, visibleItems],
+    () => visibleItems.find((item) => item.id === selectedId) ?? workflowItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null,
+    [workflowItems, selectedId, visibleItems],
   );
 
   async function fetchSnapshot(): Promise<ApiState> {
-    const [itemsData, healthData, liveReportData] = await Promise.all([
+    const [itemsData, sourcesData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
+      apiJson<{ sources: Source[] }>("/api/sources"),
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
 
-    const manualCandidates = latestManualItems(itemsData.items);
+    const workflowCandidates = latestWorkflowItems(itemsData.items);
 
     const capturePairs = await Promise.all(
-      manualCandidates.map(async (item) => {
+      workflowCandidates.map(async (item) => {
         const result = await apiJson<{ captures: Capture[] }>(`/api/items/${item.id}/captures`);
         return [item.id, result.captures] as const;
       }),
@@ -277,6 +306,7 @@ export function OpsClient() {
 
     return {
       items: itemsData.items,
+      sources: sourcesData.sources,
       metrics: healthData.metrics,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
@@ -305,7 +335,7 @@ export function OpsClient() {
       .then((snapshot) => {
         if (!active) return;
         setState(snapshot);
-        setSelectedId((current) => current ?? snapshot.items.find((item) => item.sourceType === "manual_url")?.id ?? null);
+        setSelectedId((current) => current ?? latestWorkflowItems(snapshot.items)[0]?.id ?? null);
       })
       .catch((error) => {
         if (!active) return;
@@ -369,6 +399,53 @@ export function OpsClient() {
       setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تنفيذ العملية.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function pollSource(source: Source) {
+    setPending(`poll-${source.id}`);
+    setMessage("جاري تشغيل المصدر...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourcePollResponse>(`/api/sources/${source.id}/poll`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await refreshSilently();
+      const created = result.poll.created.toLocaleString("ar-SA");
+      const duplicates = result.poll.duplicates.toLocaleString("ar-SA");
+      setMessage(`تم تشغيل ${source.name}: جديد ${created}، مكرر ${duplicates}.`);
+      setMessageType(result.poll.failed > 0 ? "warning" : "success");
+      setSelectedId(result.poll.items?.[0]?.id ?? selectedId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصدر.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function pollActiveSources() {
+    setPending("poll-active");
+    setMessage("جاري تشغيل مصادر RSS النشطة...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourcePollResponse>("/api/sources/poll-active", {
+        method: "POST",
+        body: JSON.stringify({ limit: 5 }),
+      });
+      await refreshSilently();
+      setMessage(
+        `تم فحص ${result.poll.sources ?? 0} مصدر: جديد ${result.poll.created.toLocaleString("ar-SA")}، مكرر ${result.poll.duplicates.toLocaleString("ar-SA")}.`,
+      );
+      setMessageType(result.poll.failed > 0 ? "warning" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -569,6 +646,51 @@ export function OpsClient() {
             <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-semibold ${messageClass(messageType)}`}>{message}</div>
           ) : null}
         </form>
+        {activeRssSources.length ? (
+          <div className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-sm font-bold">مصادر الأخبار</h2>
+                <p className="mt-1 text-xs font-semibold text-[#66736d]">
+                  تشغيل يدوي آمن. المواد الجديدة تظهر في قائمة المراجعة.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={pollActiveSources}
+                disabled={pending !== null}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#116a5c]/25 bg-[#e8f5ef] px-3 text-sm font-semibold text-[#116a5c] transition hover:border-[#116a5c]/60 disabled:opacity-50"
+              >
+                {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                تشغيل المصادر النشطة
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              {activeRssSources.map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#edf0e9] bg-[#fbfbf8] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold">{source.name}</div>
+                    <div className="mt-1 text-xs font-semibold text-[#66736d]">
+                      آخر نجاح: {source.lastSuccessAt ? formatDate(source.lastSuccessAt) : "لم يعمل بعد"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => pollSource(source)}
+                    disabled={pending !== null}
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+                  >
+                    {pending === `poll-${source.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    تشغيل
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">

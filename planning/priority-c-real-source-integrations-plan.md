@@ -188,17 +188,25 @@ Outcome: owner/editor can trigger a controlled source poll from the app.
 
 Tasks:
 
-- [ ] Add `POST /api/sources/:id/poll`.
-- [ ] Add `POST /api/sources/poll-active` with small batch limits.
-- [ ] Return counts: fetched, created, duplicates, failed.
-- [ ] Add audit logs for polling runs.
-- [ ] Add an admin UI action in `/ops` or a dedicated sources section.
+- [x] Add `POST /api/sources/:id/poll`.
+- [x] Add `POST /api/sources/poll-active` with small batch limits.
+- [x] Return counts: fetched, created, duplicates, failed.
+- [x] Add audit logs for polling runs.
+- [x] Add an admin UI action in `/ops` or a dedicated sources section.
 
 Acceptance checks:
 
-- Viewer cannot call polling endpoints.
-- Owner/editor can poll one source and see results.
-- Poll failures show clear Arabic messages.
+- [x] Viewer cannot call polling endpoints.
+- [x] Owner/editor can poll one source and see results.
+- [x] Poll failures show clear Arabic messages.
+
+Implementation notes:
+
+- `/api/sources/:id/poll` runs one RSS source and returns created/duplicate/failed counts plus created review items.
+- `/api/sources/poll-active` runs active RSS sources with a capped batch limit.
+- `/ops` now shows active RSS sources and can trigger either one source or the active batch.
+- RSS-created items appear in the same review/capture/report workflow as manual URL items.
+- Cron remains intentionally unimplemented until Phase C1.3.
 
 ## Phase C1.3 - Scheduled Polling
 

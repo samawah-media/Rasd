@@ -31,6 +31,7 @@ import {
   validateViewerAccountInput,
 } from "@/server/client-access";
 import { SourceValidationError } from "@/server/source-validation";
+import { RssIngestionError } from "@/server/rss-ingestion";
 
 type AppBindings = {
   Variables: {
@@ -88,6 +89,25 @@ function isAuthorizedAdminImport(c: { req: { header(name: string): string | unde
   const providedToken = c.req.header("x-rasd-admin-token");
 
   return Boolean(expectedToken && providedToken && providedToken === expectedToken);
+}
+
+function sourcePollPayload(result: Awaited<ReturnType<typeof persistentStore.ingestRssSource>>) {
+  return {
+    source: result.source,
+    fetched: result.fetched,
+    created: result.created,
+    duplicates: result.duplicates,
+    failed: result.failed,
+    items: result.items,
+  };
+}
+
+function sourcePollErrorStatus(error: unknown) {
+  const message = error instanceof Error ? error.message : "source_poll_failed";
+  if (message === "source_not_found") return { status: 404 as const, error: "source_not_found" };
+  if (message === "source_not_rss") return { status: 400 as const, error: "source_not_rss" };
+  if (error instanceof RssIngestionError) return { status: 502 as const, error: message };
+  return { status: 500 as const, error: "source_poll_failed" };
 }
 
 api.get("/admin/health", async (c) => c.json(withRequestId(c, await persistentStore.health())));
@@ -294,6 +314,59 @@ api.post("/sources", async (c) => {
       return c.json(withRequestId(c, { error: error.message }), 400);
     }
     throw error;
+  }
+});
+
+api.post("/sources/poll-active", async (c) => {
+  const body = await readJson(c);
+  const requestedLimit = typeof body.limit === "number" ? Math.trunc(body.limit) : 5;
+  const limit = Math.max(1, Math.min(10, requestedLimit));
+  const sources = (await persistentStore.listSources())
+    .filter((source) => source.type === "rss" && source.isActive && source.feedUrl)
+    .slice(0, limit);
+
+  const runs: Array<Record<string, unknown>> = [];
+  let fetched = 0;
+  let created = 0;
+  let duplicates = 0;
+  let failed = 0;
+
+  for (const source of sources) {
+    try {
+      const result = sourcePollPayload(await persistentStore.ingestRssSource(source.id));
+      fetched += result.fetched;
+      created += result.created;
+      duplicates += result.duplicates;
+      failed += result.failed;
+      runs.push({ ok: true, sourceId: source.id, sourceName: source.name, ...result });
+    } catch (error) {
+      const mapped = sourcePollErrorStatus(error);
+      failed += 1;
+      runs.push({ ok: false, sourceId: source.id, sourceName: source.name, error: mapped.error });
+    }
+  }
+
+  return c.json(
+    withRequestId(c, {
+      poll: {
+        sources: sources.length,
+        fetched,
+        created,
+        duplicates,
+        failed,
+        runs,
+      },
+    }),
+  );
+});
+
+api.post("/sources/:id/poll", async (c) => {
+  try {
+    const result = sourcePollPayload(await persistentStore.ingestRssSource(c.req.param("id")));
+    return c.json(withRequestId(c, { poll: result }));
+  } catch (error) {
+    const mapped = sourcePollErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error }), mapped.status);
   }
 });
 

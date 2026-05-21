@@ -155,13 +155,26 @@ For live row-count sanity:
 npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_priority_a.sql -o json
 ```
 
+## RSS Manual Polling Smoke Test
+
+Use this after C1.2 deploy:
+
+- As owner/editor, open `https://rasd-gamma.vercel.app/ops`.
+- Confirm the `مصادر الأخبار` block appears when at least one active RSS source exists.
+- Click `تشغيل` for one RSS source and confirm the response message shows created/duplicate counts.
+- Confirm new RSS materials appear in the same review list as manual URL items.
+- Re-run the same source and confirm duplicates increase while created stays 0 for the same feed entries.
+- Confirm the new RSS item can be approved, captured, and added to the live Hidayathon report like manual items.
+- Confirm a Viewer account cannot call `POST /api/sources/:id/poll` or `POST /api/sources/poll-active`.
+- Confirm failed/broken feeds return a JSON error message, not an empty response or `Unexpected end of JSON input`.
+
 ## Current Residual Risks
 
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
 - Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.
 - X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
 - Share-link API/RLS security passed production checks, but share links are intentionally dormant for now; primary client access is Viewer login to `/client-report`.
-- X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
+- RSS/source automation has manual owner/editor polling only; scheduled cron is not connected yet.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.
 - `npm audit --audit-level=moderate` currently reports a `postcss` advisory via Next. Do not run `npm audit fix --force`; wait for a compatible Next/PostCSS patch path.
 - After the cleanup deploy, production `/client-report`, `/ops`, `/imports`, and Viewer restrictions need one quick smoke pass on `https://rasd-gamma.vercel.app`.

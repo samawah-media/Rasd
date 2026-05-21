@@ -24,6 +24,23 @@ async function requestText(path: string, init?: RequestInit) {
   return { response, text };
 }
 
+function rssFeed(item: { guid: string; link: string; title?: string; description?: string }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>RASD Test Feed</title>
+    <item>
+      <guid>${item.guid}</guid>
+      <title>${item.title ?? "هداية هاكاثون خبر تجريبي"}</title>
+      <link>${item.link}</link>
+      <description>${item.description ?? "تغطية تجريبية عن هداية وهاكاثون هداية."}</description>
+      <dc:creator>فريق الأخبار</dc:creator>
+      <pubDate>Wed, 20 May 2026 10:30:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`;
+}
+
 describe("Hono API acceptance workflow", () => {
   beforeEach(() => {
     store.resetForTest();
@@ -162,6 +179,94 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(created.json.source.pollIntervalMinutes, 60);
     assert.equal(privateFeed.response.status, 400);
     assert.equal(privateFeed.json.error, "feed_url must be a public http or https URL");
+  });
+
+  it("polls one RSS source into review items and deduplicates reruns", async () => {
+    const source = store.createSource({
+      name: "Hidayathon RSS API",
+      type: "rss",
+      feedUrl: "https://news.example.com/rss.xml",
+      credibility: "official",
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        rssFeed({
+          guid: "api-story-1",
+          link: "https://news.example.com/hidayathon/api-story-1?utm_source=rss",
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+
+    try {
+      const first = await requestJson(`/api/sources/${source.id}/poll`, { method: "POST" });
+      const second = await requestJson(`/api/sources/${source.id}/poll`, { method: "POST" });
+
+      assert.equal(first.response.status, 200);
+      assert.equal(first.json.poll.fetched, 1);
+      assert.equal(first.json.poll.created, 1);
+      assert.equal(first.json.poll.duplicates, 0);
+      assert.equal(first.json.poll.items[0].sourceType, "rss");
+      assert.equal(first.json.poll.items[0].state, "needs_review");
+      assert.equal(first.json.poll.items[0].originalUrl, "https://news.example.com/hidayathon/api-story-1");
+
+      assert.equal(second.response.status, 200);
+      assert.equal(second.json.poll.created, 0);
+      assert.equal(second.json.poll.duplicates, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("polls active RSS sources with a small batch limit", async () => {
+    const active = store.createSource({
+      name: "Active RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/active.xml",
+      credibility: "media",
+    });
+    store.createSource({
+      name: "Inactive RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/inactive.xml",
+      credibility: "media",
+      isActive: false,
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        rssFeed({
+          guid: "active-story-1",
+          link: "https://news.example.com/hidayathon/active-story-1",
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+
+    try {
+      const result = await requestJson("/api/sources/poll-active", {
+        method: "POST",
+        body: JSON.stringify({ limit: 1 }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.poll.sources, 1);
+      assert.equal(result.json.poll.created, 1);
+      assert.equal(result.json.poll.runs[0].sourceId, active.id);
+      assert.equal(result.json.poll.runs[0].ok, true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("returns controlled JSON errors for invalid RSS source polling", async () => {
+    const manual = store.createSource({ name: "Manual", type: "manual_url" });
+    const missing = await requestJson("/api/sources/source-does-not-exist/poll", { method: "POST" });
+    const notRss = await requestJson(`/api/sources/${manual.id}/poll`, { method: "POST" });
+
+    assert.equal(missing.response.status, 404);
+    assert.equal(missing.json.error, "source_not_found");
+    assert.equal(notRss.response.status, 400);
+    assert.equal(notRss.json.error, "source_not_rss");
   });
 
   it("hydrates a pasted X URL into a readable manual item", async () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  adminRoles,
   DEFAULT_ORGANIZATION_ID,
   RASD_OWNER_EMAIL,
   defaultPathForRole,
@@ -12,6 +13,7 @@ import {
   isRoleAllowed,
   memberRoles,
 } from "../src/lib/auth-config";
+import { getApiRouteRolesForTest } from "../src/server/api-auth";
 
 describe("auth and role routing rules", () => {
   it("pins the first owner email and default tenant", () => {
@@ -41,5 +43,11 @@ describe("auth and role routing rules", () => {
     assert.equal(isAdminRole("viewer"), false);
     assert.equal(isAdminRole("editor"), true);
     assert.equal(isAdminRole("owner"), true);
+  });
+
+  it("protects RSS polling APIs from viewer accounts", () => {
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/source-1/poll"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/poll-active"), adminRoles);
+    assert.equal(isRoleAllowed("viewer", adminRoles), false);
   });
 });
