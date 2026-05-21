@@ -100,6 +100,7 @@ export type MonitoringItem = {
   warning?: string;
   sourceItemId?: string;
   raw_response?: unknown;
+  discoveryMethod?: "manual" | "rss" | "auto_search";
 };
 
 export type Capture = {

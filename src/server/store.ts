@@ -24,6 +24,9 @@ import {
   fetchRssFeed,
   type RssIngestionItem,
 } from "@/server/rss-ingestion";
+import { XSearchManager } from "@/lib/x/search-manager";
+import { canonicalizeXUrl } from "@/lib/x/parser";
+import type { XSearchRunResult } from "@/lib/x/types";
 import type {
   Capture,
   CaptureKind,
@@ -109,6 +112,7 @@ const reportItems: ReportItem[] = [];
 const auditLogs: AuditEvent[] = [];
 const shareLinks: ShareLink[] = [];
 const connectorRuns: ConnectorRun[] = [];
+let xSearchLastRun: XSearchRunResult | null = null;
 
 const initialUsage: UsageSnapshot = {
   xReadsToday: 120,
@@ -412,9 +416,10 @@ export const store = {
         rss: "healthy",
         web_page: "degraded",
         x_oembed: "not_configured",
-        x_recent_search: "not_configured",
+        x_recent_search: xSearchLastRun ? "healthy" : "ready",
       },
       usage,
+      xSearchLastRun,
     };
   },
 
@@ -1097,7 +1102,7 @@ export const store = {
     );
     if (!budget.allowed) return { ok: false as const, budget };
 
-    if (type === "x_recent_search" || type === "x_filtered_stream") {
+    if (type === "x_filtered_stream") {
       const run: ConnectorRun = {
         id: crypto.randomUUID(),
         connector: type,
@@ -1119,5 +1124,105 @@ export const store = {
     connectorRuns.unshift(run);
     audit("connector.run_queued", run.id, { connector: type });
     return { ok: true as const, run, budget };
+  },
+
+  /**
+   * Run an X search cycle using XSearchManager.
+   * Discovers tweets about Hidayathon, deduplicates, and ingests new items.
+   */
+  async runXSearch() {
+    const budget = checkBudget(usageLimit, usage, { type: "x_read", units: 50 });
+    if (!budget.allowed) {
+      return { ok: false as const, error: "budget_exceeded", budget };
+    }
+
+    const manager = new XSearchManager({
+      X_SEARCH_PROVIDER_TYPE: process.env.X_SEARCH_PROVIDER_TYPE,
+      XAI_API_KEY: process.env.XAI_API_KEY,
+    });
+
+    const rule = keywordRulesState[0];
+    if (!rule) {
+      return { ok: false as const, error: "no_keyword_rules" };
+    }
+
+    // Build existing URLs set for dedup
+    const existingUrls = new Set(
+      items
+        .filter((item) => item.sourceType?.startsWith("x_") || item.originalUrl?.includes("x.com"))
+        .map((item) => canonicalizeXUrl(item.originalUrl ?? "")),
+    );
+
+    const { results, runResult } = await manager.executeSearch({
+      requiredTerms: rule.requiredTerms,
+      optionalTerms: rule.optionalTerms,
+      languages: rule.language === "mixed" ? ["ar", "en"] : [rule.language],
+      existingUrls,
+      options: {
+        fromDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        maxResults: 30,
+      },
+    });
+
+    // Track the run result
+    xSearchLastRun = runResult;
+
+    // Ingest each new discovered tweet as a monitoring item
+    const ingestedItems: MonitoringItem[] = [];
+    for (const result of results) {
+      const matchResult = explainKeywordMatch(result.text, rule);
+
+      const newItem: MonitoringItem = {
+        id: crypto.randomUUID(),
+        sourceId: "src-x-search",
+        sourceName: result.authorHandle,
+        sourceType: "x_recent_search",
+        state: "needs_review" as ItemState,
+        title: result.text.slice(0, 120),
+        summary: result.text,
+        summarySourceText: result.text,
+        sentiment: "neutral" as MonitoringItem["sentiment"],
+        sentimentConfidence: 0.5,
+        originalUrl: result.tweetUrl,
+        publishedAt: result.publishedAt ?? now(),
+        authorName: result.authorHandle.replace(/^@/u, ""),
+        authorHandle: result.authorHandle,
+        relevanceScore: matchResult.score,
+        relevanceReason: matchResult.reason,
+        matchedTerms: matchResult.matchedTerms,
+        dedupeKey: `x-search:${result.tweetId}`,
+        hasReportGradeCapture: false,
+        discoveryMethod: "auto_search",
+      };
+
+      items.unshift(newItem);
+      ingestedItems.push(newItem);
+      audit("item.auto_discovered", newItem.id, {
+        tweetUrl: result.tweetUrl,
+        provider: runResult.provider,
+        relevanceScore: matchResult.score,
+      });
+    }
+
+    // Update usage
+    usage = { ...usage, xReadsToday: usage.xReadsToday + 1, xReadsThisMonth: usage.xReadsThisMonth + 1 };
+
+    const connectorRun: ConnectorRun = {
+      id: crypto.randomUUID(),
+      connector: "x_recent_search",
+      status: "success",
+      cursor: { lastSearchedAt: now(), discoveredCount: results.length },
+      startedAt: runResult.searchedAt,
+      finishedAt: now(),
+    };
+    connectorRuns.unshift(connectorRun);
+
+    return {
+      ok: true as const,
+      runResult,
+      ingestedCount: ingestedItems.length,
+      items: ingestedItems,
+      budget,
+    };
   },
 };

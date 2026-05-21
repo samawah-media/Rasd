@@ -714,12 +714,12 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(afterRevoke.json.error, "share_link_revoked");
   });
 
-  it("keeps X API failure isolated as not configured", async () => {
+  it("accepts x_recent_search connector run as queued", async () => {
     const { response, json } = await requestJson("/api/connectors/x_recent_search/run", { method: "POST" });
 
     assert.equal(response.status, 200);
     assert.equal(json.ok, true);
-    assert.equal(json.run.status, "not_configured");
+    assert.equal(json.run.status, "queued");
   });
 
   it("imports approved legacy data through the API idempotently", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -52,6 +52,13 @@ type ApiState = {
     x_oembed: string;
     x_recent_search: string;
   };
+  xSearchLastRun?: {
+    provider: string;
+    newItems: number;
+    duplicateSkipped: number;
+    searchedAt: string;
+    durationMs: number;
+  } | null;
 };
 
 type IntakeResponse = {
@@ -269,7 +276,7 @@ function systemText(metrics: HealthMetric[]) {
 
 function latestWorkflowItems(items: MonitoringItem[], limit = 48, pinnedId?: string | null) {
   const candidates = items
-    .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss")
+    .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss" || item.sourceType === "x_recent_search")
     .filter((item) => item.state !== "archived")
     .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
   const limited = candidates.slice(0, limit);
@@ -292,9 +299,46 @@ export function OpsClient() {
   const [messageType, setMessageType] = useState<MessageType>("info");
   const [tab, setTab] = useState<WorkTab>("active");
   const [query, setQuery] = useState("");
+  const [searchRunning, setSearchRunning] = useState(false);
 
   const [itemWithRawResponse, setItemWithRawResponse] = useState<MonitoringItem | null>(null);
   const isXUrl = useMemo(() => isValidXUrl(url), [url]);
+
+  const triggerXSearch = useCallback(async () => {
+    setSearchRunning(true);
+    try {
+      const existingXUrls = state.items
+        .filter((item) => item.originalUrl?.includes("x.com"))
+        .map((item) => item.originalUrl)
+        .filter(Boolean);
+
+      const res = await fetch("/api/x-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ existingUrls: existingXUrls }),
+      });
+      const data = await res.json();
+
+      if (data.ok && data.runResult) {
+        setMessage(`✅ اكتشف ${data.runResult.newItems} تغريدة جديدة (تم تخطي ${data.runResult.duplicateSkipped} مكررة)`);
+        setMessageType("success");
+        // Refresh the main data
+        const refreshRes = await fetch("/api/health");
+        if (refreshRes.ok) {
+          const healthData = await refreshRes.json();
+          setState((prev) => ({ ...prev, ...healthData }));
+        }
+      } else {
+        setMessage(data.error || "فشل في البحث");
+        setMessageType("error");
+      }
+    } catch {
+      setMessage("خطأ في الاتصال بمحرك البحث");
+      setMessageType("error");
+    } finally {
+      setSearchRunning(false);
+    }
+  }, [state.items]);
 
   function handleSyncSuccess(updatedItem: MonitoringItem) {
     setState((prev) => ({
@@ -904,18 +948,54 @@ export function OpsClient() {
               </div>
             </BentoCard>
 
-            {/* Connected X Engine Bento Card */}
-            <BentoCard colSpan="col-span-12" title="محرك وقراءات منصة X" icon={Cpu}>
-              <div className="space-y-4 mt-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
-                    <Server className="h-3.5 w-3.5 text-[#1DA1F2]" /> محرك الربط الحلي
-                  </span>
-                  <span className="text-[#1DA1F2] font-extrabold flex items-center gap-1.5 select-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#1DA1F2] animate-pulse" />
-                    {state.connectors?.x_oembed === "healthy" ? "Apify (نشط)" : "OEmbed (احتياطي)"}
-                  </span>
+            {/* Connected X Engine & Auto-Discovery Bento Card */}
+            <BentoCard colSpan="col-span-12" title="محرك البحث التلقائي في X" icon={Cpu}>
+              <div className="space-y-3 mt-1">
+                {/* Provider Status Row */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Grok بحث", key: "grok_search", color: "#1DA1F2" },
+                    { label: "OEmbed مجاني", key: "oembed", color: "#00C853" },
+                  ].map((eng) => {
+                    const isActive = state.xSearchLastRun?.provider === eng.key ||
+                      (eng.key === "oembed" && state.connectors?.x_oembed === "healthy");
+                    return (
+                      <div key={eng.key}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-[10px] font-bold transition-all ${
+                          isActive
+                            ? `border-[${eng.color}]/30 bg-[${eng.color}]/5 text-[${eng.color}]`
+                            : "border-[var(--color-border)] bg-[var(--color-bg-main)] text-[var(--color-text-muted)]"
+                        }`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? "animate-pulse" : "opacity-40"}`}
+                          style={{ backgroundColor: isActive ? eng.color : "#999" }} />
+                        {eng.label}
+                        <span className="mr-auto text-[8px] font-extrabold opacity-60">
+                          {isActive ? "نشط" : "جاهز"}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Last Search Run Info */}
+                {state.xSearchLastRun && (
+                  <div className="bg-[var(--color-bg-main)] p-2.5 rounded-xl border border-[var(--color-border)] text-[10px] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[var(--color-text-muted)]">آخر بحث تلقائي</span>
+                      <span className="font-extrabold text-[var(--color-text-title)]">
+                        {new Date(state.xSearchLastRun.searchedAt).toLocaleString("ar-SA", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[var(--color-text-muted)]">تغريدات مكتشفة</span>
+                      <span className="font-extrabold text-[#00C853]">{state.xSearchLastRun.newItems} جديدة</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[var(--color-text-muted)]">مكررات تم تخطيها</span>
+                      <span className="font-extrabold text-stone-400">{state.xSearchLastRun.duplicateSkipped}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Circular Progress Ring for X Query consumption */}
                 {(() => {
@@ -938,11 +1018,29 @@ export function OpsClient() {
                       <div className="flex-1 min-w-0">
                         <span className="text-[9px] font-bold text-[var(--color-text-muted)] block">الاستهلاك الشهري لقراءات X</span>
                         <span className="text-xs font-black text-[var(--color-text-title)] mt-0.5 block">{consumption.toLocaleString()} / {limit.toLocaleString()} طلب</span>
-                        <span className="text-[8px] text-stone-400 mt-0.5 block">مفتاح الربط الذكي: xai-t8sa2J...</span>
                       </div>
                     </div>
                   );
                 })()}
+
+                {/* Manual Search Trigger Button */}
+                <button
+                  id="trigger-x-search"
+                  onClick={triggerXSearch}
+                  disabled={searchRunning}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-extrabold text-xs text-white transition-all duration-300"
+                  style={{
+                    background: searchRunning
+                      ? "linear-gradient(135deg, #666, #888)"
+                      : "linear-gradient(135deg, #1DA1F2, #0D8BD9)",
+                    boxShadow: searchRunning ? "none" : "0 4px 20px rgba(29,161,242,0.3)",
+                  }}>
+                  {searchRunning ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> جاري البحث...</>
+                  ) : (
+                    <><Search className="h-4 w-4" /> ابحث الآن في X عن الهاكثون</>
+                  )}
+                </button>
               </div>
             </BentoCard>
 
@@ -1199,6 +1297,12 @@ export function OpsClient() {
                             <span className="rounded-full bg-[var(--color-bg-main)] border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-extrabold text-[var(--color-text-muted)]">
                               {platformLabel(item)}
                             </span>
+                            {item.discoveryMethod === "auto_search" && (
+                              <span className="rounded-full bg-[#1DA1F2]/10 border border-[#1DA1F2]/20 px-2 py-0.5 text-[9px] font-extrabold text-[#1DA1F2] flex items-center gap-1">
+                                <Search className="h-2.5 w-2.5" />
+                                مكتشفة تلقائياً
+                              </span>
+                            )}
                             {item.warning && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 animate-bounce" />}
                           </div>
 

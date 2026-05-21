@@ -89,6 +89,18 @@ export const sources: Source[] = [
     isActive: true,
     pollIntervalMinutes: 1440,
   },
+  {
+    id: "src-x-search",
+    name: "بحث تلقائي في X",
+    type: "x_recent_search",
+    url: "https://x.com/search",
+    handle: "@RASD_AutoDiscovery",
+    country: "السعودية",
+    credibility: "official",
+    isVerifiedSource: true,
+    isActive: true,
+    pollIntervalMinutes: 1440, // Once per day
+  },
 ];
 
 export const monitoringItems: MonitoringItem[] = [
