@@ -1,7 +1,7 @@
 import Parser from "rss-parser";
 import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
 import { keywordRules } from "@/lib/mock-data";
-import type { ItemState, MonitoringItem, Sentiment, Source } from "@/lib/types";
+import type { ItemState, KeywordRule, MonitoringItem, Sentiment, Source } from "@/lib/types";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type FetchLike = typeof fetch;
@@ -112,7 +112,7 @@ export async function parseRssFeed(xml: string, feedUrl: string): Promise<RssFee
   }
 }
 
-export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = new Date().toISOString()): RssIngestionItem {
+export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = new Date().toISOString(), rule: KeywordRule = keywordRules[0]): RssIngestionItem {
   const title = cleanText(entry.title) ?? "مادة مرصودة من RSS";
   const summary = cleanText(entry.text) ?? title;
   const publishedAt = isoDate(entry.publishedAt) ?? nowIso;
@@ -124,7 +124,6 @@ export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = 
     },
     "rss",
   );
-  const rule = keywordRules[0];
   const match = explainKeywordMatch(`${title} ${summary} ${entry.canonicalUrl}`, rule);
   const relevanceScore = match.score;
   const state = initialStateForSource(source);
@@ -183,13 +182,12 @@ export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = 
   };
 }
 
-export function evaluateRssEntryRelevance(entry: RssEntry): RssRelevanceResult {
-  const rule = keywordRules[0];
+export function evaluateRssEntryRelevance(entry: RssEntry, rule: KeywordRule = keywordRules[0]): RssRelevanceResult {
   const text = [entry.title, entry.text, entry.authorName, entry.canonicalUrl].filter(Boolean).join(" ");
   const match = explainKeywordMatch(text, rule);
 
   return {
-    ok: match.score > 0,
+    ok: match.score >= 35,
     score: match.score,
     reason: match.reason,
     matchedTerms: match.matchedTerms,

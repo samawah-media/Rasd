@@ -16,7 +16,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
+import type { Capture, HealthMetric, KeywordRule, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
@@ -25,6 +25,7 @@ type ApiState = {
   items: MonitoringItem[];
   sources: Source[];
   metrics: HealthMetric[];
+  keywordRules: KeywordRule[];
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
 };
@@ -61,6 +62,7 @@ const emptyState: ApiState = {
   items: [],
   sources: [],
   metrics: [],
+  keywordRules: [],
   capturesByItem: {},
   liveReport: null,
 };
@@ -247,6 +249,9 @@ export function OpsClient() {
   const [publishedAt, setPublishedAt] = useState("");
   const [rssName, setRssName] = useState("");
   const [rssFeedUrl, setRssFeedUrl] = useState("");
+  const [requiredTerms, setRequiredTerms] = useState("");
+  const [optionalTerms, setOptionalTerms] = useState("");
+  const [excludeTerms, setExcludeTerms] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -265,6 +270,8 @@ export function OpsClient() {
     () => state.sources.filter((source) => source.type === "rss" && source.isActive && source.feedUrl),
     [state.sources],
   );
+
+  const activeKeywordRule = state.keywordRules[0] ?? null;
 
   const tabCounts = useMemo(() => {
     const counts: Record<WorkTab, number> = {
@@ -302,9 +309,10 @@ export function OpsClient() {
   );
 
   async function fetchSnapshot(): Promise<ApiState> {
-    const [itemsData, sourcesData, healthData, liveReportData] = await Promise.all([
+    const [itemsData, sourcesData, keywordRulesData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ sources: Source[] }>("/api/sources"),
+      apiJson<{ keyword_rules: KeywordRule[] }>("/api/keyword-rules"),
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
@@ -321,6 +329,7 @@ export function OpsClient() {
     return {
       items: itemsData.items,
       sources: sourcesData.sources,
+      keywordRules: keywordRulesData.keyword_rules,
       metrics: healthData.metrics,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
@@ -349,6 +358,12 @@ export function OpsClient() {
       .then((snapshot) => {
         if (!active) return;
         setState(snapshot);
+        const rule = snapshot.keywordRules[0];
+        if (rule) {
+          setRequiredTerms(rule.requiredTerms.join("\n"));
+          setOptionalTerms(rule.optionalTerms.join("\n"));
+          setExcludeTerms(rule.excludeTerms.join("\n"));
+        }
         setSelectedId((current) => current ?? latestWorkflowItems(snapshot.items)[0]?.id ?? null);
       })
       .catch((error) => {
@@ -456,6 +471,38 @@ export function OpsClient() {
       setMessageType(result.duplicate ? "info" : "success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر حفظ مصدر RSS.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function submitKeywordRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending("keywords");
+    setMessage("جاري حفظ كلمات الرصد...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<{ keyword_rule: KeywordRule }>("/api/keyword-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          id: activeKeywordRule?.id,
+          requiredTerms,
+          optionalTerms,
+          excludeTerms,
+          language: activeKeywordRule?.language ?? "mixed",
+          priority: activeKeywordRule?.priority ?? 100,
+        }),
+      });
+      await refreshSilently();
+      setRequiredTerms(result.keyword_rule.requiredTerms.join("\n"));
+      setOptionalTerms(result.keyword_rule.optionalTerms.join("\n"));
+      setExcludeTerms(result.keyword_rule.excludeTerms.join("\n"));
+      setMessage("تم تحديث كلمات الرصد.");
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حفظ كلمات الرصد.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -788,6 +835,51 @@ export function OpsClient() {
             </div>
           )}
         </div>
+
+        <form onSubmit={submitKeywordRule} className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-sm font-bold">كلمات الرصد</h2>
+              <p className="mt-1 text-xs font-semibold text-[#66736d]">
+                سطر لكل كلمة. الإشارات الأساسية وحدها تدخل الخبر، وكلمات السياق ترفع الصلة.
+              </p>
+            </div>
+            <button
+              type="submit"
+              disabled={pending !== null}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+            >
+              {pending === "keywords" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              حفظ الكلمات
+            </button>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <label className="block">
+              <span className="text-xs font-bold text-[#52605a]">إشارات أساسية</span>
+              <textarea
+                value={requiredTerms}
+                onChange={(event) => setRequiredTerms(event.target.value)}
+                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-[#52605a]">كلمات سياق</span>
+              <textarea
+                value={optionalTerms}
+                onChange={(event) => setOptionalTerms(event.target.value)}
+                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-[#52605a]">استبعاد</span>
+              <textarea
+                value={excludeTerms}
+                onChange={(event) => setExcludeTerms(event.target.value)}
+                className="mt-1 min-h-36 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3 text-sm leading-6 outline-none transition focus:border-[#116a5c] focus:bg-white"
+              />
+            </label>
+          </div>
+        </form>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">

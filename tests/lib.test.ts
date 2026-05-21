@@ -47,8 +47,8 @@ describe("connector and budget utilities", () => {
     const matched = explainKeywordMatch("تغطية هداية وهاكاثون هداية", keywordRules[0]);
     const excluded = explainKeywordMatch("إعلان ممول عن وظائف مرتبطة بهداية", keywordRules[0]);
 
-    assert.equal(matched.score, 50);
-    assert.deepEqual(matched.matchedTerms.sort(), ["هاكاثون", "هداية"].sort());
+    assert.equal(matched.score, 85);
+    assert.deepEqual(matched.matchedTerms.sort(), ["هاكاثون", "هاكاثون هداية", "هداية"].sort());
     assert.equal(excluded.score, 0);
     assert.deepEqual(excluded.matchedTerms, ["هداية"]);
   });

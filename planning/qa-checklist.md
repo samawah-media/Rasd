@@ -166,6 +166,7 @@ Use this after C1.2 deploy:
 - Confirm the `مصادر الأخبار` block shows active RSS sources.
 - Click `تشغيل` for one RSS source and confirm the response message shows fetched, created, duplicate, and failed counts.
 - For a generic source such as Okaz, confirm unrelated items are counted as `غير مطابق` and do not appear in the review list.
+- Update `كلمات الرصد` from `/ops`, save, and confirm the next RSS run uses the new terms.
 - Confirm new RSS materials appear in the same review list as manual URL items.
 - Re-run the same source and confirm duplicates increase while created stays 0 for the same feed entries.
 - Confirm the new RSS item can be approved, captured, and added to the live Hidayathon report like manual items.

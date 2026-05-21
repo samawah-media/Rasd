@@ -508,6 +508,7 @@ Status: C1.0, C1.1, and C1.2 completed on 2026-05-21. Next: C1.3 scheduled polli
 - [x] Add `/ops` controls to run one active RSS source or a capped active-source batch.
 - [x] Add `/ops` controls to create the first RSS source from the admin UI and avoid duplicate feed rows.
 - [x] Filter RSS entries by the active Hidayathon keyword rule and count unrelated entries as skipped.
+- [x] Add owner/editor keyword tuning for RSS relevance from `/ops`.
 - [x] Verify API auth rules keep RSS polling owner/editor-only and block Viewer.
 - [ ] Add scheduled cron only after confirming Vercel plan limits and `CRON_SECRET`.
 - [ ] Keep initial official/media items in review flow; avoid broad auto-approve until real QA passes.

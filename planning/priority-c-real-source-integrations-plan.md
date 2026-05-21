@@ -168,6 +168,8 @@ Tasks:
 - [x] Store RSS source metadata in `raw_response`.
 - [x] Dedupe by canonical URL and source item ID.
 - [x] Skip RSS entries that do not match the active Hidayathon keyword rule so generic news feeds do not flood review.
+- [x] Expand the default Hidayathon keyword dictionary from legacy report language and source URLs.
+- [x] Add admin-editable keyword rules through `/ops` and `/api/keyword-rules`.
 - [x] Add tests for RSS item parsing, date extraction, duplicate handling, and malformed feeds.
 
 Acceptance checks:
@@ -182,6 +184,7 @@ Implementation notes:
 - RSS parsing uses `rss-parser` behind `src/server/rss-ingestion.ts`.
 - `store.ingestRssSource` and `persistentStore.ingestRssSource` can ingest one configured RSS source.
 - RSS ingestion counts fetched entries separately from created, duplicate, skipped, and failed entries.
+- Owner/editor can tune primary signals, context words, and excluded terms without a code deploy.
 - Created RSS items enter the review workflow, not the live client report automatically.
 - Manual UI/API triggering remains in Phase C1.2.
 

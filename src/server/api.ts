@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import type { SourceCredibility, SourceType } from "@/lib/types";
 import { getPreferredHidayathonClientReportData } from "@/lib/client-report-data";
 import { getLegacyBackfillDataset } from "@/lib/legacy-backfill";
-import { keywordRules } from "@/lib/mock-data";
 import type { LegacyLinkOverrideStatus } from "@/lib/legacy-link-overrides";
 import {
   buildPersistentLegacySupabaseUpsertPlan,
@@ -81,6 +80,16 @@ function optionalIsoDate(value: unknown) {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) return { ok: false as const };
   return { ok: true as const, value: new Date(timestamp).toISOString() };
+}
+
+function stringArray(value: unknown) {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter(Boolean)));
+  }
+  if (typeof value === "string") {
+    return Array.from(new Set(value.split(/\r?\n|,/u).map((entry) => entry.trim()).filter(Boolean)));
+  }
+  return undefined;
 }
 
 function isAuthorizedAdminImport(c: { req: { header(name: string): string | undefined } }, body: JsonBody) {
@@ -401,19 +410,19 @@ api.post("/source-rules", async (c) => {
   );
 });
 
+api.get("/keyword-rules", async (c) => c.json(withRequestId(c, { keyword_rules: await persistentStore.listKeywordRules() })));
+
 api.post("/keyword-rules", async (c) => {
   const body = await readJson(c);
-  return c.json(
-    withRequestId(c, {
-      keyword_rule: {
-        ...keywordRules[0],
-        ...body,
-        id: crypto.randomUUID(),
-        version: body.version ?? 1,
-      },
-    }),
-    201,
-  );
+  const keywordRule = await persistentStore.upsertKeywordRule({
+    id: typeof body.id === "string" ? body.id : undefined,
+    requiredTerms: stringArray(body.requiredTerms ?? body.required_terms),
+    optionalTerms: stringArray(body.optionalTerms ?? body.optional_terms),
+    excludeTerms: stringArray(body.excludeTerms ?? body.exclude_terms),
+    language: body.language === "ar" || body.language === "en" || body.language === "mixed" ? body.language : undefined,
+    priority: typeof body.priority === "number" ? body.priority : undefined,
+  });
+  return c.json(withRequestId(c, { keyword_rule: keywordRule }), 201);
 });
 
 api.post("/items/manual-url", async (c) => {

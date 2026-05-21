@@ -28,6 +28,7 @@ import type {
   CaptureKind,
   HealthMetric,
   ItemState,
+  KeywordRule,
   MonitoringItem,
   Source,
   SourceType,
@@ -92,6 +93,7 @@ const items = seedItems.map((item) => ({ ...item }));
 const captures = seedCaptures.map((capture) => ({ ...capture }));
 const sources = seedSources.map((source) => ({ ...source }));
 const reports = seedReports.map((report) => ({ ...report }));
+const keywordRulesState = keywordRules.map((rule) => ({ ...rule }));
 const reportItems: ReportItem[] = [];
 const auditLogs: AuditEvent[] = [];
 const shareLinks: ShareLink[] = [];
@@ -109,6 +111,10 @@ let usage: UsageSnapshot = { ...initialUsage };
 
 function cloneList<T>(entries: T[]) {
   return entries.map((entry) => ({ ...entry }));
+}
+
+function normalizeTerms(terms: string[] | undefined) {
+  return Array.from(new Set((terms ?? []).map((term) => term.trim()).filter(Boolean)));
 }
 
 function now() {
@@ -346,6 +352,7 @@ export const store = {
     auditLogs.splice(0, auditLogs.length);
     shareLinks.splice(0, shareLinks.length);
     connectorRuns.splice(0, connectorRuns.length);
+    keywordRulesState.splice(0, keywordRulesState.length, ...keywordRules.map((rule) => ({ ...rule })));
     usage = { ...initialUsage };
   },
 
@@ -388,6 +395,34 @@ export const store = {
 
   listSources() {
     return sources;
+  },
+
+  listKeywordRules() {
+    return keywordRulesState
+      .filter((rule) => !rule.activeTo || new Date(rule.activeTo).getTime() >= Date.now())
+      .sort((a, b) => b.priority - a.priority || b.version - a.version);
+  },
+
+  upsertKeywordRule(input: Partial<KeywordRule>) {
+    const current = keywordRulesState[0] ?? keywordRules[0];
+    const next: KeywordRule = {
+      ...current,
+      ...input,
+      id: typeof input.id === "string" && input.id ? input.id : current.id,
+      requiredTerms: normalizeTerms(input.requiredTerms ?? current.requiredTerms),
+      optionalTerms: normalizeTerms(input.optionalTerms ?? current.optionalTerms),
+      excludeTerms: normalizeTerms(input.excludeTerms ?? current.excludeTerms),
+      language: input.language ?? current.language,
+      priority: Number.isInteger(input.priority) ? input.priority! : current.priority,
+      activeFrom: input.activeFrom ?? current.activeFrom,
+      activeTo: input.activeTo,
+      version: (current.version ?? 1) + 1,
+    };
+    const index = keywordRulesState.findIndex((rule) => rule.id === next.id);
+    if (index >= 0) keywordRulesState[index] = next;
+    else keywordRulesState.unshift(next);
+    audit("keyword_rule.updated", next.id, { requiredTerms: next.requiredTerms.length, optionalTerms: next.optionalTerms.length });
+    return next;
   },
 
   listReports() {
@@ -579,6 +614,7 @@ export const store = {
 
     try {
       const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
+      const rule = this.listKeywordRules()[0] ?? keywordRules[0];
       let created = 0;
       let duplicates = 0;
       let failed = 0;
@@ -587,12 +623,12 @@ export const store = {
 
       for (const entry of feed.entries) {
         try {
-          if (!evaluateRssEntryRelevance(entry).ok) {
+          if (!evaluateRssEntryRelevance(entry, rule).ok) {
             skipped += 1;
             continue;
           }
 
-          const ingested = buildRssIngestionItem(source, entry, checkedAt);
+          const ingested = buildRssIngestionItem(source, entry, checkedAt, rule);
           const duplicate = findRssDuplicate(ingested);
           if (duplicate) {
             duplicates += 1;

@@ -205,6 +205,24 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(second.json.source.id, first.json.source.id);
   });
 
+  it("lets admins update keyword rules used by RSS relevance", async () => {
+    const listed = await requestJson("/api/keyword-rules");
+    const updated = await requestJson("/api/keyword-rules", {
+      method: "POST",
+      body: JSON.stringify({
+        id: listed.json.keyword_rules[0].id,
+        requiredTerms: "هداية ثون\nHidayathon\nجامعة جدة",
+        optionalTerms: "رئاسة الشؤون الدينية\nالحرمين",
+        excludeTerms: "وظائف\nإعلان ممول",
+      }),
+    });
+
+    assert.equal(listed.response.status, 200);
+    assert.equal(updated.response.status, 201);
+    assert.deepEqual(updated.json.keyword_rule.requiredTerms, ["هداية ثون", "Hidayathon", "جامعة جدة"]);
+    assert.deepEqual(updated.json.keyword_rule.excludeTerms, ["وظائف", "إعلان ممول"]);
+  });
+
   it("polls one RSS source into review items and deduplicates reruns", async () => {
     const source = store.createSource({
       name: "Hidayathon RSS API",

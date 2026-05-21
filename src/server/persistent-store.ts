@@ -7,6 +7,7 @@ import type {
   CaptureKind,
   HealthMetric,
   ItemState,
+  KeywordRule,
   MonitoringItem,
   ReportVersion,
   Source,
@@ -57,6 +58,19 @@ type DbSourceRow = {
   last_error: string | null;
   poll_interval_minutes: number | null;
   logo_url: string | null;
+};
+
+type DbKeywordRuleRow = {
+  id: string;
+  required_terms: string[] | null;
+  optional_terms: string[] | null;
+  exclude_terms: string[] | null;
+  language: "ar" | "en" | "mixed" | null;
+  source_type: SourceType | null;
+  priority: number | null;
+  active_from: string | null;
+  active_to: string | null;
+  version: number | null;
 };
 
 type DbItemRow = {
@@ -172,6 +186,29 @@ function toSource(row: DbSourceRow): Source {
     pollIntervalMinutes: row.poll_interval_minutes ?? 1440,
     logoUrl: row.logo_url ?? undefined,
   };
+}
+
+function toKeywordRule(row: DbKeywordRuleRow): KeywordRule {
+  return {
+    id: row.id,
+    requiredTerms: row.required_terms ?? [],
+    optionalTerms: row.optional_terms ?? [],
+    excludeTerms: row.exclude_terms ?? [],
+    language: row.language ?? "mixed",
+    sourceType: row.source_type ?? undefined,
+    priority: row.priority ?? 0,
+    activeFrom: row.active_from ?? "2026-02-01",
+    activeTo: row.active_to ?? undefined,
+    version: row.version ?? 1,
+  };
+}
+
+function normalizeTerms(terms: string[] | undefined) {
+  return Array.from(new Set((terms ?? []).map((term) => term.trim()).filter(Boolean)));
+}
+
+function isUuid(value: string | undefined) {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value));
 }
 
 function platformFromUrl(value: string) {
@@ -672,6 +709,68 @@ export const persistentStore = {
     return ((data ?? []) as DbSourceRow[]).map(toSource);
   },
 
+  async listKeywordRules() {
+    if (!shouldUseSupabase()) return store.listKeywordRules();
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const { data, error } = await supabase
+      .from("keyword_rules")
+      .select("*")
+      .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+      .eq("topic_id", DEFAULT_TOPIC_ID)
+      .order("priority", { ascending: false })
+      .order("version", { ascending: false });
+    if (error) throw error;
+    const rules = ((data ?? []) as DbKeywordRuleRow[]).map(toKeywordRule).filter((rule) => !rule.activeTo || new Date(rule.activeTo).getTime() >= Date.now());
+    return rules.length ? rules : store.listKeywordRules();
+  },
+
+  async upsertKeywordRule(input: Partial<KeywordRule>) {
+    if (!shouldUseSupabase()) return store.upsertKeywordRule(input);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const current = (await this.listKeywordRules())[0] ?? keywordRules[0];
+    const next: KeywordRule = {
+      ...current,
+      ...input,
+      id: isUuid(input.id) ? input.id! : isUuid(current.id) ? current.id : crypto.randomUUID(),
+      requiredTerms: normalizeTerms(input.requiredTerms ?? current.requiredTerms),
+      optionalTerms: normalizeTerms(input.optionalTerms ?? current.optionalTerms),
+      excludeTerms: normalizeTerms(input.excludeTerms ?? current.excludeTerms),
+      language: input.language ?? current.language,
+      priority: Number.isInteger(input.priority) ? input.priority! : current.priority,
+      activeFrom: input.activeFrom ?? current.activeFrom,
+      activeTo: input.activeTo,
+      version: (current.version ?? 1) + 1,
+    };
+    const { data, error } = await supabase
+      .from("keyword_rules")
+      .upsert({
+        id: next.id,
+        organization_id: DEFAULT_ORGANIZATION_ID,
+        topic_id: DEFAULT_TOPIC_ID,
+        required_terms: next.requiredTerms,
+        optional_terms: next.optionalTerms,
+        exclude_terms: next.excludeTerms,
+        language: next.language,
+        source_type: next.sourceType ?? null,
+        priority: next.priority,
+        active_from: next.activeFrom,
+        active_to: next.activeTo ?? null,
+        version: next.version,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    const rule = toKeywordRule(data as DbKeywordRuleRow);
+    await audit(supabase, "keyword_rule.updated", "keyword_rule", rule.id, {
+      requiredTerms: rule.requiredTerms.length,
+      optionalTerms: rule.optionalTerms.length,
+      excludeTerms: rule.excludeTerms.length,
+    });
+    return rule;
+  },
+
   async listReports() {
     if (!shouldUseSupabase()) return store.listReports();
     const supabase = getSupabaseAdmin();
@@ -767,6 +866,7 @@ export const persistentStore = {
 
     try {
       const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
+      const rule = (await this.listKeywordRules())[0] ?? keywordRules[0];
       let created = 0;
       let duplicates = 0;
       let failed = 0;
@@ -775,12 +875,12 @@ export const persistentStore = {
 
       for (const entry of feed.entries) {
         try {
-          if (!evaluateRssEntryRelevance(entry).ok) {
+          if (!evaluateRssEntryRelevance(entry, rule).ok) {
             skipped += 1;
             continue;
           }
 
-          const ingested = buildRssIngestionItem(source, entry, checkedAt);
+          const ingested = buildRssIngestionItem(source, entry, checkedAt, rule);
           const duplicate = await findSupabaseRssDuplicate(supabase, ingested);
           if (duplicate.duplicate) {
             duplicates += 1;
