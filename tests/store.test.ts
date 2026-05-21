@@ -24,6 +24,32 @@ describe("monitoring workflow store", () => {
     assert.equal(second.item.id, first.item.id);
   });
 
+  it("stores RSS source polling settings and rejects private feed URLs", () => {
+    const source = store.createSource({
+      name: "Official Hidayathon Feed",
+      type: "rss",
+      url: "https://example.com/news",
+      feedUrl: "https://example.com/rss.xml",
+      credibility: "official",
+      pollIntervalMinutes: 60,
+    });
+
+    assert.equal(source.type, "rss");
+    assert.equal(source.feedUrl, "https://example.com/rss.xml");
+    assert.equal(source.isActive, true);
+    assert.equal(source.pollIntervalMinutes, 60);
+
+    assert.throws(
+      () =>
+        store.createSource({
+          name: "Private Feed",
+          type: "rss",
+          feedUrl: "http://127.0.0.1/rss.xml",
+        }),
+      /feed_url must be a public http or https URL/,
+    );
+  });
+
   it("does not mark an approved item report-ready until report-grade capture succeeds", () => {
     const reviewed = store.reviewItem("item-2", "approve", "Relevant enough for the report.");
     assert.equal(reviewed.item.state, "approved_pending_capture");

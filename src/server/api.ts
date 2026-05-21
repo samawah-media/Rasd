@@ -30,6 +30,7 @@ import {
   listClientViewerAccounts,
   validateViewerAccountInput,
 } from "@/server/client-access";
+import { SourceValidationError } from "@/server/source-validation";
 
 type AppBindings = {
   Variables: {
@@ -272,13 +273,28 @@ api.post("/topics", async (c) => {
 
 api.post("/sources", async (c) => {
   const body = await readJson(c);
-  const source = await persistentStore.createSource({
-    name: typeof body.name === "string" ? body.name : undefined,
-    type: body.type as SourceType | undefined,
-    url: typeof body.url === "string" ? body.url : undefined,
-    credibility: body.credibility as SourceCredibility | undefined,
-  });
-  return c.json(withRequestId(c, { source }), 201);
+  try {
+    const source = await persistentStore.createSource({
+      name: typeof body.name === "string" ? body.name : undefined,
+      type: body.type as SourceType | undefined,
+      url: typeof body.url === "string" ? body.url : undefined,
+      feedUrl: optionalString(body.feed_url, body.feedUrl),
+      credibility: body.credibility as SourceCredibility | undefined,
+      isActive: typeof body.is_active === "boolean" ? body.is_active : undefined,
+      pollIntervalMinutes:
+        typeof body.poll_interval_minutes === "number"
+          ? body.poll_interval_minutes
+          : typeof body.pollIntervalMinutes === "number"
+            ? body.pollIntervalMinutes
+            : undefined,
+    });
+    return c.json(withRequestId(c, { source }), 201);
+  } catch (error) {
+    if (error instanceof SourceValidationError) {
+      return c.json(withRequestId(c, { error: error.message }), 400);
+    }
+    throw error;
+  }
 });
 
 api.post("/source-rules", async (c) => {

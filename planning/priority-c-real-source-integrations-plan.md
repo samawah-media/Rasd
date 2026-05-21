@@ -125,18 +125,37 @@ Outcome: admins can store real RSS/news source configuration in Supabase.
 
 Tasks:
 
-- [ ] Add Supabase migration for source polling fields.
-- [ ] Update schema tests for new source fields.
-- [ ] Extend source types and persistent store mapping.
-- [ ] Add source validation for public `feed_url`.
-- [ ] Keep RLS owner/editor write access and viewer read restrictions unchanged.
-- [ ] Document how to seed first Hidayathon sources.
+- [x] Add Supabase migration for source polling fields.
+- [x] Update schema tests for new source fields.
+- [x] Extend source types and persistent store mapping.
+- [x] Add source validation for public `feed_url`.
+- [x] Keep RLS owner/editor write access and viewer read restrictions unchanged.
+- [x] Document how to seed first Hidayathon sources.
 
 Acceptance checks:
 
 - `sources` can store an active RSS feed URL.
 - Invalid/private feed URLs are rejected before fetching.
 - Existing manual/X flows still work.
+
+Seed example for first Hidayathon RSS source:
+
+```json
+{
+  "name": "Official Hidayathon Feed",
+  "type": "rss",
+  "url": "https://example.com/news",
+  "feed_url": "https://example.com/rss.xml",
+  "credibility": "official",
+  "poll_interval_minutes": 1440
+}
+```
+
+Notes:
+
+- `feed_url` must be a public `http` or `https` URL.
+- Private/local URLs like `localhost`, `127.0.0.1`, and private IP ranges are rejected before any fetch attempt.
+- Polling fields are stored now; actual RSS fetching starts in Phase C1.1.
 
 ## Phase C1.1 - RSS Fetch And Normalize
 

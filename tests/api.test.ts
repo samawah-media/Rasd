@@ -134,6 +134,36 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(privateUrl.json.error, "url must be a public http or https URL");
   });
 
+  it("creates RSS sources with public feed validation", async () => {
+    const created = await requestJson("/api/sources", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Official Hidayathon Feed",
+        type: "rss",
+        url: "https://example.com/news",
+        feed_url: "https://example.com/rss.xml",
+        credibility: "official",
+        poll_interval_minutes: 60,
+      }),
+    });
+    const privateFeed = await requestJson("/api/sources", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Private Feed",
+        type: "rss",
+        feed_url: "http://127.0.0.1/rss.xml",
+      }),
+    });
+
+    assert.equal(created.response.status, 201);
+    assert.equal(created.json.source.type, "rss");
+    assert.equal(created.json.source.feedUrl, "https://example.com/rss.xml");
+    assert.equal(created.json.source.isActive, true);
+    assert.equal(created.json.source.pollIntervalMinutes, 60);
+    assert.equal(privateFeed.response.status, 400);
+    assert.equal(privateFeed.json.error, "feed_url must be a public http or https URL");
+  });
+
   it("hydrates a pasted X URL into a readable manual item", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>

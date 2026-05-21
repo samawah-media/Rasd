@@ -27,6 +27,10 @@ import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-a
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
+import {
+  normalizeSourceCreateInput,
+  type SourceCreateInput,
+} from "@/server/source-validation";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -36,10 +40,16 @@ type DbSourceRow = {
   name: string;
   type: SourceType;
   url: string;
+  feed_url: string | null;
   handle: string | null;
   country: string | null;
   credibility: SourceCredibility;
   is_verified_source: boolean;
+  is_active: boolean;
+  last_checked_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  poll_interval_minutes: number | null;
   logo_url: string | null;
 };
 
@@ -140,10 +150,16 @@ function toSource(row: DbSourceRow): Source {
     name: row.name,
     type: row.type,
     url: row.url,
+    feedUrl: row.feed_url ?? undefined,
     handle: row.handle ?? undefined,
     country: row.country ?? "السعودية",
     credibility: row.credibility,
     isVerifiedSource: row.is_verified_source,
+    isActive: row.is_active ?? true,
+    lastCheckedAt: row.last_checked_at ?? undefined,
+    lastSuccessAt: row.last_success_at ?? undefined,
+    lastError: row.last_error ?? undefined,
+    pollIntervalMinutes: row.poll_interval_minutes ?? 1440,
     logoUrl: row.logo_url ?? undefined,
   };
 }
@@ -677,26 +693,29 @@ export const persistentStore = {
     return ((data ?? []) as DbReportItemRow[]).map(toReportItem);
   },
 
-  async createSource(input: { name?: string; type?: SourceType; url?: string; credibility?: SourceCredibility }) {
+  async createSource(input: SourceCreateInput) {
     if (!shouldUseSupabase()) return store.createSource(input);
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
-    const type = input.type ?? "manual_url";
+    const normalized = normalizeSourceCreateInput(input);
     const { data, error } = await supabase
       .from("sources")
       .insert({
         organization_id: DEFAULT_ORGANIZATION_ID,
-        name: input.name ?? sourceLabel(type),
-        type,
-        url: input.url ?? "manual://intake",
+        name: normalized.name ?? sourceLabel(normalized.type),
+        type: normalized.type,
+        url: normalized.url,
+        feed_url: normalized.feedUrl ?? null,
         country: "السعودية",
-        credibility: input.credibility ?? "public",
+        credibility: normalized.credibility,
         is_verified_source: false,
+        is_active: normalized.isActive,
+        poll_interval_minutes: normalized.pollIntervalMinutes,
       })
       .select("*")
       .single();
     if (error) throw error;
-    await audit(supabase, "source.created", "source", (data as DbSourceRow).id, { type });
+    await audit(supabase, "source.created", "source", (data as DbSourceRow).id, { type: normalized.type });
     return toSource(data as DbSourceRow);
   },
 

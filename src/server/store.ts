@@ -13,6 +13,10 @@ import {
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
+import {
+  normalizeSourceCreateInput,
+  type SourceCreateInput,
+} from "@/server/source-validation";
 import type {
   Capture,
   CaptureKind,
@@ -20,7 +24,6 @@ import type {
   ItemState,
   MonitoringItem,
   Source,
-  SourceCredibility,
   SourceType,
 } from "@/lib/types";
 
@@ -523,20 +526,19 @@ export const store = {
     };
   },
 
-  createSource(input: {
-    name?: string;
-    type?: SourceType;
-    url?: string;
-    credibility?: SourceCredibility;
-  }) {
+  createSource(input: SourceCreateInput) {
+    const normalized = normalizeSourceCreateInput(input);
     const source: Source = {
       id: crypto.randomUUID(),
-      type: input.type ?? "manual_url",
-      name: input.name ?? sourceLabel(input.type ?? "manual_url"),
-      url: input.url ?? "manual://intake",
+      type: normalized.type,
+      name: normalized.name ?? sourceLabel(normalized.type),
+      url: normalized.url,
+      feedUrl: normalized.feedUrl,
       country: "السعودية",
-      credibility: input.credibility ?? "public",
+      credibility: normalized.credibility,
       isVerifiedSource: false,
+      isActive: normalized.isActive,
+      pollIntervalMinutes: normalized.pollIntervalMinutes,
     };
     sources.unshift(source);
     audit("source.created", source.id, { type: source.type });

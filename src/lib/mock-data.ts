@@ -42,15 +42,20 @@ export const sources: Source[] = [
     country: "السعودية",
     credibility: "official",
     isVerifiedSource: true,
+    isActive: true,
+    pollIntervalMinutes: 1440,
   },
   {
     id: "src-news",
     name: "صحيفة رقمية",
     type: "rss",
     url: "https://example.com/rss.xml",
+    feedUrl: "https://example.com/rss.xml",
     country: "السعودية",
     credibility: "media",
     isVerifiedSource: true,
+    isActive: true,
+    pollIntervalMinutes: 1440,
   },
   {
     id: "src-manual",
@@ -60,6 +65,8 @@ export const sources: Source[] = [
     country: "السعودية",
     credibility: "public",
     isVerifiedSource: false,
+    isActive: true,
+    pollIntervalMinutes: 1440,
   },
 ];
 

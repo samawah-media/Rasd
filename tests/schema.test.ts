@@ -91,6 +91,33 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(monitoringItems, /evidence_image_path text/);
   });
 
+  it("keeps sources ready for controlled RSS polling", async () => {
+    const sql = await schemaSql();
+    const sources = tableBlock(sql, "sources");
+
+    assert.match(sources, /feed_url text/);
+    assert.match(sources, /is_active boolean not null default true/);
+    assert.match(sources, /last_checked_at timestamptz/);
+    assert.match(sources, /last_success_at timestamptz/);
+    assert.match(sources, /last_error text/);
+    assert.match(sources, /poll_interval_minutes integer not null default 1440/);
+    assert.match(sources, /poll_interval_minutes between 15 and 10080/);
+    assert.match(sql, /create index on public\.sources \(organization_id, is_active, type\)/);
+  });
+
+  it("ships the live source polling migration idempotently", async () => {
+    const migrationsDir = join(process.cwd(), "supabase", "migrations");
+    const migrations = await readdir(migrationsDir);
+    const sourcePollingMigration = migrations.find((file) => file.endsWith("_add_source_polling_fields.sql"));
+
+    assert.ok(sourcePollingMigration);
+    const sql = await migrationSql(sourcePollingMigration);
+    assert.match(sql, /add column if not exists feed_url text/);
+    assert.match(sql, /add column if not exists is_active boolean not null default true/);
+    assert.match(sql, /add column if not exists poll_interval_minutes integer not null default 1440/);
+    assert.match(sql, /create index if not exists sources_organization_active_type_idx/);
+  });
+
   it("stores legacy link overrides as tenant-scoped reviewed data", async () => {
     const sql = await schemaSql();
     const overrides = tableBlock(sql, "legacy_link_overrides");

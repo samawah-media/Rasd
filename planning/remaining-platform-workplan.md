@@ -494,10 +494,12 @@ Detailed execution plan: [priority-c-real-source-integrations-plan.md](priority-
 
 ### C1. RSS/News Sources
 
-Status: planned on 2026-05-21. Start small with source registry and manual polling before cron.
+Status: C1.0 source registry foundation completed on 2026-05-21. Next: C1.1 RSS fetch and normalize.
 
-- [ ] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
-- [ ] Use the existing `source_credibility` enum instead of adding a second reliability model.
+- [x] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
+- [x] Use the existing `source_credibility` enum instead of adding a second reliability model.
+- [x] Add public `feed_url` validation before any fetch attempt.
+- [x] Extend source types and persistent mapping for polling fields.
 - [ ] Build RSS fetch/normalize utility with safe URL checks and timeout.
 - [ ] Dedupe by canonical URL and source item ID.
 - [ ] Add owner/editor manual polling endpoint before scheduled cron.

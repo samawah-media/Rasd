@@ -82,10 +82,18 @@ create table public.sources (
   name text not null,
   type public.source_type not null,
   url text not null,
+  feed_url text
+    check (feed_url is null or feed_url ~* '^https?://'),
   handle text,
   country text,
   credibility public.source_credibility not null default 'public',
   is_verified_source boolean not null default false,
+  is_active boolean not null default true,
+  last_checked_at timestamptz,
+  last_success_at timestamptz,
+  last_error text,
+  poll_interval_minutes integer not null default 1440
+    check (poll_interval_minutes between 15 and 10080),
   logo_url text,
   created_at timestamptz not null default now()
 );
@@ -318,6 +326,7 @@ create table public.audit_logs (
 create index on public.memberships (user_id, organization_id);
 create index on public.topics (organization_id);
 create index on public.sources (organization_id, type);
+create index on public.sources (organization_id, is_active, type);
 create index on public.source_rules (organization_id, topic_id, active);
 create index on public.keyword_rules (organization_id, topic_id);
 create index on public.monitoring_items (organization_id, topic_id, state);

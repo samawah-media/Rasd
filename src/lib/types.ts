@@ -41,10 +41,16 @@ export type Source = {
   name: string;
   type: SourceType;
   url: string;
+  feedUrl?: string;
   handle?: string;
   country: string;
   credibility: SourceCredibility;
   isVerifiedSource: boolean;
+  isActive: boolean;
+  lastCheckedAt?: string;
+  lastSuccessAt?: string;
+  lastError?: string;
+  pollIntervalMinutes: number;
   logoUrl?: string;
 };
 
