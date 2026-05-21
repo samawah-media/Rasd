@@ -15,9 +15,11 @@
     "supabase:legacy:upsert": "powershell -ExecutionPolicy Bypass -File scripts/upsert_legacy_supabase.ps1 -Execute"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.0",
     "hono": "^4.12.21",
+    "jsdom": "^29.1.1",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "react": "19.2.4",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsdom": "^28.0.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

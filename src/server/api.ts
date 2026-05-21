@@ -21,7 +21,7 @@ import {
   revokeReportShareLinkById,
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
-import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
+import { fetchUrlMetadata, isSafePublicHttpUrl, type UrlMetadata } from "@/server/url-metadata";
 import { renderEvidenceCardSvg } from "@/server/evidence-card";
 import { buildClientReportExportHtml } from "@/server/client-report-export";
 import {
@@ -80,6 +80,20 @@ function optionalIsoDate(value: unknown) {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) return { ok: false as const };
   return { ok: true as const, value: new Date(timestamp).toISOString() };
+}
+
+function compactExtractionMetadata(metadata: UrlMetadata | null) {
+  if (!metadata) return undefined;
+  return {
+    source: metadata.source,
+    platform: metadata.platform,
+    canonicalUrl: metadata.canonicalUrl,
+    imageUrl: metadata.imageUrl,
+    publisherName: metadata.publisherName,
+    siteName: metadata.siteName,
+    readabilityUsed: metadata.readabilityUsed,
+    warnings: metadata.warnings,
+  };
 }
 
 function stringArray(value: unknown) {
@@ -534,6 +548,7 @@ api.post("/items/manual-url", async (c) => {
     authorName: providedAuthorName ?? metadata?.authorName,
     authorHandle: providedAuthorHandle ?? metadata?.authorHandle,
     publishedAt: publishedAt.value ?? metadata?.publishedAt,
+    extraction: compactExtractionMetadata(metadata),
   });
 
   return c.json(

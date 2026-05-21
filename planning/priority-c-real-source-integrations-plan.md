@@ -302,17 +302,24 @@ Outcome: article extraction improves beyond metadata for sites that provide weak
 
 Tasks:
 
-- [ ] Add `@mozilla/readability` and `jsdom` only if bundle/build impact is acceptable.
-- [ ] Extract readable article title/text/siteName/byline.
-- [ ] Use Readability after metadata fetch, not before RSS item fields.
-- [ ] Add timeout and size limits.
-- [ ] Store only selected snippets in `raw_response`.
+- [x] Add `@mozilla/readability` and `jsdom` only if bundle/build impact is acceptable.
+- [x] Extract readable article title/text/siteName/byline.
+- [x] Use Readability after metadata fetch, not before RSS item fields.
+- [x] Add timeout and size limits.
+- [x] Store only selected extraction metadata/snippets in `raw_response`.
 
 Acceptance checks:
 
-- Long pages do not block the function.
-- Extraction improves weak metadata cases.
-- Build size and function runtime remain acceptable.
+- [x] Long pages do not block the function.
+- [x] Extraction improves weak metadata cases.
+- [ ] Build size and function runtime remain acceptable after the parallel `/ops` UI work is fixed enough for `next build`.
+
+Implementation notes:
+
+- Readability runs only for normal webpage metadata extraction; X oEmbed remains unchanged.
+- Metadata fields still win first. Readability only fills missing/weak title, excerpt/text, byline, and site name.
+- The extractor caps HTML processed for metadata and skips Readability on oversized pages.
+- Manual intake keeps compact extraction evidence in `raw_response.input.extraction` instead of storing full HTML.
 
 ## Phase C2.4 - Optional External Fallback
 

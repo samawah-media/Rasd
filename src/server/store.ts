@@ -84,6 +84,7 @@ type ManualUrlInput = {
   authorName?: string;
   authorHandle?: string;
   publishedAt?: string;
+  extraction?: Record<string, unknown>;
 };
 
 type ItemCorrectionInput = {

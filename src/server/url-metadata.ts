@@ -12,6 +12,7 @@ export type ExtractionResult = {
   imageUrl?: string;
   platform: "X" | "Website" | "Unknown";
   source: "x_oembed" | "html_metadata" | "url_only";
+  readabilityUsed?: boolean;
   warnings?: string[];
   warning?: string;
 };
@@ -21,6 +22,10 @@ export type UrlMetadata = ExtractionResult;
 type FetchLike = typeof fetch;
 
 const metadataTimeoutMs = 6000;
+const maxHtmlExtractionChars = 1_000_000;
+const maxReadabilityChars = 500_000;
+const readabilityTimeoutMs = 2500;
+const minReadableTextLength = 80;
 
 export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch): Promise<UrlMetadata> {
   const platform = platformFromUrl(url);
@@ -171,7 +176,13 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
 
   if (!response.ok) throw new Error("page_metadata_unavailable");
 
-  const html = await response.text();
+  const rawHtml = await response.text();
+  const warnings: string[] = [];
+  const html =
+    rawHtml.length > maxHtmlExtractionChars
+      ? rawHtml.slice(0, maxHtmlExtractionChars)
+      : rawHtml;
+  if (rawHtml.length > maxHtmlExtractionChars) warnings.push("html_truncated_for_extraction");
   const title = firstPresent(
     metaContent(html, "property", "og:title"),
     metaContent(html, "name", "twitter:title"),
@@ -194,7 +205,11 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
       metaContent(html, "name", "twitter:site"),
     ),
   );
-  const publisherName = siteName ?? publisherNameFromUrl(url);
+  const shouldUseReadability = !title || !description;
+  const readableArticle = shouldUseReadability ? await extractReadableArticle(html, url, warnings) : null;
+  const readableText = readableArticle?.textContent ? clipped(readableArticle.textContent, 900) : undefined;
+  const readableSiteName = cleanText(readableArticle?.siteName);
+  const publisherName = siteName ?? readableSiteName ?? publisherNameFromUrl(url);
   const publishedAt = isoDate(
     firstPresent(
       metaContent(html, "property", "article:published_time"),
@@ -217,17 +232,78 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   );
 
   return {
-    title: title ?? "مادة مرصودة من رابط",
-    text: description ?? title ?? url,
-    authorName: authorName ?? publisherName,
+    title: title ?? cleanText(readableArticle?.title) ?? "مادة مرصودة من رابط",
+    text: description ?? cleanText(readableArticle?.excerpt) ?? readableText ?? title ?? url,
+    authorName: authorName ?? cleanText(readableArticle?.byline) ?? publisherName,
     publisherName,
-    siteName,
+    siteName: siteName ?? readableSiteName,
     publishedAt,
     canonicalUrl,
     imageUrl,
     platform: "Website",
     source: "html_metadata",
+    readabilityUsed: Boolean(readableArticle),
+    warnings: warnings.length ? warnings : undefined,
   };
+}
+
+type ReadableArticle = {
+  title?: string | null;
+  byline?: string | null;
+  siteName?: string | null;
+  excerpt?: string | null;
+  textContent?: string | null;
+};
+
+async function extractReadableArticle(html: string, url: string, warnings: string[]) {
+  if (html.length > maxReadabilityChars) {
+    warnings.push("readability_skipped_html_too_large");
+    return null;
+  }
+
+  try {
+    const article = await withTimeout(async () => {
+      const [{ Readability }, { JSDOM }] = await Promise.all([
+        import("@mozilla/readability"),
+        import("jsdom"),
+      ]);
+      const dom = new JSDOM(html, { url });
+
+      try {
+        return new Readability(dom.window.document).parse() as ReadableArticle | null;
+      } finally {
+        dom.window.close();
+      }
+    }, readabilityTimeoutMs);
+    const textContent = cleanText(article?.textContent);
+
+    if (!article || !textContent || textContent.length < minReadableTextLength) return null;
+
+    return {
+      title: cleanText(article.title),
+      byline: cleanText(article.byline),
+      siteName: cleanText(article.siteName),
+      excerpt: cleanText(article.excerpt),
+      textContent,
+    };
+  } catch {
+    warnings.push("readability_failed");
+    return null;
+  }
+}
+
+async function withTimeout<T>(run: () => Promise<T>, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("operation_timeout")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function fetchWithTimeout(input: string, fetcher: FetchLike, init: RequestInit) {

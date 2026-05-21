@@ -261,6 +261,7 @@ describe("connector and budget utilities", () => {
 
     assert.equal(metadata.platform, "Website");
     assert.equal(metadata.source, "html_metadata");
+    assert.equal(metadata.readabilityUsed, false);
     assert.equal(metadata.title, "خبر هداية");
     assert.equal(metadata.text, "متابعة إعلامية لهاكاثون هداية");
     assert.equal(metadata.authorName, "فريق الأخبار");
@@ -289,6 +290,28 @@ describe("connector and budget utilities", () => {
     assert.equal(withSiteName.authorName, "Okaz");
     assert.equal(fromHostname.publisherName, "Alriyadh");
     assert.equal(fromHostname.authorName, "Alriyadh");
+  });
+
+  it("uses Readability text when webpage metadata is too weak", async () => {
+    const metadata = await fetchUrlMetadata("https://example.com/deep/hidayathon-story", async () => {
+      return new Response(
+        `<html><head><title>Weak metadata</title></head><body>
+          <main>
+            <article>
+              <h1>Readability Hidayathon report</h1>
+              <p>Hidayathon coverage expanded article body with useful context about the initiative, the teams, the challenge tracks, and the public response from participants.</p>
+              <p>This second paragraph gives the extractor enough meaningful article text to summarize the page instead of returning only the weak title metadata.</p>
+            </article>
+          </main>
+        </body></html>`,
+        { status: 200, headers: { "content-type": "text/html" } },
+      );
+    });
+
+    assert.equal(metadata.platform, "Website");
+    assert.equal(metadata.source, "html_metadata");
+    assert.equal(metadata.readabilityUsed, true);
+    assert.match(metadata.text ?? "", /expanded article body/);
   });
 
   it("blocks private or credentialed URLs before server-side metadata fetching", () => {

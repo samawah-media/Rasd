@@ -517,7 +517,7 @@ Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron
 
 ### C2. Manual Web Extraction
 
-Status: C2.0, C2.1 metadata baseline, and C2.2 editor correction completed on 2026-05-21. C2.1 now also includes publisher fallback from site metadata or hostname. Remaining: richer Readability extraction and optional fallbacks.
+Status: C2.0, C2.1 metadata baseline, C2.2 editor correction, and C2.3 Readability extraction completed on 2026-05-21. Remaining: production build verification after the parallel `/ops` UI work is fixed, then optional external fallbacks.
 
 - [x] Use existing `monitoring_items.raw_response` for compact internal correction details.
 - [x] Do not add a new `raw_data` column now.
@@ -528,7 +528,8 @@ Status: C2.0, C2.1 metadata baseline, and C2.2 editor correction completed on 20
 - [x] Add editor correction endpoint for title, summary, author, date, and original URL.
 - [x] Preserve old extracted values in `raw_response.editorCorrections` and audit logs for Supabase-backed items.
 - [x] Add inline correction controls in `/ops` item detail.
-- [ ] Add Readability later only after manual/RSS extraction is stable.
+- [x] Add Readability after metadata extraction for weak article pages, with timeout and size limits.
+- [x] Store compact extraction metadata only, not full HTML.
 - [ ] Keep external fallback services optional and env-gated.
 
 ### C3. X/Twitter Workflow
