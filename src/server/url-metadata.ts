@@ -1,4 +1,6 @@
 import { isIP } from "node:net";
+import { XProviderManager } from "../lib/x/manager";
+import { parseXUrl } from "../lib/x/parser";
 
 export type ExtractionResult = {
   title?: string;
@@ -121,46 +123,35 @@ function isXPostUrl(value: string) {
   }
 }
 
-function canonicalizeXUrl(url: string) {
-  try {
-    const parsed = new URL(url);
-    parsed.protocol = "https:";
-    parsed.hostname = "x.com";
-    parsed.search = "";
-    parsed.hash = "";
-    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    return url;
-  }
-}
+
 
 async function fetchXMetadata(url: string, fetcher: FetchLike): Promise<UrlMetadata> {
-  const canonicalUrl = canonicalizeXUrl(url);
-  const endpoint = `https://publish.twitter.com/oembed?omit_script=true&dnt=true&url=${encodeURIComponent(canonicalUrl)}`;
-  const response = await fetchWithTimeout(endpoint, fetcher, {
-    headers: { accept: "application/json" },
-  });
+  const parsedX = parseXUrl(url);
+  if (!parsedX) {
+    throw new Error("x_url_invalid");
+  }
 
-  if (!response.ok) throw new Error("x_metadata_unavailable");
+  const manager = new XProviderManager();
+  const post = await manager.fetchPost(parsedX.tweetId, fetcher as typeof fetch);
 
-  const data = (await response.json()) as {
-    author_name?: string;
-    author_url?: string;
-    html?: string;
-  };
-  const html = data.html ?? "";
-  const tweetText = textFromFirstParagraph(html);
-  const authorHandle = handleFromXAuthorUrl(data.author_url) ?? handleFromText(html);
-  const title = tweetText ? clipped(tweetText, 110) : data.author_name ? `تغريدة من ${data.author_name}` : "تغريدة X";
+  if (!post) {
+    throw new Error("x_metadata_unavailable");
+  }
+
+  const title = post.text
+    ? clipped(post.text, 110)
+    : post.authorName
+    ? `تغريدة من ${post.authorName}`
+    : "تغريدة X";
 
   return {
     title,
-    text: tweetText || title,
-    authorName: cleanText(data.author_name),
-    authorHandle,
-    publishedAt: publishedAtFromXEmbed(html),
-    canonicalUrl,
+    text: post.text || title,
+    authorName: cleanText(post.authorName),
+    authorHandle: post.authorHandle,
+    publishedAt: post.publishedAt,
+    canonicalUrl: post.originalUrl,
+    imageUrl: post.mediaUrls?.[0],
     platform: "X",
     source: "x_oembed",
   };
@@ -317,11 +308,7 @@ async function fetchWithTimeout(input: string, fetcher: FetchLike, init: Request
   }
 }
 
-function textFromFirstParagraph(html: string) {
-  const match = html.match(/<p\b[^>]*>([\s\S]*?)<\/p>/iu);
-  if (!match) return null;
-  return htmlToText(match[1]);
-}
+
 
 function tagContent(html: string, tagName: string) {
   const match = html.match(new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}>`, "iu"));
@@ -382,25 +369,7 @@ function decodeHtml(value: string) {
   });
 }
 
-function handleFromXAuthorUrl(value: string | undefined) {
-  if (!value) return undefined;
-  try {
-    const firstSegment = new URL(value).pathname.split("/").filter(Boolean)[0];
-    return firstSegment ? `@${firstSegment}` : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
-function handleFromText(value: string) {
-  const match = value.match(/@[\p{L}\p{N}_]+/u);
-  return match?.[0];
-}
-
-function publishedAtFromXEmbed(value: string) {
-  const anchorText = [...value.matchAll(/<a\b[^>]*>([^<]+)<\/a>/giu)].at(-1)?.[1];
-  return isoDate(anchorText ? decodeHtml(anchorText) : null);
-}
 
 function isoDate(value: string | null | undefined) {
   if (!value) return undefined;

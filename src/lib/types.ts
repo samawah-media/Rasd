@@ -99,6 +99,7 @@ export type MonitoringItem = {
   hasReportGradeCapture: boolean;
   warning?: string;
   sourceItemId?: string;
+  raw_response?: unknown;
 };
 
 export type Capture = {

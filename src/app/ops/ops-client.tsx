@@ -26,6 +26,8 @@ import {
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { BentoGrid, BentoCard } from "@/components/BentoGrid";
+import { isValidXUrl } from "@/lib/x/parser";
+import TweetPreviewCard from "@/components/TweetPreviewCard";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
@@ -36,6 +38,20 @@ type ApiState = {
   metrics: HealthMetric[];
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
+  usage?: {
+    xReadsToday: number;
+    xReadsThisMonth: number;
+    aiTokensThisMonth: number;
+    screenshotsThisMonth: number;
+    storageMb: number;
+  };
+  connectors?: {
+    manual_url: string;
+    rss: string;
+    web_page: string;
+    x_oembed: string;
+    x_recent_search: string;
+  };
 };
 
 type IntakeResponse = {
@@ -63,6 +79,20 @@ const emptyState: ApiState = {
   metrics: [],
   capturesByItem: {},
   liveReport: null,
+  usage: {
+    xReadsToday: 0,
+    xReadsThisMonth: 0,
+    aiTokensThisMonth: 0,
+    screenshotsThisMonth: 0,
+    storageMb: 0,
+  },
+  connectors: {
+    manual_url: "not_configured",
+    rss: "not_configured",
+    web_page: "not_configured",
+    x_oembed: "not_configured",
+    x_recent_search: "not_configured",
+  },
 };
 
 const arabicApiErrors: Record<string, string> = {
@@ -263,6 +293,17 @@ export function OpsClient() {
   const [tab, setTab] = useState<WorkTab>("active");
   const [query, setQuery] = useState("");
 
+  const [itemWithRawResponse, setItemWithRawResponse] = useState<MonitoringItem | null>(null);
+  const isXUrl = useMemo(() => isValidXUrl(url), [url]);
+
+  function handleSyncSuccess(updatedItem: MonitoringItem) {
+    setState((prev) => ({
+      ...prev,
+      items: prev.items.map((item) => (item.id === updatedItem.id ? updatedItem : item)),
+    }));
+    setItemWithRawResponse(updatedItem);
+  }
+
   const liveReportId = state.liveReport?.id ?? "report-5";
 
   const workflowItems = useMemo(
@@ -310,11 +351,45 @@ export function OpsClient() {
     [workflowItems, selectedId, visibleItems],
   );
 
+  const selectedItemId = selectedItem?.id;
+  const selectedItemUrl = selectedItem?.originalUrl;
+
+  useEffect(() => {
+    if (!selectedItemId || !selectedItemUrl) {
+      Promise.resolve().then(() => setItemWithRawResponse(null));
+      return;
+    }
+
+    const isTweet = isValidXUrl(selectedItemUrl);
+    if (!isTweet) {
+      Promise.resolve().then(() => setItemWithRawResponse(null));
+      return;
+    }
+
+    let active = true;
+    Promise.resolve().then(() => setItemWithRawResponse(null));
+
+    fetch(`/api/items/x-refresh?itemId=${selectedItemId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (active && data.item) {
+          setItemWithRawResponse(data.item);
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching full item details:", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedItemId, selectedItemUrl]);
+
   async function fetchSnapshot(): Promise<ApiState> {
     const [itemsData, sourcesData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ sources: Source[] }>("/api/sources"),
-      apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
+      apiJson<{ metrics: HealthMetric[]; usage?: ApiState["usage"]; connectors?: ApiState["connectors"] }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
 
@@ -333,6 +408,8 @@ export function OpsClient() {
       metrics: healthData.metrics,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
+      usage: healthData.usage,
+      connectors: healthData.connectors,
     };
   }
 
@@ -709,10 +786,20 @@ export function OpsClient() {
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   placeholder="الصق الرابط المباشر للمادة..."
-                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] pr-3 pl-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 ${
+                    isXUrl
+                      ? "border-[#1DA1F2] pr-16 pl-3 shadow-[0_0_10px_rgba(29,161,242,0.15)] bg-blue-50/5 focus:border-[#1DA1F2]"
+                      : "border-[var(--color-border)] pr-3 pl-3 focus:border-[#2383E2] focus:bg-white"
+                  }`}
                   dir="ltr"
                   required
                 />
+                {isXUrl && (
+                  <div className="absolute right-3 top-2.5 flex items-center gap-1.5 animate-pulse select-none">
+                    <span className="flex h-2 w-2 rounded-full bg-[#1DA1F2]" />
+                    <span className="text-[10px] font-extrabold text-[#1DA1F2] tracking-wider font-mono">X LINK</span>
+                  </div>
+                )}
               </div>
 
               <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
@@ -817,6 +904,48 @@ export function OpsClient() {
               </div>
             </BentoCard>
 
+            {/* Connected X Engine Bento Card */}
+            <BentoCard colSpan="col-span-12" title="محرك وقراءات منصة X" icon={Cpu}>
+              <div className="space-y-4 mt-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
+                    <Server className="h-3.5 w-3.5 text-[#1DA1F2]" /> محرك الربط الحلي
+                  </span>
+                  <span className="text-[#1DA1F2] font-extrabold flex items-center gap-1.5 select-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#1DA1F2] animate-pulse" />
+                    {state.connectors?.x_oembed === "healthy" ? "Apify (نشط)" : "OEmbed (احتياطي)"}
+                  </span>
+                </div>
+
+                {/* Circular Progress Ring for X Query consumption */}
+                {(() => {
+                  const consumption = state.usage?.xReadsThisMonth ?? 900;
+                  const limit = 6000;
+                  const pct = Math.min(100, Math.max(0, (consumption / limit) * 100));
+                  const radius = 24;
+                  const circumference = 2 * Math.PI * radius;
+                  const strokeDashoffset = circumference - (pct / 100) * circumference;
+
+                  return (
+                    <div className="flex items-center gap-3 bg-[var(--color-bg-main)] p-3 rounded-2xl border border-[var(--color-border)] select-none">
+                      <div className="relative flex items-center justify-center shrink-0 w-12 h-12">
+                        <svg className="w-full h-full transform -rotate-90">
+                          <circle cx="24" cy="24" r={radius} className="text-stone-100" strokeWidth="4.5" stroke="currentColor" fill="transparent" />
+                          <circle cx="24" cy="24" r={radius} className="text-[#1DA1F2] transition-all duration-1000 ease-out" strokeWidth="4.5" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" stroke="currentColor" fill="transparent" />
+                        </svg>
+                        <span className="absolute text-[9px] font-black text-[var(--color-text-title)]">{Math.round(pct)}%</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[9px] font-bold text-[var(--color-text-muted)] block">الاستهلاك الشهري لقراءات X</span>
+                        <span className="text-xs font-black text-[var(--color-text-title)] mt-0.5 block">{consumption.toLocaleString()} / {limit.toLocaleString()} طلب</span>
+                        <span className="text-[8px] text-stone-400 mt-0.5 block">مفتاح الربط الذكي: xai-t8sa2J...</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </BentoCard>
+
             {/* Selected Item Details Sticky Widget */}
             {selectedItem ? (
               <div className="bg-white rounded-3xl border border-[var(--color-border)] p-5 shadow-sm space-y-4">
@@ -837,23 +966,30 @@ export function OpsClient() {
                   </a>
                 </div>
 
-                <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] max-h-48 relative group/img">
-                  {captureAsset(state.capturesByItem[selectedItem.id]) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      alt="صورة المحتوى"
-                      className="w-full h-full object-contain max-h-48 object-top rounded-2xl transition duration-500 group-hover/img:scale-105"
-                      src={captureAsset(state.capturesByItem[selectedItem.id]) ?? ""}
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-28 items-center justify-center text-[var(--color-text-muted)]">
-                      <Camera className="h-6 w-6" />
-                    </div>
-                  )}
-                </div>
+                {isValidXUrl(selectedItem.originalUrl) ? (
+                  <TweetPreviewCard
+                    item={itemWithRawResponse && itemWithRawResponse.id === selectedItem.id ? itemWithRawResponse : selectedItem}
+                    onSyncSuccess={handleSyncSuccess}
+                  />
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] max-h-48 relative group/img">
+                    {captureAsset(state.capturesByItem[selectedItem.id]) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        alt="صورة المحتوى"
+                        className="w-full h-full object-contain max-h-48 object-top rounded-2xl transition duration-500 group-hover/img:scale-105"
+                        src={captureAsset(state.capturesByItem[selectedItem.id]) ?? ""}
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-28 items-center justify-center text-[var(--color-text-muted)]">
+                        <Camera className="h-6 w-6" />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -880,7 +1016,9 @@ export function OpsClient() {
                     ) : null}
                   </div>
 
-                  <p className="text-xs font-semibold leading-5 text-[var(--color-text-body)] bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border)]">{selectedItem.summary}</p>
+                  {!isValidXUrl(selectedItem.originalUrl) && (
+                    <p className="text-xs font-semibold leading-5 text-[var(--color-text-body)] bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border)]">{selectedItem.summary}</p>
+                  )}
 
                   <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
                     <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-title)] hover:text-[#2383E2] select-none">
