@@ -202,6 +202,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manualReportItem.title, "متابعة هاكاثون هداية عبر اختبار API");
     assert.equal(manualReportItem.authorName, "فريق اختبار رصد");
     assert.equal(manualReportItem.platform, "X");
+    assert.equal(manualReportItem.reportLabel, "الرصد الحي");
     assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456789");
     assert.equal(manualReportItem.linkStatus, "openable");
   });

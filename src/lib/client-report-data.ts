@@ -1,7 +1,7 @@
 import { formatGregorian, formatHijri } from "@/lib/dates";
 import { DEFAULT_ORGANIZATION_ID, LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
 import { getImportedReportsDataset, type ImportConfidence, type ImportedReportItem } from "@/lib/imported-reports";
-import type { Capture, MonitoringItem, ReportVersion } from "@/lib/types";
+import type { Capture, MonitoringItem } from "@/lib/types";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 
@@ -56,6 +56,7 @@ type DbReportItemRow = {
 
 type DbReportRow = {
   id: string;
+  organization_id: string;
   version: number;
   title: string;
   period_start: string | null;
@@ -188,7 +189,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
   }
 
   const [reportsResult, itemsResult, capturesResult] = await Promise.all([
-    supabase.from("reports").select("id, version, title, period_start, period_end").in("id", reportIds),
+    supabase.from("reports").select("id, organization_id, version, title, period_start, period_end").in("id", reportIds),
     supabase
       .from("monitoring_items")
       .select(
@@ -242,9 +243,17 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
   const reportSummaries = [...reportsById.values()]
     .sort((a, b) => a.version - b.version)
     .map((report) => ({
-      issue: report.version,
-      label: report.version ? `الإصدار ${report.version}` : report.title,
-      sourcePdf: firstSourcePdfByReportId.get(report.id) ?? report.id,
+      issue: report.organization_id === DEFAULT_ORGANIZATION_ID ? null : report.version,
+      label:
+        report.organization_id === DEFAULT_ORGANIZATION_ID
+          ? "الرصد الحي"
+          : report.version
+            ? `الإصدار ${report.version}`
+            : report.title,
+      sourcePdf:
+        report.organization_id === DEFAULT_ORGANIZATION_ID
+          ? "live-hidayathon"
+          : firstSourcePdfByReportId.get(report.id) ?? report.id,
       count: reportItemRows.filter((link) => link.report_id === report.id).length,
     }));
 
@@ -265,7 +274,7 @@ function getLocalLiveClientReportItems() {
       const capture = store
         .listCaptures(item.id)
         .find((entry) => entry.kind === "report_grade" && entry.status === "success");
-      liveItems.push(toClientReportItemFromWorkflow(item, report, capture, link.addedAt, index + 1));
+      liveItems.push(toClientReportItemFromWorkflow(item, capture, link.addedAt, index + 1));
     });
   }
 
@@ -280,8 +289,8 @@ function getLocalLiveReportSummaries() {
         .listReportItems(report.id)
         .filter((link) => !link.itemId.startsWith("legacy-item-")).length;
       return {
-        issue: report.version,
-        label: `الإصدار ${report.version}`,
+        issue: null,
+        label: "الرصد الحي",
         sourcePdf: "live-hidayathon",
         count,
       };
@@ -291,7 +300,6 @@ function getLocalLiveReportSummaries() {
 
 function toClientReportItemFromWorkflow(
   item: MonitoringItem,
-  report: ReportVersion,
   capture: Capture | undefined,
   addedAt: string,
   order: number,
@@ -301,7 +309,7 @@ function toClientReportItemFromWorkflow(
   return enrichClientReportItem({
     id: item.id,
     sourcePdf: "live-hidayathon",
-    reportIssue: report.version,
+    reportIssue: null,
     page: order,
     platform: platformFromOriginalUrl(item.originalUrl),
     sourceName: item.sourceName,
@@ -406,8 +414,10 @@ function toClientReportItemFromDb(
   sources: Map<string, string>,
   link: DbReportItemRow,
 ) {
-  const sourcePdf = rawString(row.raw_response, "sourcePdf") ?? report?.title ?? "supabase";
-  const reportIssue = rawNumber(row.raw_response, "reportIssue") ?? report?.version ?? null;
+  const isLiveReport =
+    report?.organization_id === DEFAULT_ORGANIZATION_ID || rawString(row.raw_response, "sourcePdf") === "live-hidayathon";
+  const sourcePdf = rawString(row.raw_response, "sourcePdf") ?? (isLiveReport ? "live-hidayathon" : report?.title ?? "supabase");
+  const reportIssue = rawNumber(row.raw_response, "reportIssue") ?? (isLiveReport ? null : report?.version ?? null);
   const platform = rawString(row.raw_response, "platform") ?? platformFromDbRow(row);
   const contentImagePath =
     rawContentCropString(row.raw_response, "contentImagePath") ??
@@ -465,7 +475,12 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
     ...item,
     originalUrl,
     contentUrl,
-    reportLabel: item.reportIssue ? `الإصدار ${item.reportIssue}` : "تقرير غير مرقم",
+    reportLabel:
+      item.sourcePdf === "live-hidayathon"
+        ? "الرصد الحي"
+        : item.reportIssue
+          ? `الإصدار ${item.reportIssue}`
+          : "تقرير غير مرقم",
     platformLabel: platformLabels[item.platform] ?? item.platform,
     sentimentLabel: sentimentLabels[item.sentiment] ?? item.sentiment,
     confidenceLabel: confidenceLabels[item.confidence] ?? item.confidence,
