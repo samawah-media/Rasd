@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock-data";
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { isSafePublicHttpUrl } from "@/server/url-metadata";
 import type {
   Capture,
   CaptureKind,
@@ -201,13 +202,19 @@ function legacyEvidenceUrl(item: ImportedReportItem) {
 }
 
 function createEvidenceLiteCapture(itemId: string): Capture {
+  const item = items.find((entry) => entry.id === itemId);
+  let screenshotUrl = evidenceCardUrl(itemId);
+  if (item && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+  }
+
   const capture: Capture = {
     id: crypto.randomUUID(),
     itemId,
     kind: "evidence_lite",
     status: "success",
     capturedAt: now(),
-    assetUrl: evidenceCardUrl(itemId),
+    assetUrl: screenshotUrl,
   };
   captures.unshift(capture);
   return capture;
@@ -277,8 +284,13 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
   }
 
   for (const capture of captures) {
-    if (capture.itemId === item.id && capture.status === "success" && (!capture.assetUrl || capture.assetUrl === "/window.svg")) {
-      capture.assetUrl = evidenceCardUrl(item.id);
+    if (capture.itemId === item.id && capture.status === "success" && (!capture.assetUrl || capture.assetUrl === "/window.svg" || capture.assetUrl.includes("evidence-card.svg"))) {
+      let screenshotUrl = evidenceCardUrl(item.id);
+      const targetUrl = canonicalUrl || item.originalUrl;
+      if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
+        screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+      }
+      capture.assetUrl = screenshotUrl;
       changed = true;
     }
   }
@@ -627,6 +639,11 @@ export const store = {
       storageMb: usage.storageMb + 2,
     };
 
+    let screenshotUrl = evidenceCardUrl(id);
+    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+    }
+
     const capture: Capture = shouldFail
       ? {
           id: crypto.randomUUID(),
@@ -641,7 +658,7 @@ export const store = {
           kind,
           status: "success",
           capturedAt: now(),
-          assetUrl: evidenceCardUrl(id),
+          assetUrl: screenshotUrl,
         };
 
     captures.unshift(capture);

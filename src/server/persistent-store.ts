@@ -26,6 +26,7 @@ import {
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -396,7 +397,11 @@ async function refreshSupabaseManualDuplicate(
   platform: string,
 ) {
   const patch: DbRow = {};
-  const screenshotUrl = evidenceCardUrl(row.id);
+  let screenshotUrl = evidenceCardUrl(row.id);
+  const targetUrl = canonicalUrl || row.original_url;
+  if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
+    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+  }
 
   if (input.title && (isWeakManualTitle(row) || input.title.length > (row.title ?? "").length)) {
     patch.title = input.title;
@@ -806,7 +811,10 @@ export const persistentStore = {
     if (error) throw error;
 
     const insertedRow = row as DbItemRow;
-    const screenshotUrl = evidenceCardUrl(insertedRow.id);
+    let screenshotUrl = evidenceCardUrl(insertedRow.id);
+    if (insertedRow.original_url && isSafePublicHttpUrl(insertedRow.original_url)) {
+      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(insertedRow.original_url)}&screenshot=true&embed=screenshot.url`;
+    }
     const { data: hydratedRow, error: hydrationError } = await supabase
       .from("monitoring_items")
       .update({
@@ -893,7 +901,11 @@ export const persistentStore = {
     if (!budget.allowed) return { allowed: false as const, budget };
 
     await supabase.from("monitoring_items").update({ state: "capture_pending" }).eq("id", id);
-    const screenshotUrl = evidenceCardUrl(id);
+    let screenshotUrl = evidenceCardUrl(id);
+    const item = await getItemOrThrow(supabase, id);
+    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+    }
 
     const captureInput: DbRow = shouldFail
       ? {

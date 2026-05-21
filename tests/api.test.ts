@@ -222,7 +222,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manual.response.status, 201);
     assert.equal(manual.json.item.state, "needs_review");
     assert.equal(manual.json.evidence.kind, "evidence_lite");
-    assert.match(manual.json.evidence.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$/);
+    assert.match(manual.json.evidence.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);
     assert.equal(manual.json.item.authorName, "فريق اختبار رصد");
     assert.equal(manual.json.item.authorHandle, "@rasd_test");
     assert.equal(manual.json.item.publishedAt, "2026-05-20T10:30:00.000Z");
@@ -264,13 +264,15 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(captured.response.status, 200);
     assert.equal(captured.json.item.state, "report_ready");
     assert.equal(captured.json.capture.status, "success");
-    assert.match(captured.json.capture.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$/);
+    assert.match(captured.json.capture.assetUrl, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);
     assert.equal(captured.json.capture_source, "rendered_evidence_card");
 
-    const evidenceSvg = await requestText(captured.json.capture.assetUrl);
-    assert.equal(evidenceSvg.response.status, 200);
-    assert.match(evidenceSvg.response.headers.get("content-type") ?? "", /image\/svg\+xml/);
-    assert.match(evidenceSvg.text, /متابعة/);
+    if (captured.json.capture.assetUrl.startsWith("/api/")) {
+      const evidenceSvg = await requestText(captured.json.capture.assetUrl);
+      assert.equal(evidenceSvg.response.status, 200);
+      assert.match(evidenceSvg.response.headers.get("content-type") ?? "", /image\/svg\+xml/);
+      assert.match(evidenceSvg.text, /متابعة/);
+    }
 
     const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
       method: "POST",
@@ -293,7 +295,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456789");
     assert.equal(manualReportItem.linkStatus, "openable");
     assert.equal(manualReportItem.screenshotStatus, "available");
-    assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$/);
+    assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);
   });
 
   it("preserves warning gates for failed captures", async () => {
