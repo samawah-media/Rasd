@@ -76,6 +76,7 @@ Partial run on 2026-05-21:
 - Fix added: `/window.svg` is no longer treated as client evidence; the UI should mark it as missing evidence instead of displaying a fake screenshot.
 - Owner chose to remove the old test item. Production cleanup deleted 1 monitoring item, 1 report link, and 2 old captures for `https://hedayathon.com`.
 - Post-cleanup production state: 124 legacy report items plus 1 live X report item, so the client report should show 125 items after refresh.
+- Owner confirmed after refresh that the client report works as expected: total coverage is correct, the first visible item is valid, day filtering works, and filtered PDF export opens. PDF polish remains a later improvement, not an A10 blocker.
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
 

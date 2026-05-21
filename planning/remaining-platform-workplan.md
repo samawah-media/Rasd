@@ -374,6 +374,7 @@ Status update - 2026-05-21:
 - A10 found an old live test item using the historical `/window.svg` placeholder capture. Code now excludes `/window.svg` from client evidence so fake screenshots are not shown.
 - Owner chose to remove the old test artifact. Production cleanup deleted the `https://hedayathon.com` test monitoring item, its report link, and two old captures.
 - Post-cleanup state should show 125 client report items after refresh: 124 legacy archive items plus 1 live X report item.
+- Owner confirmed the refreshed client report works: expected item count, valid first item, clickable day filtering, and filtered PDF export. Export quality polish remains a later D2 task, not a blocker for A10.
 
 ## Priority B - Needed For Efficient Operations
 
