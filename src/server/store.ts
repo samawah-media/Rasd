@@ -298,6 +298,12 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
     item.publishedAt = input.publishedAt;
     changed = true;
   }
+  if (item.state === "archived" || item.state === "rejected") {
+    const rule = keywordRules[0];
+    const match = explainKeywordMatch(`${input.title ?? item.title} ${input.text ?? item.summary} ${canonicalUrl}`, rule);
+    item.state = match.score > 0 ? "needs_review" : "candidate";
+    changed = true;
+  }
   if (item.originalUrl !== canonicalUrl && xStatusIdFromUrl(item.originalUrl) === xStatusIdFromUrl(canonicalUrl)) {
     item.originalUrl = canonicalUrl;
     changed = true;

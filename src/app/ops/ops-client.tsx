@@ -237,12 +237,15 @@ function systemText(metrics: HealthMetric[]) {
   return "مستقرة";
 }
 
-function latestWorkflowItems(items: MonitoringItem[], limit = 48) {
-  return items
+function latestWorkflowItems(items: MonitoringItem[], limit = 48, pinnedId?: string | null) {
+  const candidates = items
     .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss")
     .filter((item) => item.state !== "archived")
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
-    .slice(0, limit);
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+  const limited = candidates.slice(0, limit);
+  const pinned = pinnedId ? candidates.find((item) => item.id === pinnedId) : undefined;
+  if (!pinned || limited.some((item) => item.id === pinned.id)) return limited;
+  return [pinned, ...limited.slice(0, Math.max(0, limit - 1))];
 }
 
 export function OpsClient() {
@@ -253,6 +256,7 @@ export function OpsClient() {
   const [authorName, setAuthorName] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pinnedItemId, setPinnedItemId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
@@ -262,8 +266,8 @@ export function OpsClient() {
   const liveReportId = state.liveReport?.id ?? "report-5";
 
   const workflowItems = useMemo(
-    () => latestWorkflowItems(state.items),
-    [state.items],
+    () => latestWorkflowItems(state.items, 48, pinnedItemId ?? selectedId),
+    [pinnedItemId, selectedId, state.items],
   );
 
   const activeRssSources = useMemo(
@@ -385,6 +389,7 @@ export function OpsClient() {
       });
 
       setSelectedId(result.item.id);
+      setPinnedItemId(result.item.id);
       setTab("active");
       setUrl("");
       setTitle("");
@@ -522,6 +527,7 @@ export function OpsClient() {
         }),
       });
       setSelectedId(null);
+      setPinnedItemId(null);
       await refreshSilently();
       setMessage(
         `تم تنظيف ${result.cleanup.archived.toLocaleString("ar-SA")} مادة، وإزالة ${result.cleanup.removedReportItems.toLocaleString("ar-SA")} ربط من التقرير.`,
@@ -1020,7 +1026,10 @@ export function OpsClient() {
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setSelectedId(item.id)}
+                      onClick={() => {
+                        setSelectedId(item.id);
+                        setPinnedItemId(item.id);
+                      }}
                       className={`grid w-full gap-4 p-4 text-right transition-colors duration-200 md:grid-cols-[100px_minmax(0,1fr)] ${
                         selected ? "bg-[#2383E2]/5" : "hover:bg-[var(--color-bg-main)]"
                       }`}

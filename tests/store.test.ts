@@ -166,6 +166,31 @@ describe("monitoring workflow store", () => {
     assert.equal(refreshed.item.originalUrl, "https://x.com/TestUser/status/999888777");
   });
 
+  it("reopens archived manual duplicates when the link is submitted again", () => {
+    const first = store.ingestManualUrl({
+      url: "https://x.com/UOfjeddah/status/2013613302509699235?lang=en",
+      title: "هاكثون هداية من جامعة جدة",
+      text: "هاكثون هداية من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.",
+      authorName: "جامعة جدة",
+      authorHandle: "@UOfjeddah",
+      publishedAt: "2026-01-20T00:00:00.000Z",
+    });
+    store.archiveItem(first.item.id, "cleanup test");
+
+    const reopened = store.ingestManualUrl({
+      url: "https://x.com/UOfjeddah/status/2013613302509699235",
+      title: "هاكثون هداية من جامعة جدة",
+      text: "هاكثون هداية من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.",
+      authorName: "جامعة جدة",
+      authorHandle: "@UOfjeddah",
+    });
+
+    assert.equal(reopened.duplicate, true);
+    assert.equal(reopened.duplicateType, "url");
+    assert.equal(reopened.item.id, first.item.id);
+    assert.equal(reopened.item.state, "needs_review");
+  });
+
   it("detects duplicate content when different URLs are submitted with same text (> 30 chars)", () => {
     const first = store.ingestManualUrl({
       url: "https://x.com/FirstUser/status/111111",

@@ -178,15 +178,16 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 18. Confirm private/internal URLs such as `http://127.0.0.1/admin` are rejected.
 19. Confirm X URLs with `?lang=...` or tracking parameters dedupe to the clean `https://x.com/.../status/...` URL.
 20. If a duplicate was previously saved without tweet metadata, submit it again and confirm the same item is refreshed with tweet text, publisher, handle, and date.
-21. Open the item detail, expand `تعديل بيانات المادة`, edit title/summary/publisher/date/original URL, save, and confirm the list/detail reflect the correction.
-22. Approve the item, run report-grade capture, and confirm `/ops` shows a content evidence image for the item.
-23. Add it to the live Hidayathon report.
-24. Open `https://rasd-gamma.vercel.app/client-report` and confirm the corrected item appears with original link, publisher, summary, platform, date, and a content image.
-25. Confirm admin tools are visible only while logged in as owner/editor.
-26. Confirm a signed-out browser redirects `/client-report` to `/login?next=%2Fclient-report`.
-27. Confirm the client handoff is Viewer login to `https://rasd-gamma.vercel.app/client-report`, not a public share-link flow.
-28. As owner, open `https://rasd-gamma.vercel.app/access`, create/update one email-password Viewer account, and confirm that account can open `/client-report` only.
-29. Confirm email-password login does not stay stuck on `جاري التحقق`; it should either enter the app or show a clear Arabic error within about 12 seconds.
+21. If a duplicate was previously archived, submit it again and confirm it reappears in `/ops` instead of only showing a "link exists" message.
+22. Open the item detail, expand `تعديل بيانات المادة`, edit title/summary/publisher/date/original URL, save, and confirm the list/detail reflect the correction.
+23. Approve the item, run report-grade capture, and confirm `/ops` shows a content evidence image for the item.
+24. Add it to the live Hidayathon report.
+25. Open `https://rasd-gamma.vercel.app/client-report` and confirm the corrected item appears with original link, publisher, summary, platform, date, and a content image.
+26. Confirm admin tools are visible only while logged in as owner/editor.
+27. Confirm a signed-out browser redirects `/client-report` to `/login?next=%2Fclient-report`.
+28. Confirm the client handoff is Viewer login to `https://rasd-gamma.vercel.app/client-report`, not a public share-link flow.
+29. As owner, open `https://rasd-gamma.vercel.app/access`, create/update one email-password Viewer account, and confirm that account can open `/client-report` only.
+30. Confirm email-password login does not stay stuck on `جاري التحقق`; it should either enter the app or show a clear Arabic error within about 12 seconds.
 
 ## Content Screenshot Pipeline Smoke Test
 

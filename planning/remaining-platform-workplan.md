@@ -299,6 +299,7 @@ Status update - 2026-05-21:
 - Live report-grade capture now stores a rendered evidence image from the fetched item metadata instead of the old `/window.svg` placeholder. A true browser screenshot service remains a later A7/C4 task.
 - `/client-report` can include manual items after they are reviewed, report-grade captured, and added to the live report, while keeping unlinked default/manual test rows out of the client dataset.
 - Automated API coverage now proves a real X URL can flow through intake -> metadata hydration -> duplicate detection -> review -> capture -> report insertion -> client report.
+- Duplicate manual links that were previously archived now reopen into the workflow when submitted again, and `/ops` pins the selected duplicate so old dated content is not hidden by the 48-item workbench limit.
 
 Tasks:
 
@@ -306,6 +307,7 @@ Tasks:
 - [x] Store source, platform, URL, title/text, author, author handle, published date, captured date, and review status.
 - [x] Fetch readable metadata from a pasted URL before asking the editor for manual fields.
 - [x] Refresh stale duplicate manual rows when metadata becomes available later.
+- [x] Reopen archived duplicate manual rows when the owner submits the same link again.
 - [x] Replace live manual placeholder capture assets with a content evidence image.
 - [x] Dedupe by canonical URL and organization.
 - [x] Allow owner/editor to approve/reject items.
@@ -502,6 +504,7 @@ Status: premium first pass deployed on 2026-05-22, then simplified and redeploye
 - [x] Preserve RSS source schedule controls, then relocate them to `/sources` when `/ops` was simplified.
 - [x] Move RSS source controls and keyword tuning out of `/ops` into `/sources`.
 - [x] Add clearer duplicate-link feedback after manual intake.
+- [x] Keep the selected duplicate visible in `/ops` even when it is older than the current 48-item workbench window.
 - [ ] Validate on production with owner login after deploy.
 
 ### B4.1. Sources And Keywords Hub

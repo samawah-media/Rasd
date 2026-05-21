@@ -520,6 +520,9 @@ async function refreshSupabaseManualDuplicate(
   const summary = String(patch.summary ?? row.summary ?? "");
   const rule = keywordRules[0];
   const match = explainKeywordMatch(`${title} ${summary} ${canonicalUrl}`, rule);
+  if (row.state === "archived" || row.state === "rejected") {
+    patch.state = match.score > 0 ? "needs_review" : "candidate";
+  }
   if (match.score > (row.relevance_score ?? 0)) {
     patch.relevance_score = match.score;
     patch.relevance_reason = match.reason;
