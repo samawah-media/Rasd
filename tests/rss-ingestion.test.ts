@@ -62,11 +62,32 @@ describe("RSS ingestion", () => {
     assert.equal(first.fetched, 1);
     assert.equal(first.created, 1);
     assert.equal(first.duplicates, 0);
+    assert.equal(first.skipped, 0);
     assert.equal(first.items[0].state, "needs_review");
     assert.equal(first.items[0].originalUrl, "https://news.example.com/hidayathon/story-1");
     assert.equal(first.items[0].sourceItemId, `${source.id}:story-1`);
     assert.equal(second.created, 0);
     assert.equal(second.duplicates, 1);
+    assert.equal(second.skipped, 0);
+  });
+
+  it("skips RSS entries that do not match Hidayathon keywords", async () => {
+    const source = store.createSource({
+      name: "General News Feed",
+      type: "rss",
+      feedUrl: "https://news.example.com/general.xml",
+      credibility: "media",
+    });
+    const unrelatedFeed = `<?xml version="1.0"?><rss version="2.0"><channel><item><title>خبر اقتصادي عام</title><link>https://news.example.com/business/story</link><description>تغطية اقتصادية لا تخص المشروع.</description><pubDate>Wed, 20 May 2026 10:30:00 GMT</pubDate></item></channel></rss>`;
+    const fetcher: typeof fetch = async () => new Response(unrelatedFeed, { status: 200 });
+
+    const result = await store.ingestRssSource(source.id, { fetcher });
+
+    assert.equal(result.fetched, 1);
+    assert.equal(result.created, 0);
+    assert.equal(result.duplicates, 0);
+    assert.equal(result.skipped, 1);
+    assert.equal(result.items.length, 0);
   });
 
   it("does not crash on missing optional RSS fields", async () => {
@@ -76,13 +97,14 @@ describe("RSS ingestion", () => {
       feedUrl: "https://news.example.com/sparse.xml",
       credibility: "media",
     });
-    const sparseFeed = `<?xml version="1.0"?><rss version="2.0"><channel><item><link>https://news.example.com/no-title</link></item></channel></rss>`;
+    const sparseFeed = `<?xml version="1.0"?><rss version="2.0"><channel><item><link>https://news.example.com/hidayathon/no-title</link></item></channel></rss>`;
     const fetcher: typeof fetch = async () => new Response(sparseFeed, { status: 200 });
 
     const result = await store.ingestRssSource(source.id, { fetcher });
 
     assert.equal(result.created, 1);
-    assert.equal(result.items[0].title, "https://news.example.com/no-title");
+    assert.equal(result.skipped, 0);
+    assert.equal(result.items[0].title, "https://news.example.com/hidayathon/no-title");
     assert.equal(result.items[0].warning, "missing_or_invalid_date");
   });
 

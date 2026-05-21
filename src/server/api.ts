@@ -97,6 +97,7 @@ function sourcePollPayload(result: Awaited<ReturnType<typeof persistentStore.ing
     fetched: result.fetched,
     created: result.created,
     duplicates: result.duplicates,
+    skipped: result.skipped,
     failed: result.failed,
     items: result.items,
   };
@@ -342,6 +343,7 @@ api.post("/sources/poll-active", async (c) => {
   let fetched = 0;
   let created = 0;
   let duplicates = 0;
+  let skipped = 0;
   let failed = 0;
 
   for (const source of sources) {
@@ -350,6 +352,7 @@ api.post("/sources/poll-active", async (c) => {
       fetched += result.fetched;
       created += result.created;
       duplicates += result.duplicates;
+      skipped += typeof result.skipped === "number" ? result.skipped : 0;
       failed += result.failed;
       runs.push({ ok: true, sourceId: source.id, sourceName: source.name, ...result });
     } catch (error) {
@@ -366,6 +369,7 @@ api.post("/sources/poll-active", async (c) => {
         fetched,
         created,
         duplicates,
+        skipped,
         failed,
         runs,
       },

@@ -53,6 +53,13 @@ export type RssIngestionItem = {
   normalizedText: string;
 };
 
+export type RssRelevanceResult = {
+  ok: boolean;
+  score: number;
+  reason: string;
+  matchedTerms: string[];
+};
+
 export class RssIngestionError extends Error {
   constructor(message: string) {
     super(message);
@@ -173,6 +180,19 @@ export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = 
     canonicalUrlHashInput: entry.canonicalUrl,
     sourceItemKeyInput,
     normalizedText: summary,
+  };
+}
+
+export function evaluateRssEntryRelevance(entry: RssEntry): RssRelevanceResult {
+  const rule = keywordRules[0];
+  const text = [entry.title, entry.text, entry.authorName, entry.canonicalUrl].filter(Boolean).join(" ");
+  const match = explainKeywordMatch(text, rule);
+
+  return {
+    ok: match.score > 0,
+    score: match.score,
+    reason: match.reason,
+    matchedTerms: match.matchedTerms,
   };
 }
 

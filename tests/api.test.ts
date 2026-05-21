@@ -230,6 +230,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(first.json.poll.fetched, 1);
       assert.equal(first.json.poll.created, 1);
       assert.equal(first.json.poll.duplicates, 0);
+      assert.equal(first.json.poll.skipped, 0);
       assert.equal(first.json.poll.items[0].sourceType, "rss");
       assert.equal(first.json.poll.items[0].state, "needs_review");
       assert.equal(first.json.poll.items[0].originalUrl, "https://news.example.com/hidayathon/api-story-1");
@@ -237,6 +238,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(second.response.status, 200);
       assert.equal(second.json.poll.created, 0);
       assert.equal(second.json.poll.duplicates, 1);
+      assert.equal(second.json.poll.skipped, 0);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -275,6 +277,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(result.response.status, 200);
       assert.equal(result.json.poll.sources, 1);
       assert.equal(result.json.poll.created, 1);
+      assert.equal(result.json.poll.skipped, 0);
       assert.equal(result.json.poll.runs[0].sourceId, active.id);
       assert.equal(result.json.poll.runs[0].ok, true);
     } finally {

@@ -33,6 +33,7 @@ import {
 } from "@/server/source-validation";
 import {
   buildRssIngestionItem,
+  evaluateRssEntryRelevance,
   fetchRssFeed,
   type RssIngestionItem,
 } from "@/server/rss-ingestion";
@@ -769,10 +770,16 @@ export const persistentStore = {
       let created = 0;
       let duplicates = 0;
       let failed = 0;
+      let skipped = 0;
       const createdItems: MonitoringItem[] = [];
 
       for (const entry of feed.entries) {
         try {
+          if (!evaluateRssEntryRelevance(entry).ok) {
+            skipped += 1;
+            continue;
+          }
+
           const ingested = buildRssIngestionItem(source, entry, checkedAt);
           const duplicate = await findSupabaseRssDuplicate(supabase, ingested);
           if (duplicate.duplicate) {
@@ -832,6 +839,7 @@ export const persistentStore = {
         fetched: feed.entries.length,
         created,
         duplicates,
+        skipped,
         failed,
       });
 
@@ -846,6 +854,7 @@ export const persistentStore = {
         fetched: feed.entries.length,
         created,
         duplicates,
+        skipped,
         failed,
         items: createdItems,
       };

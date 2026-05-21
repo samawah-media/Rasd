@@ -46,6 +46,7 @@ type SourcePollResponse = {
     fetched: number;
     created: number;
     duplicates: number;
+    skipped?: number;
     failed: number;
     items?: MonitoringItem[];
   };
@@ -475,8 +476,9 @@ export function OpsClient() {
       const fetched = result.poll.fetched.toLocaleString("ar-SA");
       const created = result.poll.created.toLocaleString("ar-SA");
       const duplicates = result.poll.duplicates.toLocaleString("ar-SA");
+      const skipped = (result.poll.skipped ?? 0).toLocaleString("ar-SA");
       const failed = result.poll.failed.toLocaleString("ar-SA");
-      setMessage(`تم تشغيل ${source.name}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، متعثر ${failed}.`);
+      setMessage(`تم تشغيل ${source.name}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، غير مطابق ${skipped}، متعثر ${failed}.`);
       setMessageType(result.poll.failed > 0 ? "warning" : "success");
       setSelectedId(result.poll.items?.[0]?.id ?? selectedId);
     } catch (error) {
@@ -499,7 +501,7 @@ export function OpsClient() {
       });
       await refreshSilently();
       setMessage(
-        `تم فحص ${result.poll.sources ?? 0} مصدر: جلب ${result.poll.fetched.toLocaleString("ar-SA")}، جديد ${result.poll.created.toLocaleString("ar-SA")}، مكرر ${result.poll.duplicates.toLocaleString("ar-SA")}، متعثر ${result.poll.failed.toLocaleString("ar-SA")}.`,
+        `تم فحص ${result.poll.sources ?? 0} مصدر: جلب ${result.poll.fetched.toLocaleString("ar-SA")}، جديد ${result.poll.created.toLocaleString("ar-SA")}، مكرر ${result.poll.duplicates.toLocaleString("ar-SA")}، غير مطابق ${(result.poll.skipped ?? 0).toLocaleString("ar-SA")}، متعثر ${result.poll.failed.toLocaleString("ar-SA")}.`,
       );
       setMessageType(result.poll.failed > 0 ? "warning" : "success");
     } catch (error) {
