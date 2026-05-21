@@ -436,6 +436,8 @@ Operations simplification update - 2026-05-22:
 - Legacy import/backfill pages remain available but are no longer first-level navigation items; they are linked from `/sources` as advanced archive tools.
 - Duplicate manual URL feedback is now explicit: when a URL/content already exists, the UI says the existing item was updated and opens it for review/capture/report actions.
 - Local quality checks passed after the split: `npm run test` (99 tests), `npm run typecheck`, `npm run lint`, and `npm run build`.
+- Commit `bc61ae8` was pushed to GitHub `main`; Vercel production deployment `rasd-mcd38wixs-samawahs-projects.vercel.app` is `Ready` and aliased to `https://rasd-gamma.vercel.app`.
+- Signed-out production checks passed for `/ops`, `/sources`, and `/settings`: each redirects to `/login?next=...` rather than exposing the page publicly or returning 404.
 
 Acceptance:
 
@@ -479,7 +481,7 @@ Status: deferred on 2026-05-21. Current legacy report links are good enough for 
 
 ### B4. Improve `/ops`
 
-Status: premium first pass deployed on 2026-05-22, then simplified locally on 2026-05-22 so `/ops` is a daily operations center instead of a mixed settings/source page. Local checks passed; pending production deploy/review.
+Status: premium first pass deployed on 2026-05-22, then simplified and redeployed on 2026-05-22 so `/ops` is a daily operations center instead of a mixed settings/source page. Local checks and signed-out production route checks passed; pending owner authenticated review.
 
 - [x] Convert `/ops` into a focused inbox-style workbench.
 - [x] Keep the main flow visible: paste link, review, capture, add to report.
@@ -493,7 +495,7 @@ Status: premium first pass deployed on 2026-05-22, then simplified locally on 20
 
 ### B4.1. Sources And Keywords Hub
 
-Status: implemented locally on 2026-05-22 with tests/typecheck/lint/build passing; pending production deploy/review.
+Status: implemented and deployed on 2026-05-22 with tests/typecheck/lint/build passing; pending owner authenticated review.
 
 - [x] Add `/sources` as the admin hub for RSS sources, polling schedule, active/inactive state, manual source polling, and active-source batch polling.
 - [x] Move keyword rule editing into `/sources`.

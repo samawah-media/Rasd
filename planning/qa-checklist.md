@@ -35,12 +35,15 @@ Current owner-side smoke target:
 
 ## Operations Simplification Quality Gate
 
-Status: local implementation passed on 2026-05-22; pending deploy/production owner smoke.
+Status: deployed on 2026-05-22; pending authenticated production owner smoke.
 
 - `/ops` is the daily content workbench: manual URL intake, duplicate feedback, review, capture, report insertion, and workflow cleanup.
 - `/sources` is the source hub: RSS sources, source schedules, active/inactive state, manual polling, keyword rules, and advanced links to legacy import/backfill tools.
 - Main navigation is intentionally reduced to: لوحة التشغيل، تقرير العميل، المصادر، المستخدمين، الإعدادات.
 - Duplicate URL submissions now explain that the existing item was updated and opened for review, instead of only saying the URL exists.
+- GitHub commit: `bc61ae8`.
+- Vercel deployment: `rasd-mcd38wixs-samawahs-projects.vercel.app`, aliased to `https://rasd-gamma.vercel.app`.
+- Signed-out production checks passed: `/ops`, `/sources`, and `/settings` redirect to login.
 
 Local checks passed:
 
