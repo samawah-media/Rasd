@@ -9,6 +9,7 @@ import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey } from "../src/lib/
 import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
+import { fetchUrlMetadata, isSafePublicHttpUrl } from "../src/server/url-metadata";
 
 describe("connector and budget utilities", () => {
   it("canonicalizes URLs for dedupe without dropping meaningful query params", () => {
@@ -163,5 +164,50 @@ describe("connector and budget utilities", () => {
 
     assert.ok(query.length <= 180);
     assert.ok(query.includes("Hidayathon"));
+  });
+
+  it("extracts X oEmbed metadata for manual URL intake without calling the X API", async () => {
+    const metadata = await fetchUrlMetadata("https://x.com/Hidayathon/status/123456789", async () => {
+      return new Response(
+        JSON.stringify({
+          author_name: "Hidayathon",
+          author_url: "https://twitter.com/Hidayathon",
+          html:
+            '<blockquote><p lang="ar">تجربة رصد جديدة لهاكاثون هداية &amp; متابعة التفاعل.</p>&mdash; Hidayathon (@Hidayathon) <a href="https://twitter.com/Hidayathon/status/123456789">May 20, 2026</a></blockquote>',
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    assert.equal(metadata.platform, "X");
+    assert.equal(metadata.source, "x_oembed");
+    assert.equal(metadata.authorName, "Hidayathon");
+    assert.equal(metadata.authorHandle, "@Hidayathon");
+    assert.equal(metadata.text, "تجربة رصد جديدة لهاكاثون هداية & متابعة التفاعل.");
+    assert.equal(metadata.publishedAt, "2026-05-20T00:00:00.000Z");
+  });
+
+  it("extracts webpage title and description metadata for manual URL intake", async () => {
+    const metadata = await fetchUrlMetadata("https://example.com/news/hidayathon", async () => {
+      return new Response(
+        '<html><head><title>خبر هداية</title><meta name="description" content="متابعة إعلامية لهاكاثون هداية"><meta name="author" content="فريق الأخبار"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } },
+      );
+    });
+
+    assert.equal(metadata.platform, "Website");
+    assert.equal(metadata.source, "html_metadata");
+    assert.equal(metadata.title, "خبر هداية");
+    assert.equal(metadata.text, "متابعة إعلامية لهاكاثون هداية");
+    assert.equal(metadata.authorName, "فريق الأخبار");
+  });
+
+  it("blocks private or credentialed URLs before server-side metadata fetching", () => {
+    assert.equal(isSafePublicHttpUrl("https://example.com/news"), true);
+    assert.equal(isSafePublicHttpUrl("http://localhost:3000/admin"), false);
+    assert.equal(isSafePublicHttpUrl("http://10.0.0.8/admin"), false);
+    assert.equal(isSafePublicHttpUrl("http://192.168.1.20/admin"), false);
+    assert.equal(isSafePublicHttpUrl("http://[::1]/admin"), false);
+    assert.equal(isSafePublicHttpUrl("https://user:pass@example.com/news"), false);
   });
 });

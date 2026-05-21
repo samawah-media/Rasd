@@ -58,11 +58,13 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 8. Open `https://rasd-gamma.vercel.app/imports/backfill`.
 9. Confirm the backfill page no longer shows bulk missing legacy links for the current archive; it should remain available for future corrections.
 10. Open `https://rasd-gamma.vercel.app/ops`.
-11. Submit one fresh X or news URL with title, short text, publisher name, and publish date.
-12. Confirm the same URL submitted again is detected as a duplicate after canonicalization.
-13. Approve the item, run report-grade capture, and add it to the live Hidayathon report.
-14. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, and report status.
-15. Confirm admin tools are visible only while logged in as owner/editor.
+11. Paste one fresh public X or news URL without filling optional manual fields.
+12. Confirm the new item appears immediately at the top of `/ops` with readable title/summary, publisher, platform, date when available, and the original link.
+13. Confirm private/internal URLs such as `http://127.0.0.1/admin` are rejected.
+14. Confirm the same URL submitted again is detected as a duplicate after canonicalization.
+15. Approve the item, run report-grade capture, and add it to the live Hidayathon report.
+16. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, and report status.
+17. Confirm admin tools are visible only while logged in as owner/editor.
 
 ## Content Screenshot Pipeline Smoke Test
 
@@ -102,6 +104,7 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 - Viewer-role behavior still needs a real viewer account or invite flow test.
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
+- X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
 - Share links need a browser-level production test after the report/share UI is polished.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.

@@ -20,6 +20,7 @@ import {
   revokeReportShareLink,
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
+import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type AppBindings = {
   Variables: {
@@ -253,24 +254,37 @@ api.post("/items/manual-url", async (c) => {
   if (!isHttpUrl(url)) {
     return c.json(withRequestId(c, { error: "url must be a valid http or https URL" }), 400);
   }
+  if (!isSafePublicHttpUrl(url)) {
+    return c.json(withRequestId(c, { error: "url must be a public http or https URL" }), 400);
+  }
 
   const publishedAt = optionalIsoDate(body.publishedAt ?? body.published_at);
   if (!publishedAt.ok) {
     return c.json(withRequestId(c, { error: "published_at must be a valid date" }), 400);
   }
 
+  const providedTitle = optionalString(body.title);
+  const providedText = optionalString(body.text);
+  const providedAuthorName = optionalString(body.authorName, body.author_name);
+  const providedAuthorHandle = optionalString(body.authorHandle, body.author_handle);
+  const metadata =
+    providedTitle && providedText && providedAuthorName
+      ? null
+      : await fetchUrlMetadata(url);
+
   const result = await persistentStore.ingestManualUrl({
     url,
-    title: optionalString(body.title),
-    text: optionalString(body.text),
-    authorName: optionalString(body.authorName, body.author_name),
-    authorHandle: optionalString(body.authorHandle, body.author_handle),
-    publishedAt: publishedAt.value,
+    title: providedTitle ?? metadata?.title,
+    text: providedText ?? metadata?.text,
+    authorName: providedAuthorName ?? metadata?.authorName,
+    authorHandle: providedAuthorHandle ?? metadata?.authorHandle,
+    publishedAt: publishedAt.value ?? metadata?.publishedAt,
   });
 
   return c.json(
     withRequestId(c, {
       ...result,
+      metadata,
       next_step: result.item.state === "needs_review" ? "review" : "tune_keyword_rules",
     }),
     result.duplicate ? 200 : 201,

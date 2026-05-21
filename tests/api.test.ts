@@ -113,6 +113,10 @@ describe("Hono API acceptance workflow", () => {
       method: "POST",
       body: JSON.stringify({ url: "https://example.com/story", published_at: "not-a-date" }),
     });
+    const privateUrl = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({ url: "http://127.0.0.1/admin" }),
+    });
 
     assert.equal(response.status, 400);
     assert.equal(json.error, "url is required");
@@ -120,6 +124,39 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(invalidUrl.json.error, "url must be a valid http or https URL");
     assert.equal(invalidDate.response.status, 400);
     assert.equal(invalidDate.json.error, "published_at must be a valid date");
+    assert.equal(privateUrl.response.status, 400);
+    assert.equal(privateUrl.json.error, "url must be a public http or https URL");
+  });
+
+  it("hydrates a pasted X URL into a readable manual item", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          author_name: "Hidayathon",
+          author_url: "https://twitter.com/Hidayathon",
+          html:
+            '<blockquote><p lang="ar">تغطية جديدة لهاكاثون هداية من رابط فقط.</p>&mdash; Hidayathon (@Hidayathon) <a href="https://twitter.com/Hidayathon/status/987654321">May 20, 2026</a></blockquote>',
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+
+    try {
+      const manual = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://x.com/Hidayathon/status/987654321?utm_source=test" }),
+      });
+
+      assert.equal(manual.response.status, 201);
+      assert.equal(manual.json.metadata.source, "x_oembed");
+      assert.equal(manual.json.item.title, "تغطية جديدة لهاكاثون هداية من رابط فقط.");
+      assert.equal(manual.json.item.summary, "تغطية جديدة لهاكاثون هداية من رابط فقط.");
+      assert.equal(manual.json.item.authorName, "Hidayathon");
+      assert.equal(manual.json.item.authorHandle, "@Hidayathon");
+      assert.equal(manual.json.item.originalUrl, "https://x.com/Hidayathon/status/987654321");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("runs the manual intake to report insertion lifecycle", async () => {

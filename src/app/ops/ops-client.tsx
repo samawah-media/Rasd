@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  Activity,
   Archive,
   Camera,
   Check,
-  FilePlus2,
+  ExternalLink,
   Link as LinkIcon,
   RefreshCw,
-  ShieldCheck,
-  X,
+  Sparkles,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
 
 type ApiState = {
@@ -23,6 +20,15 @@ type ApiState = {
   liveReport: ReportVersion | null;
 };
 
+type IntakeResponse = {
+  item: MonitoringItem;
+  duplicate?: boolean;
+  metadata?: {
+    source: "x_oembed" | "html_metadata" | "url_only";
+    warning?: string;
+  } | null;
+};
+
 const emptyState: ApiState = {
   items: [],
   metrics: [],
@@ -30,20 +36,6 @@ const emptyState: ApiState = {
   capturesByItem: {},
   liveReport: null,
 };
-
-const statCards: Array<[string, keyof ReturnType<typeof getStats>, LucideIcon]> = [
-  ["كل المواد", "total", Activity],
-  ["بانتظار المراجعة", "review", Archive],
-  ["جاهزة للتقرير", "ready", ShieldCheck],
-  ["فشل الالتقاط", "failed", Camera],
-];
-
-function getStats(items: MonitoringItem[]) {
-  const ready = items.filter((item) => item.state === "report_ready").length;
-  const review = items.filter((item) => item.state === "needs_review").length;
-  const failed = items.filter((item) => item.state === "capture_failed").length;
-  return { ready, review, failed, total: items.length };
-}
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -64,10 +56,10 @@ function stateLabel(state: MonitoringItem["state"]) {
     normalized: "منظم",
     deduped: "مكرر",
     candidate: "مرشح",
-    needs_review: "بانتظار المراجعة",
+    needs_review: "بانتظار الاعتماد",
     rejected: "مرفوض",
-    approved_pending_capture: "معتمد بانتظار الالتقاط",
-    capture_pending: "الالتقاط جار",
+    approved_pending_capture: "بانتظار اللقطة",
+    capture_pending: "اللقطة جارية",
     capture_failed: "فشل الالتقاط",
     report_ready: "جاهز للتقرير",
     added_to_report: "داخل التقرير",
@@ -78,24 +70,54 @@ function stateLabel(state: MonitoringItem["state"]) {
 }
 
 function stateClass(state: MonitoringItem["state"]) {
-  if (state === "report_ready" || state === "added_to_report") return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (state === "report_ready" || state === "added_to_report" || state === "published") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
   if (state === "capture_failed" || state === "rejected") return "border-red-200 bg-red-50 text-red-900";
   if (state === "approved_pending_capture" || state === "needs_review") return "border-amber-200 bg-amber-50 text-amber-900";
   return "border-stone-200 bg-stone-50 text-stone-800";
 }
 
+function sourceLabel(source?: IntakeResponse["metadata"]) {
+  if (!source) return "تم حفظ الرابط.";
+  if (source.source === "x_oembed") return "تم جلب بيانات التغريدة من X.";
+  if (source.source === "html_metadata") return "تم جلب عنوان ووصف الصفحة.";
+  return "تم حفظ الرابط، ولم نستطع جلب النص تلقائيًا.";
+}
+
+function nextStepLabel(item: MonitoringItem) {
+  if (item.state === "needs_review" || item.state === "candidate") return "الخطوة التالية: اعتماد المادة";
+  if (item.state === "approved_pending_capture") return "الخطوة التالية: التقاط لقطة نهائية";
+  if (item.state === "report_ready" || item.state === "capture_failed") return "الخطوة التالية: إضافة المادة للتقرير";
+  if (item.state === "added_to_report" || item.state === "published") return "المادة موجودة في تقرير العميل";
+  if (item.state === "rejected") return "المادة مرفوضة";
+  return "المادة محفوظة";
+}
+
 export function OpsClient() {
   const [state, setState] = useState<ApiState>(emptyState);
-  const [url, setUrl] = useState("https://example.com/news/hidayathon");
-  const [title, setTitle] = useState("خبر عن هاكاثون هداية");
-  const [text, setText] = useState("تغطية إعلامية عن هداية وهاكاثون هداية ضمن فعالية تقنية.");
+  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [text, setText] = useState("");
+  const [authorName, setAuthorName] = useState("");
+  const [publishedAt, setPublishedAt] = useState("");
+  const [lastItemId, setLastItemId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [shareToken, setShareToken] = useState<string | null>(null);
-  const [shareStatus, setShareStatus] = useState<string>("لم يتم إنشاء رابط مشاركة بعد.");
 
-  const stats = useMemo(() => getStats(state.items), [state.items]);
   const liveReportId = state.liveReport?.id ?? "report-5";
+  const lastItem = useMemo(
+    () => state.items.find((item) => item.id === lastItemId) ?? null,
+    [lastItemId, state.items],
+  );
+  const manualItems = useMemo(
+    () =>
+      state.items
+        .filter((item) => item.sourceType === "manual_url")
+        .filter((item) => item.state !== "archived")
+        .slice(0, 8),
+    [state.items],
+  );
 
   async function fetchSnapshot(): Promise<ApiState> {
     const [itemsData, healthData, auditData, liveReportData] = await Promise.all([
@@ -123,98 +145,169 @@ export function OpsClient() {
 
   async function refresh() {
     setPending("refresh");
+    try {
+      setState(await fetchSnapshot());
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function refreshSilently() {
     setState(await fetchSnapshot());
-    setPending(null);
   }
 
   useEffect(() => {
     let active = true;
-    fetchSnapshot().then((snapshot) => {
-      if (!active) return;
-      setState(snapshot);
-    }).catch((error) => {
-      if (!active) return;
-      setMessage(error.message);
-    });
+    fetchSnapshot()
+      .then((snapshot) => {
+        if (!active) return;
+        setState(snapshot);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setMessage(error instanceof Error ? error.message : "تعذر تحميل بيانات التشغيل.");
+      });
     return () => {
       active = false;
     };
   }, []);
 
-  async function runAction(label: string, action: () => Promise<unknown>) {
+  async function submitUrl(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending("manual");
+    setMessage("جاري حفظ الرابط وإحضار بياناته...");
+
+    try {
+      const result = await apiJson<IntakeResponse>("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({
+          url,
+          title: title || undefined,
+          text: text || undefined,
+          author_name: authorName || undefined,
+          published_at: publishedAt || undefined,
+        }),
+      });
+
+      setLastItemId(result.item.id);
+      setUrl("");
+      setTitle("");
+      setText("");
+      setAuthorName("");
+      setPublishedAt("");
+      await refreshSilently();
+      setMessage(result.duplicate ? "هذا الرابط موجود بالفعل، وعرضناه لك هنا." : sourceLabel(result.metadata));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حفظ الرابط.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function runItemAction(label: string, action: () => Promise<unknown>, successMessage: string) {
     setPending(label);
     setMessage(null);
     try {
       await action();
-      await refresh();
-      setMessage("تم تنفيذ العملية وتحديث الحالة.");
+      await refreshSilently();
+      setMessage(successMessage);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "حدث خطأ غير متوقع.");
-      setPending(null);
-    }
-  }
-
-  async function createShareLink() {
-    setPending("share-create");
-    setShareStatus("جاري إنشاء رابط آمن...");
-    try {
-      const result = await apiJson<{ token: string; link: { expiresAt: string; maxViews?: number } }>(
-        `/api/reports/${liveReportId}/share-link`,
-        {
-          method: "POST",
-          body: JSON.stringify({ max_views: 3, expires_in_days: 7 }),
-        },
-      );
-      setShareToken(result.token);
-      setShareStatus(`رابط نشط حتى ${new Date(result.link.expiresAt).toLocaleDateString("ar-SA")}`);
-    } catch (error) {
-      setShareStatus(error instanceof Error ? error.message : "تعذر إنشاء الرابط.");
+      setMessage(error instanceof Error ? error.message : "تعذر تنفيذ العملية.");
     } finally {
       setPending(null);
     }
   }
 
-  async function validateShareLink() {
-    if (!shareToken) return;
-    setPending("share-validate");
-    try {
-      const result = await apiJson<{ link: { viewCount: number; maxViews?: number } }>(`/api/share-links/${shareToken}`);
-      setShareStatus(`تم فتح الرابط. المشاهدات: ${result.link.viewCount}/${result.link.maxViews ?? "∞"}`);
-    } catch (error) {
-      setShareStatus(error instanceof Error ? error.message : "الرابط غير متاح.");
-    } finally {
-      setPending(null);
-    }
-  }
+  function itemActions(item: MonitoringItem, compact = false) {
+    const buttonClass = compact
+      ? "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-semibold disabled:opacity-50"
+      : "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold disabled:opacity-50";
 
-  async function revokeShareLink() {
-    if (!shareToken) return;
-    setPending("share-revoke");
-    try {
-      await apiJson(`/api/share-links/${shareToken}/revoke`, { method: "POST" });
-      setShareStatus("تم إلغاء رابط المشاركة.");
-    } catch (error) {
-      setShareStatus(error instanceof Error ? error.message : "تعذر إلغاء الرابط.");
-    } finally {
-      setPending(null);
-    }
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            runItemAction(
+              `approve-${item.id}`,
+              () =>
+                apiJson(`/api/items/${item.id}/review`, {
+                  method: "POST",
+                  body: JSON.stringify({ action: "approve", review_notes: "اعتماد من صفحة التشغيل المبسطة." }),
+                }),
+              "تم اعتماد المادة. الخطوة التالية هي اللقطة النهائية.",
+            )
+          }
+          disabled={pending !== null || item.state === "added_to_report" || item.state === "published"}
+          className={`${buttonClass} border border-emerald-200 bg-emerald-50 text-emerald-900`}
+        >
+          <Check className="h-4 w-4" />
+          اعتماد
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            runItemAction(
+              `capture-${item.id}`,
+              () =>
+                apiJson(`/api/items/${item.id}/capture-report-grade`, {
+                  method: "POST",
+                  body: JSON.stringify({}),
+                }),
+              "تم تجهيز اللقطة. يمكنك الآن إضافة المادة للتقرير.",
+            )
+          }
+          disabled={pending !== null || item.state === "needs_review" || item.state === "added_to_report" || item.state === "published"}
+          className={`${buttonClass} border border-stone-300 bg-white text-stone-900`}
+        >
+          <Camera className="h-4 w-4" />
+          لقطة
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            runItemAction(
+              `report-${item.id}`,
+              () =>
+                apiJson(`/api/reports/${liveReportId}/items`, {
+                  method: "POST",
+                  body: JSON.stringify({ item_id: item.id, warning_accepted: true }),
+                }),
+              "تمت إضافة المادة للتقرير. ستظهر في واجهة العميل.",
+            )
+          }
+          disabled={pending !== null || item.state === "needs_review" || item.state === "approved_pending_capture"}
+          className={`${buttonClass} border border-stone-950 bg-stone-950 text-white`}
+        >
+          <Archive className="h-4 w-4" />
+          إضافة للتقرير
+        </button>
+        <a
+          href={item.originalUrl}
+          target="_blank"
+          rel="noreferrer"
+          className={`${buttonClass} border border-stone-300 bg-white text-stone-700`}
+        >
+          <ExternalLink className="h-4 w-4" />
+          فتح
+        </a>
+      </div>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f2ea] text-stone-950">
+    <main className="min-h-screen bg-[#f6f7f1] text-stone-950" dir="rtl">
       <section className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-6 md:flex-row md:items-end md:justify-between">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5">
           <div>
-            <p className="text-sm font-semibold text-emerald-700">Rasd Workflow Console</p>
-            <h1 className="mt-2 text-3xl font-bold">تشغيل دورة الرصد والتحرير</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-7 text-stone-600">
-              هذه الصفحة تختبر الخطة عمليًا عبر API محلي: إدخال يدوي، دليل خفيف، مراجعة بشرية، التقاط نهائي، ثم تجهيز المادة للتقرير.
-            </p>
+            <p className="text-sm font-semibold text-emerald-700">تشغيل الرصد</p>
+            <h1 className="mt-1 text-2xl font-bold">إضافة مادة جديدة</h1>
           </div>
           <button
             type="button"
-            onClick={() => refresh()}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50"
+            onClick={refresh}
+            disabled={pending !== null}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50"
           >
             <RefreshCw className="h-4 w-4" />
             تحديث
@@ -222,228 +315,149 @@ export function OpsClient() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-5 py-6 md:grid-cols-4">
-        {statCards.map(([label, key, Icon]) => (
-          <div key={label} className="rounded-lg border border-stone-200 bg-white p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-stone-500">{label}</p>
-              <Icon className="h-4 w-4 text-stone-400" />
-            </div>
-            <p className="mt-3 text-3xl font-bold">{stats[key]}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-10 lg:grid-cols-[380px_1fr]">
+      <section className="mx-auto grid max-w-6xl gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
-          <form
-            className="rounded-lg border border-stone-200 bg-white p-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              runAction("manual", () =>
-                apiJson("/api/items/manual-url", {
-                  method: "POST",
-                  body: JSON.stringify({ url, title, text }),
-                }),
-              );
-            }}
-          >
+          <form onSubmit={submitUrl} className="rounded-lg border border-stone-200 bg-white p-5">
             <div className="flex items-center gap-2">
               <LinkIcon className="h-5 w-5 text-emerald-700" />
-              <h2 className="text-lg font-bold">إدخال رابط يدوي</h2>
+              <h2 className="text-lg font-bold">ألصق رابط التغريدة أو الخبر</h2>
             </div>
-            <label className="mt-4 block text-sm font-semibold text-stone-700">
-              الرابط
+            <div className="mt-4 flex flex-col gap-3 md:flex-row">
               <input
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                className="mt-2 h-10 w-full rounded-md border border-stone-300 px-3 text-left text-sm"
+                placeholder="https://x.com/.../status/... أو رابط خبر"
+                className="h-12 min-w-0 flex-1 rounded-md border border-stone-300 px-3 text-left text-sm"
                 dir="ltr"
+                required
               />
-            </label>
-            <label className="mt-3 block text-sm font-semibold text-stone-700">
-              العنوان
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="mt-2 h-10 w-full rounded-md border border-stone-300 px-3 text-sm"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-semibold text-stone-700">
-              نص مختصر
-              <textarea
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-                className="mt-2 min-h-24 w-full rounded-md border border-stone-300 p-3 text-sm leading-6"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={pending !== null}
-              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-stone-950 px-4 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              <FilePlus2 className="h-4 w-4" />
-              حفظ كـ Evidence-lite
-            </button>
-            {message ? <p className="mt-3 rounded-md bg-stone-100 p-3 text-sm text-stone-700">{message}</p> : null}
+              <button
+                type="submit"
+                disabled={pending !== null}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-stone-950 px-5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                <Sparkles className="h-4 w-4" />
+                إضافة وإحضار المحتوى
+              </button>
+            </div>
+
+            <details className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-stone-700">تعديل يدوي عند الحاجة</summary>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="عنوان بديل"
+                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
+                />
+                <input
+                  value={authorName}
+                  onChange={(event) => setAuthorName(event.target.value)}
+                  placeholder="اسم الناشر"
+                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
+                />
+                <input
+                  value={publishedAt}
+                  onChange={(event) => setPublishedAt(event.target.value)}
+                  type="datetime-local"
+                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
+                />
+                <textarea
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                  placeholder="ملخص أو نص المادة"
+                  className="min-h-20 rounded-md border border-stone-300 bg-white p-3 text-sm leading-6 md:col-span-2"
+                />
+              </div>
+            </details>
+
+            {message ? <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">{message}</p> : null}
           </form>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <h2 className="text-lg font-bold">الصحة والتتبع</h2>
-            <div className="mt-4 space-y-3">
-              {state.metrics.slice(0, 8).map((metric) => (
-                <div key={metric.label} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-stone-600">{metric.label}</span>
-                  <span className="font-semibold">{metric.value}</span>
-                </div>
-              ))}
-              <div className="border-t border-stone-200 pt-3 text-sm text-stone-600">
-                أحداث التدقيق الحالية: <span className="font-semibold text-stone-950">{state.auditCount}</span>
+          {lastItem ? (
+            <article className="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${stateClass(lastItem.state)}`}>
+                  {stateLabel(lastItem.state)}
+                </span>
+                <span className="text-xs font-semibold text-emerald-700">{nextStepLabel(lastItem)}</span>
               </div>
+              <h2 className="mt-4 text-xl font-bold leading-8">{lastItem.title}</h2>
+              <p className="mt-2 text-sm leading-7 text-stone-600">{lastItem.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
+                <span>{lastItem.authorName ?? "ناشر غير محدد"}</span>
+                <span>{lastItem.sourceName}</span>
+                <span>{new Date(lastItem.publishedAt).toLocaleString("ar-SA")}</span>
+              </div>
+              <div className="mt-5">{itemActions(lastItem)}</div>
+            </article>
+          ) : (
+            <div className="rounded-lg border border-dashed border-stone-300 bg-white p-6 text-center text-sm text-stone-500">
+              بعد إضافة الرابط ستظهر المادة هنا مباشرة، ومعها أزرار الاعتماد واللقطة والإضافة للتقرير.
             </div>
-          </div>
+          )}
 
-          <div className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-emerald-700" />
-              <h2 className="text-lg font-bold">رابط مشاركة آمن</h2>
+          <section className="rounded-lg border border-stone-200 bg-white">
+            <div className="border-b border-stone-200 p-4">
+              <h2 className="text-lg font-bold">آخر المواد اليدوية</h2>
             </div>
-            {state.liveReport ? <p className="mt-2 text-xs text-stone-500">{state.liveReport.title}</p> : null}
-            <p className="mt-3 rounded-md bg-stone-100 p-3 text-sm leading-6 text-stone-700">{shareStatus}</p>
-            {shareToken ? (
-              <p className="mt-3 break-all rounded-md border border-stone-200 bg-white p-3 text-left text-xs text-stone-500" dir="ltr">
-                /api/share-links/{shareToken}
-              </p>
-            ) : null}
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={createShareLink}
-                disabled={pending !== null}
-                className="inline-flex h-9 items-center justify-center rounded-md bg-stone-950 px-3 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                إنشاء
-              </button>
-              <button
-                type="button"
-                onClick={validateShareLink}
-                disabled={!shareToken || pending !== null}
-                className="inline-flex h-9 items-center justify-center rounded-md border border-stone-300 bg-white px-3 text-xs font-semibold disabled:opacity-50"
-              >
-                اختبار
-              </button>
-              <button
-                type="button"
-                onClick={revokeShareLink}
-                disabled={!shareToken || pending !== null}
-                className="inline-flex h-9 items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-900 disabled:opacity-50"
-              >
-                إلغاء
-              </button>
+            <div className="divide-y divide-stone-200">
+              {manualItems.length ? (
+                manualItems.map((item) => (
+                  <article key={item.id} className="p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${stateClass(item.state)}`}>
+                          {stateLabel(item.state)}
+                        </span>
+                        <h3 className="mt-3 font-bold leading-7">{item.title}</h3>
+                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-stone-600">{item.summary}</p>
+                      </div>
+                      {itemActions(item, true)}
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <p className="p-5 text-sm text-stone-500">لا توجد مواد يدوية بعد.</p>
+              )}
             </div>
-          </div>
+          </section>
         </div>
 
-        <div className="rounded-lg border border-stone-200 bg-white">
-          <div className="border-b border-stone-200 p-5">
-            <h2 className="text-lg font-bold">Inbox التحريري</h2>
-            <p className="mt-1 text-sm text-stone-500">الأزرار هنا تضرب API فعليًا وتغير حالة المادة داخل الذاكرة المحلية.</p>
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <h2 className="font-bold">أين تظهر المادة؟</h2>
+            <ol className="mt-3 space-y-2 text-sm leading-6 text-stone-600">
+              <li>1. تظهر فورًا في البطاقة الخضراء بعد الإضافة.</li>
+              <li>2. بعد الاعتماد واللقطة تصبح جاهزة للتقرير.</li>
+              <li>3. بعد «إضافة للتقرير» تظهر في واجهة العميل.</li>
+            </ol>
           </div>
-          <div className="divide-y divide-stone-200">
-            {state.items.map((item) => (
-              <article key={item.id} className="p-5">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${stateClass(item.state)}`}>
-                        {stateLabel(item.state)}
-                      </span>
-                      <span className="text-xs text-stone-500">{item.sourceName}</span>
-                    </div>
-                    <h3 className="mt-3 text-lg font-bold leading-7">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-7 text-stone-600">{item.summary}</p>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-600">
-                      <span>الصلة: {item.relevanceScore}%</span>
-                      <span>التصنيف: {item.sentiment}</span>
-                      <span>المطابقة: {item.matchedTerms.join("، ") || "لا توجد"}</span>
-                    </div>
-                    {item.warning ? <p className="mt-3 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{item.warning}</p> : null}
-                  </div>
 
-                  <div className="grid min-w-64 grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        runAction(`approve-${item.id}`, () =>
-                          apiJson(`/api/items/${item.id}/review`, {
-                            method: "POST",
-                            body: JSON.stringify({ action: "approve", review_notes: "اعتماد من صفحة التشغيل." }),
-                          }),
-                        )
-                      }
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-900"
-                    >
-                      <Check className="h-4 w-4" />
-                      اعتماد
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        runAction(`reject-${item.id}`, () =>
-                          apiJson(`/api/items/${item.id}/review`, {
-                            method: "POST",
-                            body: JSON.stringify({ action: "reject", review_notes: "رفض من صفحة التشغيل." }),
-                          }),
-                        )
-                      }
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-900"
-                    >
-                      <X className="h-4 w-4" />
-                      رفض
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        runAction(`capture-${item.id}`, () =>
-                          apiJson(`/api/items/${item.id}/capture-report-grade`, {
-                            method: "POST",
-                            body: JSON.stringify({}),
-                          }),
-                        )
-                      }
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-semibold"
-                    >
-                      <Camera className="h-4 w-4" />
-                      لقطة نهائية
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        runAction(`report-${item.id}`, () =>
-                          apiJson(`/api/reports/${liveReportId}/items`, {
-                            method: "POST",
-                            body: JSON.stringify({ item_id: item.id, warning_accepted: true }),
-                          }),
-                        )
-                      }
-                      className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 text-xs font-semibold"
-                    >
-                      <Archive className="h-4 w-4" />
-                      أضف للتقرير
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-stone-500">
-                  {(state.capturesByItem[item.id] ?? []).map((capture) => (
-                    <span key={capture.id} className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1">
-                      {capture.kind}: {capture.status}
-                    </span>
-                  ))}
-                </div>
-              </article>
-            ))}
+          <div className="rounded-lg border border-stone-200 bg-white p-4">
+            <h2 className="font-bold">تقرير هداية الحي</h2>
+            <p className="mt-2 text-sm leading-6 text-stone-600">
+              {state.liveReport?.title ?? "جاري تحميل التقرير النشط..."}
+            </p>
+            <a
+              href="/client-report"
+              className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white"
+            >
+              فتح واجهة العميل
+            </a>
           </div>
-        </div>
+
+          <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-600">
+            <div className="flex items-center justify-between">
+              <span>مواد يدوية</span>
+              <span className="font-bold text-stone-950">{manualItems.length}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span>أحداث تدقيق</span>
+              <span className="font-bold text-stone-950">{state.auditCount}</span>
+            </div>
+          </div>
+        </aside>
       </section>
     </main>
   );
