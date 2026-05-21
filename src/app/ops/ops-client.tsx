@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Link as LinkIcon,
   Loader2,
+  Copy,
   RefreshCw,
   Search,
   Sparkles,
@@ -25,6 +26,7 @@ type ApiState = {
   metrics: HealthMetric[];
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
+  shareLinks: ShareLinkSummary[];
 };
 
 type IntakeResponse = {
@@ -37,11 +39,27 @@ type IntakeResponse = {
   } | null;
 };
 
+type ShareLinkSummary = {
+  id: string;
+  reportId: string;
+  tokenHash: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  maxViews?: number;
+  viewCount: number;
+  noindex: boolean;
+  watermark: boolean;
+  createdAt: string | null;
+  lastViewedAt: string | null;
+  clientStatus?: "active" | "expired" | "revoked";
+};
+
 const emptyState: ApiState = {
   items: [],
   metrics: [],
   capturesByItem: {},
   liveReport: null,
+  shareLinks: [],
 };
 
 const arabicApiErrors: Record<string, string> = {
@@ -175,6 +193,11 @@ function formatDate(value: string) {
   });
 }
 
+function formatOptionalDate(value: string | null) {
+  if (!value) return "غير محدد";
+  return formatDate(value);
+}
+
 function messageClass(type: MessageType) {
   if (type === "error") return "border-[#f1b6aa] bg-[#fff1ed] text-[#8f321d]";
   if (type === "warning") return "border-[#eed478] bg-[#fff8dc] text-[#735d00]";
@@ -216,6 +239,9 @@ export function OpsClient() {
   const [messageType, setMessageType] = useState<MessageType>("info");
   const [tab, setTab] = useState<WorkTab>("active");
   const [query, setQuery] = useState("");
+  const [shareExpiresInDays, setShareExpiresInDays] = useState("none");
+  const [shareMaxViews, setShareMaxViews] = useState("");
+  const [generatedShareUrl, setGeneratedShareUrl] = useState<string | null>(null);
 
   const liveReportId = state.liveReport?.id ?? "report-5";
 
@@ -265,6 +291,7 @@ export function OpsClient() {
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
+    const shareLinksData = await apiJson<{ links: ShareLinkSummary[] }>(`/api/reports/${liveReportData.report.id}/share-links`);
 
     const manualCandidates = latestManualItems(itemsData.items);
 
@@ -280,6 +307,7 @@ export function OpsClient() {
       metrics: healthData.metrics,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
+      shareLinks: shareLinksData.links,
     };
   }
 
@@ -426,6 +454,45 @@ export function OpsClient() {
     );
   }
 
+  async function createShareLink() {
+    const expiresInDays = shareExpiresInDays === "none" ? undefined : Number(shareExpiresInDays);
+    const maxViews = shareMaxViews.trim() ? Number(shareMaxViews) : undefined;
+
+    await runItemAction(
+      "share-create",
+      async () => {
+        const result = await apiJson<{ token: string }>(`/api/reports/${liveReportId}/share-link`, {
+          method: "POST",
+          body: JSON.stringify({
+            expires_in_days: Number.isFinite(expiresInDays) ? expiresInDays : undefined,
+            max_views: Number.isFinite(maxViews) ? maxViews : undefined,
+          }),
+        });
+        setGeneratedShareUrl(`${window.location.origin}/share/${result.token}`);
+      },
+      "تم إنشاء رابط مشاركة خاص.",
+    );
+  }
+
+  async function revokeShareLink(id: string) {
+    await runItemAction(
+      `share-revoke-${id}`,
+      () =>
+        apiJson(`/api/share-links/${id}/revoke-by-id`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "تم إلغاء رابط المشاركة.",
+    );
+  }
+
+  async function copyGeneratedShareUrl() {
+    if (!generatedShareUrl) return;
+    await navigator.clipboard.writeText(generatedShareUrl);
+    setMessage("تم نسخ رابط المشاركة.");
+    setMessageType("success");
+  }
+
   function primaryAction(item: MonitoringItem) {
     if (item.state === "needs_review" || item.state === "candidate") {
       return (
@@ -570,6 +637,19 @@ export function OpsClient() {
           ) : null}
         </form>
       </section>
+
+      <ShareLinksPanel
+        links={state.shareLinks}
+        expiresInDays={shareExpiresInDays}
+        maxViews={shareMaxViews}
+        generatedUrl={generatedShareUrl}
+        pending={pending}
+        onExpiresInDaysChange={setShareExpiresInDays}
+        onMaxViewsChange={setShareMaxViews}
+        onCreate={createShareLink}
+        onCopy={copyGeneratedShareUrl}
+        onRevoke={revokeShareLink}
+      />
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="min-w-0 rounded-lg border border-[#dfe3d9] bg-white">
@@ -744,6 +824,132 @@ export function OpsClient() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function ShareLinksPanel({
+  links,
+  expiresInDays,
+  maxViews,
+  generatedUrl,
+  pending,
+  onExpiresInDaysChange,
+  onMaxViewsChange,
+  onCreate,
+  onCopy,
+  onRevoke,
+}: {
+  links: ShareLinkSummary[];
+  expiresInDays: string;
+  maxViews: string;
+  generatedUrl: string | null;
+  pending: string | null;
+  onExpiresInDaysChange: (value: string) => void;
+  onMaxViewsChange: (value: string) => void;
+  onCreate: () => void;
+  onCopy: () => void;
+  onRevoke: (id: string) => void;
+}) {
+  return (
+    <section className="mx-auto max-w-7xl px-5 pb-5">
+      <div className="rounded-lg border border-[#dfe3d9] bg-white p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold text-[#66736d]">مشاركة التقرير</p>
+            <h2 className="mt-1 text-lg font-semibold">روابط خاصة للعميل</h2>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[150px_130px_auto]">
+            <select
+              value={expiresInDays}
+              onChange={(event) => onExpiresInDaysChange(event.target.value)}
+              className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm font-semibold outline-none"
+            >
+              <option value="none">بدون انتهاء</option>
+              <option value="7">7 أيام</option>
+              <option value="30">30 يوم</option>
+            </select>
+            <input
+              value={maxViews}
+              onChange={(event) => onMaxViewsChange(event.target.value.replace(/[^\d]/g, ""))}
+              placeholder="عدد المشاهدات"
+              className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm outline-none"
+              inputMode="numeric"
+            />
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={pending !== null}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#116a5c] px-4 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              <LinkIcon className="h-4 w-4" />
+              إنشاء رابط
+            </button>
+          </div>
+        </div>
+
+        {generatedUrl ? (
+          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-[#b7ddce] bg-[#ecf7f2] p-3 sm:flex-row sm:items-center">
+            <code className="min-w-0 flex-1 truncate text-left text-sm text-[#0f6b57]" dir="ltr">
+              {generatedUrl}
+            </code>
+            <button
+              type="button"
+              onClick={onCopy}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 text-sm font-semibold text-[#116a5c]"
+            >
+              <Copy className="h-4 w-4" />
+              نسخ
+            </button>
+          </div>
+        ) : null}
+
+        <div className="mt-4 divide-y divide-[#edf0e9] rounded-lg border border-[#edf0e9]">
+          {links.length ? (
+            links.map((link) => {
+              const revoked = link.clientStatus === "revoked";
+              const expired = link.clientStatus === "expired";
+              return (
+                <div className="grid gap-3 p-3 lg:grid-cols-[1fr_auto]" key={link.id}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          revoked || expired ? "bg-[#fff1ed] text-[#a33a24]" : "bg-[#e8f5ef] text-[#0f6b57]"
+                        }`}
+                      >
+                        {revoked ? "ملغي" : expired ? "منتهي" : "نشط"}
+                      </span>
+                      <span className="text-xs font-semibold text-[#66736d]">مشاهدات {link.viewCount.toLocaleString("ar-SA")}</span>
+                      {link.maxViews ? (
+                        <span className="text-xs font-semibold text-[#66736d]">الحد {link.maxViews.toLocaleString("ar-SA")}</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 truncate text-left text-xs font-semibold text-[#66736d]" dir="ltr">
+                      {link.tokenHash.slice(0, 18)}...{link.tokenHash.slice(-8)}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-[#66736d]">
+                      <span>إنشاء: {formatOptionalDate(link.createdAt)}</span>
+                      <span>انتهاء: {formatOptionalDate(link.expiresAt)}</span>
+                      <span>آخر مشاهدة: {formatOptionalDate(link.lastViewedAt)}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRevoke(link.id)}
+                    disabled={pending !== null || revoked}
+                    className="inline-flex h-9 items-center justify-center rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-sm font-semibold text-[#9a341f] disabled:opacity-50"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <div className="p-4 text-sm text-[#66736d]">لا توجد روابط مشاركة بعد.</div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

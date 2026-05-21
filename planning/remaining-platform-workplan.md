@@ -476,10 +476,17 @@ Status: deferred until `/ops` is stable, because `/ops` is the actual daily work
 
 ### B6. Reports And Share Links
 
-- Generate report versions from approved items.
-- Create share links only for owner/editor.
-- Enforce expiry, revoke, and view limit.
-- Record views in audit log.
+Status: first pass implemented locally on 2026-05-21; pending production review with the owner account.
+
+- [ ] Generate report versions from approved items.
+- [x] Add visible admin UI in `/ops` for current Hidayathon report share links.
+- [x] Create share links only for owner/editor through protected API routes.
+- [x] Show existing share links without exposing usable tokens.
+- [x] Copy the newly generated share URL as a one-time visible secret.
+- [x] Revoke share links by id without needing the original token.
+- [x] Enforce expiry, revoke, and view limit in the share-link resolver.
+- [x] Record views in audit log.
+- [ ] Validate create/copy/revoke on production with owner login.
 
 ## Priority C - Real Source Integrations
 

@@ -16,8 +16,10 @@ import { store } from "@/server/store";
 import { checkSupabasePersistence } from "@/server/supabase-admin";
 import {
   createReportShareLink,
+  listReportShareLinks,
   resolveReportShareLink,
   revokeReportShareLink,
+  revokeReportShareLinkById,
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
@@ -441,6 +443,12 @@ api.post("/reports/:id/share-link", async (c) => {
   return c.json(withRequestId(c, result), 201);
 });
 
+api.get("/reports/:id/share-links", async (c) => {
+  const result = await listReportShareLinks(c.req.param("id"));
+  if (!result.ok) return c.json(withRequestId(c, result), 404);
+  return c.json(withRequestId(c, result));
+});
+
 api.get("/share-links/:token", async (c) => {
   const result = await resolveReportShareLink(c.req.param("token"));
   if (!result.ok) {
@@ -452,6 +460,12 @@ api.get("/share-links/:token", async (c) => {
 
 api.post("/share-links/:token/revoke", async (c) => {
   const result = await revokeReportShareLink(c.req.param("token"));
+  if (!result.ok) return c.json(withRequestId(c, result), 404);
+  return c.json(withRequestId(c, result));
+});
+
+api.post("/share-links/:id/revoke-by-id", async (c) => {
+  const result = await revokeReportShareLinkById(c.req.param("id"));
   if (!result.ok) return c.json(withRequestId(c, result), 404);
   return c.json(withRequestId(c, result));
 });

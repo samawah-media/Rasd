@@ -16,6 +16,8 @@ type DbShareLinkRow = {
   view_count: number;
   noindex: boolean;
   watermark: boolean;
+  last_viewed_at?: string | null;
+  created_at?: string | null;
 };
 
 function isUuid(value: string) {
@@ -31,6 +33,12 @@ async function sha256(value: string) {
 }
 
 function normalizeDbLink(row: DbShareLinkRow) {
+  const clientStatus = row.revoked_at
+    ? "revoked"
+    : row.expires_at && new Date(row.expires_at).getTime() <= Date.now()
+      ? "expired"
+      : "active";
+
   return {
     id: row.id,
     reportId: row.report_id,
@@ -41,6 +49,9 @@ function normalizeDbLink(row: DbShareLinkRow) {
     viewCount: row.view_count,
     noindex: row.noindex,
     watermark: row.watermark,
+    lastViewedAt: row.last_viewed_at ?? null,
+    createdAt: row.created_at ?? null,
+    clientStatus,
   };
 }
 
@@ -82,7 +93,7 @@ export async function createReportShareLink(reportId: string, input?: ShareLinkI
       noindex: true,
       watermark: true,
     })
-    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark")
+    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark, last_viewed_at, created_at")
     .single();
 
   if (error) return { ok: false as const, error: error.message };
@@ -103,7 +114,7 @@ export async function resolveReportShareLink(token: string) {
   const tokenHash = `sha256:${await sha256(token)}`;
   const { data: link, error } = await supabase
     .from("share_links")
-    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark")
+    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark, last_viewed_at, created_at")
     .eq("token_hash", tokenHash)
     .maybeSingle();
 
@@ -154,11 +165,52 @@ export async function revokeReportShareLink(token: string) {
     .from("share_links")
     .update({ revoked_at: new Date().toISOString() })
     .eq("token_hash", tokenHash)
-    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark")
+    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark, last_viewed_at, created_at")
     .maybeSingle();
 
   if (error) return { ok: false as const, error: error.message };
   if (!link) return store.revokeShareLink(token);
+
+  return {
+    ok: true as const,
+    link: normalizeDbLink(link as DbShareLinkRow),
+  };
+}
+
+export async function listReportShareLinks(reportId: string) {
+  if (!shouldUseSupabase(reportId)) {
+    return { ok: true as const, links: store.listShareLinks(reportId) };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("share_links")
+    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark, last_viewed_at, created_at")
+    .eq("report_id", reportId)
+    .order("created_at", { ascending: false });
+
+  if (error) return { ok: false as const, error: error.message };
+  return {
+    ok: true as const,
+    links: ((data ?? []) as DbShareLinkRow[]).map(normalizeDbLink),
+  };
+}
+
+export async function revokeReportShareLinkById(id: string) {
+  if (!isSupabaseAdminConfigured()) {
+    return store.revokeShareLinkById(id);
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: link, error } = await supabase
+    .from("share_links")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id, report_id, token_hash, expires_at, revoked_at, max_views, view_count, noindex, watermark, last_viewed_at, created_at")
+    .maybeSingle();
+
+  if (error) return { ok: false as const, error: error.message };
+  if (!link) return { ok: false as const, error: "share_link_not_found" };
 
   return {
     ok: true as const,

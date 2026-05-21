@@ -53,6 +53,8 @@ type ShareLink = {
   viewCount: number;
   noindex: boolean;
   watermark: boolean;
+  createdAt: string | null;
+  lastViewedAt: string | null;
 };
 
 type ConnectorRun = {
@@ -376,6 +378,19 @@ export const store = {
 
   listReportItems(reportId: string) {
     return reportItems.filter((entry) => entry.reportId === reportId);
+  },
+
+  listShareLinks(reportId: string) {
+    return shareLinks
+      .filter((entry) => entry.reportId === reportId)
+      .map((entry) => ({
+        ...entry,
+        clientStatus: entry.revokedAt
+          ? "revoked"
+          : entry.expiresAt && new Date(entry.expiresAt).getTime() <= Date.now()
+            ? "expired"
+            : "active",
+      }));
   },
 
   legacyImportStatus() {
@@ -749,6 +764,8 @@ export const store = {
       viewCount: 0,
       noindex: true,
       watermark: true,
+      createdAt: now(),
+      lastViewedAt: null,
     };
     shareLinks.unshift(link);
     audit("share_link.created", link.id, { reportId });
@@ -762,6 +779,15 @@ export const store = {
 
     link.revokedAt = now();
     audit("share_link.revoked", link.id, { reportId: link.reportId });
+    return { ok: true as const, link };
+  },
+
+  async revokeShareLinkById(id: string) {
+    const link = shareLinks.find((entry) => entry.id === id);
+    if (!link) return { ok: false as const, error: "share_link_not_found" };
+
+    link.revokedAt = now();
+    audit("share_link.revoked", link.id, { reportId: link.reportId, revokedBy: "id" });
     return { ok: true as const, link };
   },
 
@@ -781,6 +807,7 @@ export const store = {
     if (!report) return { ok: false as const, error: "report_not_found" };
 
     link.viewCount += 1;
+    link.lastViewedAt = now();
     audit("share_link.viewed", link.id, { reportId: link.reportId, viewCount: link.viewCount });
     return { ok: true as const, link, report };
   },

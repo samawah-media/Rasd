@@ -374,6 +374,31 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(afterRevoke.json.error, "share_link_revoked");
   });
 
+  it("lists and revokes report share links for admin UI management", async () => {
+    const created = await requestJson("/api/reports/report-5/share-link", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    assert.equal(created.response.status, 201);
+
+    const listed = await requestJson("/api/reports/report-5/share-links");
+    assert.equal(listed.response.status, 200);
+    assert.equal(listed.json.links.length, 1);
+    assert.equal(listed.json.links[0].id, created.json.link.id);
+    assert.equal(listed.json.links[0].tokenHash, created.json.link.tokenHash);
+    assert.equal("token" in listed.json.links[0], false);
+
+    const revoked = await requestJson(`/api/share-links/${created.json.link.id}/revoke-by-id`, {
+      method: "POST",
+    });
+    assert.equal(revoked.response.status, 200);
+    assert.equal(typeof revoked.json.link.revokedAt, "string");
+
+    const afterRevoke = await requestJson(`/api/share-links/${created.json.token}`);
+    assert.equal(afterRevoke.response.status, 410);
+    assert.equal(afterRevoke.json.error, "share_link_revoked");
+  });
+
   it("keeps X API failure isolated as not configured", async () => {
     const { response, json } = await requestJson("/api/connectors/x_recent_search/run", { method: "POST" });
 
