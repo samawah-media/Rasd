@@ -55,6 +55,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (isClientPath(pathname)) {
+    return supabaseResponse;
+  }
+
   const role = await resolveProxyRole(user.id, user.email?.toLowerCase() ?? null, supabase);
 
   if (!role) {
@@ -69,10 +73,6 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/unauthorized";
     url.search = "";
     return NextResponse.redirect(url);
-  }
-
-  if (isClientPath(pathname)) {
-    return supabaseResponse;
   }
 
   if (pathname === "/login") {
