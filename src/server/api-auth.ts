@@ -1,4 +1,4 @@
-import { adminRoles, memberRoles, isRoleAllowed } from "@/lib/auth-config";
+import { adminRoles, memberRoles, ownerRoles, isRoleAllowed } from "@/lib/auth-config";
 import type { Role } from "@/lib/types";
 import { getCurrentAuthContext } from "@/server/auth";
 
@@ -14,6 +14,7 @@ const apiRules: ApiRule[] = [
   { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon\/export-pdf$/, roles: memberRoles },
   { methods: ["GET"], pattern: /^\/api\/items\/[^/]+\/evidence-card\.svg$/, roles: memberRoles },
   { pattern: /^\/api\/admin(?:\/|$)/, roles: adminRoles },
+  { pattern: /^\/api\/access(?:\/|$)/, roles: ownerRoles },
   { pattern: /^\/api\/audit-logs$/, roles: adminRoles },
   { pattern: /^\/api\/imports(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/items(?:\/|$)/, roles: adminRoles },

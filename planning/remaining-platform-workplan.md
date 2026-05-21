@@ -476,14 +476,14 @@ Status: deferred until `/ops` is stable, because `/ops` is the actual daily work
 
 ### B6. Reports And Client Access
 
-Status: simplified on 2026-05-21. The team decided not to expose share-link management in `/ops`; client access should stay practical and clean through Viewer login to `/client-report`.
+Status: simplified on 2026-05-21. The team decided not to expose share-link management in `/ops`; client access should stay practical and clean through Viewer login to `/client-report`. Owner now has a dedicated `/access` screen to create/update client Viewer accounts with email and password.
 
 - [ ] Generate report versions from approved items.
 - [x] Keep the primary client route as `/client-report` behind authenticated Viewer access.
 - [x] Remove visible share-link management from `/ops` to reduce operational clutter.
 - [x] Keep share-link backend/security tests as a dormant fallback, not a primary product path.
-- [ ] Add a clean Viewer/user access management screen later, outside the content review flow.
-- [ ] Validate Viewer access to `/client-report` remains the primary client handoff.
+- [x] Add a clean Viewer/user access management screen outside the content review flow.
+- [ ] Validate a newly created email/password Viewer account can open `/client-report` and is blocked from `/`, `/ops`, `/imports`, and `/reports/*`.
 
 ## Priority C - Real Source Integrations
 

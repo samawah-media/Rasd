@@ -25,6 +25,11 @@ import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
 import { renderEvidenceCardSvg } from "@/server/evidence-card";
 import { buildClientReportExportHtml } from "@/server/client-report-export";
+import {
+  createOrUpdateClientViewerAccount,
+  listClientViewerAccounts,
+  validateViewerAccountInput,
+} from "@/server/client-access";
 
 type AppBindings = {
   Variables: {
@@ -91,6 +96,44 @@ api.get("/admin/persistence", async (c) =>
 );
 
 api.get("/audit-logs", async (c) => c.json(withRequestId(c, { audit_logs: await persistentStore.listAuditLogs() })));
+
+api.get("/access/client-viewers", async (c) => {
+  try {
+    const result = await listClientViewerAccounts();
+    if (!result.ok) return c.json(withRequestId(c, result), 503);
+    return c.json(withRequestId(c, result));
+  } catch (error) {
+    return c.json(
+      withRequestId(c, {
+        error: "client_viewers_list_failed",
+        message: error instanceof Error ? error.message : "Unknown client viewer list failure",
+      }),
+      500,
+    );
+  }
+});
+
+api.post("/access/client-viewers", async (c) => {
+  const parsed = validateViewerAccountInput(await readJson(c));
+  if (!parsed.ok) return c.json(withRequestId(c, parsed), 400);
+
+  try {
+    const result = await createOrUpdateClientViewerAccount(parsed.value);
+    if (!result.ok) {
+      const status = result.error === "supabase_admin_not_configured" ? 503 : 409;
+      return c.json(withRequestId(c, result), status);
+    }
+    return c.json(withRequestId(c, result), 201);
+  } catch (error) {
+    return c.json(
+      withRequestId(c, {
+        error: "client_viewer_save_failed",
+        message: error instanceof Error ? error.message : "Unknown client viewer save failure",
+      }),
+      500,
+    );
+  }
+});
 
 api.get("/client-report/hidayathon", async (c) =>
   c.json(withRequestId(c, { report: await getPreferredHidayathonClientReportData() })),

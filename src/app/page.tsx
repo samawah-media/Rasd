@@ -19,6 +19,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { adminRoles } from "@/lib/auth-config";
@@ -34,6 +35,7 @@ const navItems = [
   { label: "استيراد التقارير", href: "/imports", icon: FileText },
   { label: "استكمال الروابط", href: "/imports/backfill", icon: Link2 },
   { label: "المراجعة", href: "/ops", icon: CheckCircle2 },
+  { label: "حسابات العملاء", href: "/access", icon: UserRound },
   { label: "التقارير", href: "/reports/report-5", icon: FileText },
   { label: "المصادر", href: "#sources", icon: Radio },
   { label: "التكلفة", href: "#budgets", icon: Gauge },

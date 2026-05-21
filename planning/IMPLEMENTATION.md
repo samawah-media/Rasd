@@ -28,10 +28,12 @@ Open `http://localhost:3000`.
 - `/` operational dashboard, inbox, sources, budgets, and report versions.
 - `/feed` dedicated live monitoring feed with filters, editorial state, evidence status, and selected-item actions.
 - `/client-report` client-facing Hidayathon workspace with four executive metrics, clickable day heatmap, compact filters, visual content list, detail drawer/bottom sheet, original links, content crops, publisher crops, and filtered printable export.
+- `/access` owner-only client access screen for creating/updating email-password Viewer accounts and keeping customer handoff separate from content review.
 - `/imports` local review/import UI for `data/imports/hidayathon_reports.json`, with filters for report, platform, confidence, page, and text search.
 - `/imports/backfill` local source-link backfill UI for legacy items whose PDFs do not include an openable original URL; includes X/Web search links and an override JSON template per item.
 - `/api/client-report/hidayathon` serves the enriched client report dataset from Supabase when configured, combining approved legacy data with manual items that have been added to the live Hidayathon report.
 - `/api/client-report/hidayathon/export-pdf` serves a client-safe printable Arabic export for the currently selected/filtered items, capped at 50 items.
+- `/api/access/client-viewers` lists and creates/updates Viewer accounts through Supabase Admin. It is owner-only and assigns Viewer memberships for both the active Hidayathon organization and the legacy Hidayathon archive.
 - `/api/imports/legacy/status` returns legacy import counts.
 - `/api/imports/legacy/backfill` returns link-backfill counts, status, search URLs, and override templates for legacy items.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.

@@ -118,6 +118,7 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 24. Confirm admin tools are visible only while logged in as owner/editor.
 25. Confirm a signed-out browser redirects `/client-report` to `/login?next=%2Fclient-report`.
 26. Confirm the client handoff is Viewer login to `https://rasd-gamma.vercel.app/client-report`, not a public share-link flow.
+27. As owner, open `https://rasd-gamma.vercel.app/access`, create/update one email-password Viewer account, and confirm that account can open `/client-report` only.
 
 ## Content Screenshot Pipeline Smoke Test
 

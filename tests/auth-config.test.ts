@@ -28,6 +28,7 @@ describe("auth and role routing rules", () => {
   it("keeps admin pages separate from the client report", () => {
     assert.equal(isAdminPath("/"), true);
     assert.equal(isAdminPath("/ops"), true);
+    assert.equal(isAdminPath("/access"), true);
     assert.equal(isAdminPath("/imports/backfill"), true);
     assert.equal(isAdminPath("/reports/report-5"), true);
     assert.equal(isClientPath("/client-report"), true);
