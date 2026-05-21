@@ -1,4 +1,4 @@
-import { adminRoles, memberRoles, ownerRoles, isRoleAllowed } from "@/lib/auth-config";
+import { adminRoles, memberRoles, isRoleAllowed } from "@/lib/auth-config";
 import type { Role } from "@/lib/types";
 import { getCurrentAuthContext } from "@/server/auth";
 
@@ -11,6 +11,7 @@ type ApiRule = {
 const apiRules: ApiRule[] = [
   { methods: ["GET"], pattern: /^\/api\/share-links\/[^/]+$/, roles: "public" },
   { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon$/, roles: memberRoles },
+  { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon\/export-pdf$/, roles: memberRoles },
   { methods: ["GET"], pattern: /^\/api\/items\/[^/]+\/evidence-card\.svg$/, roles: memberRoles },
   { pattern: /^\/api\/admin(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/audit-logs$/, roles: adminRoles },
@@ -20,8 +21,8 @@ const apiRules: ApiRule[] = [
   { pattern: /^\/api\/sources$/, roles: adminRoles },
   { pattern: /^\/api\/source-rules$/, roles: adminRoles },
   { pattern: /^\/api\/keyword-rules$/, roles: adminRoles },
-  { pattern: /^\/api\/reports\/[^/]+\/share-link$/, roles: ownerRoles },
-  { pattern: /^\/api\/share-links\/[^/]+\/revoke$/, roles: ownerRoles },
+  { pattern: /^\/api\/reports\/[^/]+\/share-link$/, roles: adminRoles },
+  { pattern: /^\/api\/share-links\/[^/]+\/revoke$/, roles: adminRoles },
   { pattern: /^\/api\/reports(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/topics$/, roles: adminRoles },
 ];

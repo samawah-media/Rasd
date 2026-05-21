@@ -64,6 +64,7 @@ describe("monitoring workflow store", () => {
     assert.equal(created.ok, true);
     assert.notEqual(created.link.tokenHash, `sha256:${created.token}`);
     assert.equal(created.link.tokenHash.length, "sha256:".length + 64);
+    assert.equal(created.link.expiresAt, null);
 
     const firstView = await store.resolveShareLink(created.token);
     const secondView = await store.resolveShareLink(created.token);

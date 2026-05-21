@@ -392,6 +392,34 @@ describe("Hono API acceptance workflow", () => {
     assert.ok(json.report.items[0].publishDateLabel);
   });
 
+  it("serves a printable client PDF export for the selected visible items", async () => {
+    const report = await requestJson("/api/client-report/hidayathon");
+    const ids = report.json.report.items
+      .slice(0, 2)
+      .map((item: { id: string }) => item.id)
+      .join(",");
+    const exportPage = await requestText(`/api/client-report/hidayathon/export-pdf?ids=${encodeURIComponent(ids)}`);
+
+    assert.equal(exportPage.response.status, 200);
+    assert.match(exportPage.response.headers.get("content-type") ?? "", /text\/html/);
+    assert.match(exportPage.text, /رصد هداية هاكاثون/);
+    assert.match(exportPage.text, /حفظ PDF/);
+    assert.doesNotMatch(exportPage.text, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
+  });
+
+  it("limits printable client PDF export to 50 items", async () => {
+    const report = await requestJson("/api/client-report/hidayathon");
+    const ids = report.json.report.items
+      .slice(0, 51)
+      .map((item: { id: string }) => item.id)
+      .join(",");
+    const limited = await requestJson(`/api/client-report/hidayathon/export-pdf?ids=${encodeURIComponent(ids)}`);
+
+    assert.equal(limited.response.status, 400);
+    assert.equal(limited.json.error, "export_item_limit_exceeded");
+    assert.equal(limited.json.maxItems, 50);
+  });
+
   it("serves the legacy link backfill dataset for missing original URLs", async () => {
     const { response, json } = await requestJson("/api/imports/legacy/backfill");
 

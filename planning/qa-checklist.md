@@ -4,6 +4,12 @@ Last updated: 2026-05-21
 
 This checklist is the short production smoke test for RASD. Use it after each production deploy and before starting large UI work.
 
+Current next check:
+
+```text
+A10. Production Smoke Test after the 2026-05-21 client-report redesign deploy
+```
+
 ## Production Persistence
 
 Status: passed on 2026-05-20.
@@ -40,9 +46,17 @@ Live DB sanity target:
 - 124 publisher profile crop references in the client report dataset.
 - 4 legacy reports.
 - 3 legacy link overrides.
-- 2 default manual items.
+- 3 default manual items.
 - Any manually approved live-report items should be linked through the default Hidayathon live report, not by hard-coded `report-5`.
 - 0 public tables with RLS disabled.
+
+Live Supabase schema/RLS verification:
+
+- Passed on 2026-05-21 against project `ewunxfttbpqisspqthiz`.
+- Applied migration `20260521094823_allow_editor_share_links.sql`.
+- `share_links` now has policy `owners and editors can manage share links`.
+- The live policy allows `owner` and `editor` and excludes `viewer`.
+- The live Priority A SQL returned 0 public tables with RLS disabled.
 
 ## Manual Owner Smoke Test
 
@@ -52,21 +66,28 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 2. Confirm the JSON matches the Production Persistence expectations above.
 3. Open `https://rasd-gamma.vercel.app/client-report`.
 4. Confirm the Hidayathon report loads real items, not an empty state.
-5. Use filters for date, platform, source, link status, and screenshot status.
-6. Open an item detail and confirm it shows the original link, a cropped content image, and a publisher profile image.
-7. For X items, confirm original links open `x.com/.../status/...` post permalinks extracted from the PDF link icon.
-8. Open `https://rasd-gamma.vercel.app/imports/backfill`.
-9. Confirm the backfill page no longer shows bulk missing legacy links for the current archive; it should remain available for future corrections.
-10. Open `https://rasd-gamma.vercel.app/ops`.
-11. Paste one fresh public X or news URL without filling optional manual fields.
-12. Confirm the new item appears immediately at the top of `/ops` with readable title/summary, publisher, platform, date when available, and the original link.
-13. Confirm private/internal URLs such as `http://127.0.0.1/admin` are rejected.
-14. Confirm X URLs with `?lang=...` or tracking parameters dedupe to the clean `https://x.com/.../status/...` URL.
-15. If a duplicate was previously saved without tweet metadata, submit it again and confirm the same item is refreshed with tweet text, publisher, handle, and date.
-16. Approve the item, run report-grade capture, and confirm `/ops` shows a content evidence image for the item.
-17. Add it to the live Hidayathon report.
-18. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, report status, and a content image.
-19. Confirm admin tools are visible only while logged in as owner/editor.
+5. Confirm the redesigned page shows `رصد هداية هاكاثون`, four top metrics, day heatmap, compact filters, visual content rows, and a detail panel.
+6. Click `أعلى يوم نشاط` and a day in the heatmap; confirm the content list filters immediately.
+7. Use visible filters for search, date, platform, and the `المزيد` filters for source, sentiment, data scope, and readiness.
+8. Open an item detail and confirm it shows the original link, a cropped content image, publisher/profile image, author/source, date, platform, sentiment, copy actions, image zoom, and image download.
+9. Confirm the client page does not show internal fields: confidence, raw text, extraction warnings, report page number, backfill links, or admin controls.
+10. For X items, confirm original links open `x.com/.../status/...` post permalinks extracted from the PDF link icon.
+11. Apply a filter that returns 50 or fewer items, click `تصدير PDF`, and confirm a printable Arabic report opens.
+12. Try exporting more than 50 visible items and confirm the UI asks for a narrower range.
+13. Open `https://rasd-gamma.vercel.app/imports/backfill`.
+14. Confirm the backfill page no longer shows bulk missing legacy links for the current archive; it should remain available for future corrections.
+15. Open `https://rasd-gamma.vercel.app/ops`.
+16. Paste one fresh public X or news URL without filling optional manual fields.
+17. Confirm the new item appears immediately at the top of `/ops` with readable title/summary, publisher, platform, date when available, and the original link.
+18. Confirm private/internal URLs such as `http://127.0.0.1/admin` are rejected.
+19. Confirm X URLs with `?lang=...` or tracking parameters dedupe to the clean `https://x.com/.../status/...` URL.
+20. If a duplicate was previously saved without tweet metadata, submit it again and confirm the same item is refreshed with tweet text, publisher, handle, and date.
+21. Approve the item, run report-grade capture, and confirm `/ops` shows a content evidence image for the item.
+22. Add it to the live Hidayathon report.
+23. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, and a content image.
+24. Confirm admin tools are visible only while logged in as owner/editor.
+25. Confirm a signed-out browser redirects `/client-report` to `/login?next=%2Fclient-report`.
+26. Confirm `/share/[token]`, when generated by owner/editor from the admin/report flow, is read-only, noindexed, and does not show admin tools.
 
 ## Content Screenshot Pipeline Smoke Test
 
@@ -106,6 +127,8 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 - Viewer-role behavior still needs a real viewer account or invite flow test.
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
+- The redesigned production client report still needs owner-side visual acceptance after the 2026-05-21 deploy.
+- Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.
 - X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
 - Share links need a browser-level production test after the report/share UI is polished.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.

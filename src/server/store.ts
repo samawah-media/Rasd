@@ -46,7 +46,7 @@ type ShareLink = {
   id: string;
   reportId: string;
   tokenHash: string;
-  expiresAt: string;
+  expiresAt: string | null;
   revokedAt: string | null;
   maxViews?: number;
   viewCount: number;
@@ -710,7 +710,10 @@ export const store = {
       id: crypto.randomUUID(),
       reportId,
       tokenHash: `sha256:${await sha256(token)}`,
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * (input?.expiresInDays ?? 14)).toISOString(),
+      expiresAt:
+        typeof input?.expiresInDays === "number"
+          ? new Date(Date.now() + 1000 * 60 * 60 * 24 * input.expiresInDays).toISOString()
+          : null,
       revokedAt: null,
       maxViews: input?.maxViews,
       viewCount: 0,
@@ -737,7 +740,7 @@ export const store = {
     const link = shareLinks.find((entry) => entry.tokenHash === tokenHash);
     if (!link) return { ok: false as const, error: "share_link_not_found" };
     if (link.revokedAt) return { ok: false as const, error: "share_link_revoked" };
-    if (new Date(link.expiresAt).getTime() <= Date.now()) {
+    if (link.expiresAt && new Date(link.expiresAt).getTime() <= Date.now()) {
       return { ok: false as const, error: "share_link_expired" };
     }
     if (typeof link.maxViews === "number" && link.viewCount >= link.maxViews) {

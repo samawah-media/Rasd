@@ -4,6 +4,27 @@ Last updated: 2026-05-21
 
 This file lists the remaining work needed to make the platform operate efficiently and become testable with real Hidayathon monitoring data.
 
+Current priority:
+
+```text
+A10. Production Smoke Test
+```
+
+Immediate prerequisite:
+
+```text
+Sync deployed local changes to GitHub
+```
+
+The 2026-05-21 production deploy was made directly from the local working tree. Commit and push the deployed changes before relying on Git-triggered deployments again, otherwise a future GitHub deployment could overwrite the live client-report work.
+
+Why this is next:
+
+- The production client experience was redesigned and deployed to Vercel on 2026-05-21.
+- The legacy archive, links, content crops, and publisher crops are already wired into the client report path.
+- Manual intake and evidence-lite capture have automated coverage, but the full production browser loop still needs owner-side confirmation.
+- Before building more UI or automation, the team needs one trusted production pass proving the deployed app works with the real Supabase runtime.
+
 ## North Star
 
 The platform is considered ready for serious testing when this loop works end to end:
@@ -24,6 +45,7 @@ Status: done enough for the next operational phase.
 - Google provider starts successfully and redirects to Google.
 - Owner login with `samawah.pod@gmail.com` works according to user confirmation.
 - Admin/client route protection exists.
+- Client report redesign was deployed to production on Vercel on 2026-05-21.
 - Initial legacy Hidayathon reports are extracted.
 - Legacy backfill workflow exists for missing links.
 - Local docs exist for auth/deployment and UI redesign.
@@ -95,19 +117,29 @@ Goal:
 
 Ensure the live Supabase DB has the complete schema and RLS.
 
+Status update - 2026-05-21:
+
+- Local schema and initial migration were updated so share-link management is allowed for `owner` and `editor`, while `viewer` remains blocked.
+- Live Supabase verification found the already-applied initial migration still had the older owner-only `share_links` policy.
+- Applied migration `20260521094823_allow_editor_share_links.sql` to the live project `ewunxfttbpqisspqthiz`.
+- Live `share_links` RLS now has policy `owners and editors can manage share links`, with `owner` and `editor` allowed and `viewer` excluded.
+- Live Priority A sanity query passed: 124 legacy monitoring items, 124 captures, 124 report-item links, 124 openable original links, 4 legacy reports, 3 legacy link overrides, 3 default manual items, and 0 public tables without RLS.
+
 Tasks:
 
-- Verify all tables from `supabase/schema.sql` exist in project `ewunxfttbpqisspqthiz`.
-- Verify RLS is enabled on exposed public tables.
-- Verify organization, membership, report, item, capture, share-link, and audit tables exist.
-- Verify Data API exposure/grants are deliberate.
-- Verify service-role server operations can write safely.
+- [x] Verify all tables from `supabase/schema.sql` exist in project `ewunxfttbpqisspqthiz`.
+- [x] Verify RLS is enabled on exposed public tables.
+- [x] Verify organization, membership, report, item, capture, share-link, and audit tables exist.
+- [x] Verify Data API exposure/grants are deliberate enough for the current server-side service-role runtime; keep explicit grants under review before broader client-side Data API use.
+- [x] Verify service-role server operations can write safely.
+- [x] Verify live `share_links` RLS policy allows `owner/editor` management and blocks `viewer`.
 
 Acceptance:
 
-- Schema exists.
-- RLS is enabled.
-- App APIs can read/write the expected tables.
+- [x] Schema exists.
+- [x] RLS is enabled.
+- [x] App APIs can read/write the expected tables.
+- [x] Share-link policies match the current product decision: owner/editor manage links; viewer cannot.
 
 ### A4. Move Legacy Hidayathon Data Fully Into Supabase
 
@@ -143,19 +175,31 @@ Status update - 2026-05-20:
 - Client-safe filters now include source, link status, and screenshot status. Viewer role no longer sees the raw extracted text toggle.
 - Pending production verification: confirm the live Supabase import has data and the deployed report renders it after redeploy.
 
+Status update - 2026-05-21:
+
+- `/client-report` was redesigned into a simpler Arabic Saudi client workspace.
+- The page now focuses on four top metrics, a clickable day heatmap, compact filters, a visual content list, and a detail panel/bottom sheet.
+- Client-facing UI no longer exposes confidence, raw extraction text, extraction warnings, report page numbers, backfill links, or admin tools.
+- Viewer can export the currently filtered view through a printable PDF-style HTML export, capped at 50 visible items.
+- A public `/share/[token]` read-only route was added for token-based report viewing.
+- Production deployment completed and aliased to `https://rasd-gamma.vercel.app`.
+
 Tasks:
 
 - [x] Ensure `/api/client-report/hidayathon` reads from Supabase in production.
 - [x] Keep local/mock fallback only for development or explicit fallback.
 - [x] Show original links, evidence image paths, source, date, platform, text, and status.
-- [x] Keep filters working by date range, platform, source, report, confidence, and link/screenshot status.
+- [x] Keep filters working by date range, platform, source, sentiment, data scope, and readiness.
 - [x] Hide raw extraction/admin details from viewer.
+- [x] Keep client report comfortable and visual: metrics, heatmap, content thumbnails, publisher image, and detail drawer.
+- [x] Add client-safe filtered export with a 50-item guardrail.
 
 Acceptance:
 
 - Client report shows real imported/persisted data.
 - Filters operate on production data.
 - Viewer sees only client-safe fields.
+- Client report does not show internal technical fields or admin controls.
 
 ### A6. Link Backfill Persistence
 
@@ -265,6 +309,11 @@ Goal:
 
 Make editorial decisions durable.
 
+Status update - 2026-05-21:
+
+- Manual intake, review, capture, report insertion, share-link creation/revoke, and audit events are implemented through the persistent store path.
+- The remaining need is a production smoke pass proving these decisions survive the real Vercel/Supabase runtime and are visible in the client report.
+
 Tasks:
 
 - Persist approve/reject status.
@@ -272,6 +321,7 @@ Tasks:
 - Persist capture warnings.
 - Persist editor notes.
 - Write audit logs for manual URL, review, link update, capture, report insert, share link creation/revoke.
+- Verify the above in production with a fresh manual item.
 
 Acceptance:
 
@@ -284,6 +334,16 @@ Goal:
 
 Have one repeatable checklist that proves the platform can be tested seriously.
 
+Status:
+
+```text
+NEXT PRIORITY
+```
+
+Reason:
+
+This is the first task that proves the deployed system is actually usable end to end after the client UI redesign and production deployment.
+
 Tasks:
 
 - Owner login.
@@ -291,13 +351,17 @@ Tasks:
 - Review item.
 - Add/fix original link.
 - Confirm client report shows item.
+- Confirm client report metrics, heatmap, filters, item details, content image, publisher image, original link, and filtered export work.
 - Confirm viewer cannot access admin routes.
-- Confirm share link works, expires, and can be revoked.
+- Confirm share link works, is noindexed/read-only, has no automatic expiry by default, and can be revoked.
+- Confirm owner/editor can manage share links while viewer cannot.
 - Confirm Vercel redeploy does not lose data.
 
 Acceptance:
 
 - One Hidayathon item can travel through the full platform loop.
+- The deployed client experience is comfortable enough for real client review.
+- The smoke-test result is recorded in `planning/qa-checklist.md`.
 
 ## Priority B - Needed For Efficient Operations
 
@@ -386,25 +450,35 @@ These tasks make the platform useful to the client after the data loop is workin
 
 ### D1. Client Report Product
 
-- Show live/private platform feel.
-- Add executive metric band.
-- Add activity timeline.
-- Add source distribution.
-- Add content feed.
-- Add detail drawer.
-- Improve screenshot and original-link inspection.
+Status: first pass deployed on 2026-05-21.
+
+- [x] Show live/private platform feel.
+- [x] Add executive metric band.
+- [x] Add clickable day heatmap.
+- [x] Add compact platform distribution.
+- [x] Add content feed.
+- [x] Add detail drawer/bottom sheet.
+- [x] Improve screenshot and original-link inspection.
+- [ ] Validate the experience with owner in production.
+- [ ] Iterate after real user feedback.
 
 ### D2. Export
 
-- PDF export from the client report layout.
-- Preserve RTL and Arabic typography.
-- Include screenshots and original links.
-- Add warning when a screenshot/link is missing.
+Status: first pass deployed on 2026-05-21.
+
+- [x] Printable PDF-style export from the filtered client report view.
+- [x] Preserve RTL and Arabic typography.
+- [x] Include screenshots and original links.
+- [x] Cap export at 50 visible items.
+- [ ] Replace browser-print export with a generated PDF service if needed.
 
 ### D3. Viewer Experience
 
-- Viewer sees filters, analytics, links, screenshots, and exports.
-- Viewer does not see imports, backfill, ops, raw extraction, admin buttons, or edit controls.
+Status: first pass deployed on 2026-05-21.
+
+- [x] Viewer sees filters, analytics, links, screenshots, and exports.
+- [x] Viewer does not see imports, backfill, ops, raw extraction, admin buttons, or edit controls.
+- [ ] Test with a real viewer account/invite.
 
 ## Priority E - Full UI Redesign
 
@@ -462,14 +536,15 @@ Make RASD testable with real persisted Hidayathon data
 
 Sprint tasks:
 
-1. Confirm production auth smoke test.
-2. Verify live Supabase schema and RLS.
-3. Upsert legacy Hidayathon archive into Supabase.
-4. Make `/client-report` read persisted Supabase data in production.
-5. Make link backfill writes persistent.
-6. Add PDF-cropped content images for legacy items.
-7. Add one real manual URL intake test path.
-8. Run one end-to-end smoke test.
+1. [x] Confirm production auth smoke test enough for owner access.
+2. [x] Verify live Supabase schema and RLS after the share-link policy update.
+3. [x] Upsert legacy Hidayathon archive into Supabase.
+4. [x] Make `/client-report` read persisted Supabase data in production.
+5. [x] Make link backfill writes persistent for current workflow.
+6. [x] Add PDF-cropped content images for legacy items.
+7. [x] Add one real manual URL intake test path.
+8. [x] Deploy the simplified client experience to Vercel.
+9. [ ] Run one end-to-end production smoke test.
 
 Definition of done:
 
@@ -480,3 +555,13 @@ Definition of done:
 - Legacy items have content images or safe full-page evidence fallback.
 - One manually added item can be reviewed and shown in the client report.
 - Viewer cannot access admin pages.
+
+Next recommended task:
+
+```text
+A10. Production Smoke Test
+```
+
+Concrete first step:
+
+Open `https://rasd-gamma.vercel.app/client-report` as owner and confirm the redesigned client workspace loads real data. Then use `/ops` with one fresh public X/news URL and follow the item through review, capture, live report insertion, client report visibility, and filtered export.

@@ -7,6 +7,10 @@ async function schemaSql() {
   return readFile(join(process.cwd(), "supabase", "schema.sql"), "utf8");
 }
 
+async function migrationSql(file: string) {
+  return readFile(join(process.cwd(), "supabase", "migrations", file), "utf8");
+}
+
 function tableNames(sql: string) {
   return [...sql.matchAll(/create table public\.([a-z_]+)\s*\(/g)].map((match) => match[1]);
 }
@@ -99,11 +103,20 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(sql, /create policy "editors can manage legacy link overrides"/);
   });
 
-  it("limits share-link management to owners in RLS policy", async () => {
+  it("limits share-link management to owners and editors in RLS policy", async () => {
     const sql = await schemaSql();
 
-    assert.match(sql, /create policy "owners can manage share links"/);
-    assert.match(sql, /m\.role = 'owner'/);
+    assert.match(sql, /create policy "owners and editors can manage share links"/);
+    assert.match(sql, /m\.role in \('owner', 'editor'\)/);
+  });
+
+  it("keeps the live share-link RLS correction migration idempotent", async () => {
+    const sql = await migrationSql("20260521094823_allow_editor_share_links.sql");
+
+    assert.match(sql, /drop policy if exists "owners can manage share links"/);
+    assert.match(sql, /drop policy if exists "owners and editors can manage share links"/);
+    assert.match(sql, /create policy "owners and editors can manage share links"/);
+    assert.match(sql, /m\.role in \('owner', 'editor'\)/);
   });
 
   it("keeps production Priority A verification pointed at the canonical legacy organization", async () => {

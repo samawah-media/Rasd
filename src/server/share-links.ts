@@ -66,7 +66,10 @@ export async function createReportShareLink(reportId: string, input?: ShareLinkI
   const reportRow = report as { id: string; organization_id: string };
   const token = crypto.randomUUID().replaceAll("-", "");
   const tokenHash = `sha256:${await sha256(token)}`;
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * (input?.expiresInDays ?? 14)).toISOString();
+  const expiresAt =
+    typeof input?.expiresInDays === "number"
+      ? new Date(Date.now() + 1000 * 60 * 60 * 24 * input.expiresInDays).toISOString()
+      : null;
 
   const { data: link, error } = await supabase
     .from("share_links")

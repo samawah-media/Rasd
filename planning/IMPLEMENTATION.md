@@ -27,10 +27,11 @@ Open `http://localhost:3000`.
 
 - `/` operational dashboard, inbox, sources, budgets, and report versions.
 - `/feed` dedicated live monitoring feed with filters, editorial state, evidence status, and selected-item actions.
-- `/client-report` client-facing interactive Hidayathon report with date calendar/range filters, report/platform/sentiment/confidence filters, source cards, and raw-text detail reveal.
+- `/client-report` client-facing Hidayathon workspace with four executive metrics, clickable day heatmap, compact filters, visual content list, detail drawer/bottom sheet, original links, content crops, publisher crops, and filtered printable export.
 - `/imports` local review/import UI for `data/imports/hidayathon_reports.json`, with filters for report, platform, confidence, page, and text search.
 - `/imports/backfill` local source-link backfill UI for legacy items whose PDFs do not include an openable original URL; includes X/Web search links and an override JSON template per item.
 - `/api/client-report/hidayathon` serves the enriched client report dataset from Supabase when configured, combining approved legacy data with manual items that have been added to the live Hidayathon report.
+- `/api/client-report/hidayathon/export-pdf` serves a client-safe printable Arabic export for the currently selected/filtered items, capped at 50 items.
 - `/api/imports/legacy/status` returns legacy import counts.
 - `/api/imports/legacy/backfill` returns link-backfill counts, status, search URLs, and override templates for legacy items.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.
@@ -45,9 +46,10 @@ Open `http://localhost:3000`.
 - `/api/items/:id/review` approve/reject review endpoint.
 - `/api/items/:id/capture-report-grade` guarded report-grade capture endpoint.
 - `/api/reports/:id/items` report insertion endpoint with readiness checks.
-- `/api/reports/:id/share-link` creates a private share link with expiry and optional view limit.
+- `/api/reports/:id/share-link` creates a private share link for owner/editor management, noindexed/watermarked by default, with optional expiry and optional view limit.
 - `/api/share-links/:token` validates expiry/revocation/view limits and records a view.
 - `/api/share-links/:token/revoke` revokes an existing share link.
+- `/share/[token]` is the public read-only report view for token links; it is noindexed and does not expose admin tools.
 - `/api/reports/report-5/export-pdf` queues a PDF export job placeholder.
 
 ## Legacy Report Import
@@ -83,16 +85,18 @@ The prototype now includes Node test coverage for the most important workflow ru
 - non-ready items cannot be inserted into a report.
 - capture-failed items require explicit warning acceptance.
 - screenshot work stops before crossing budget limits.
-- share links enforce expiry, revocation, and view limits.
+- share links enforce revocation and view limits, and enforce expiry when an expiry is explicitly configured. By default, new links have no automatic expiry.
 - share-link token hashes are verified not to leak the usable token.
-- Supabase schema checks verify RLS coverage, tenant ownership, BYOK encrypted/masked fields, share-link controls, and organization-scoped dedupe.
+- Supabase schema checks verify RLS coverage, tenant ownership, BYOK encrypted/masked fields, share-link controls, the live share-link policy correction migration, and organization-scoped dedupe.
 - utility checks cover URL canonicalization, keyword match explanations, and budget hard-stop behavior.
 - client-report utility checks cover Arabic legacy date extraction, capture-date extraction, and the enriched Hidayathon report dataset.
 - API checks verify `/api/client-report/hidayathon` serves the interactive report data.
+- API checks verify `/api/client-report/hidayathon/export-pdf` returns a printable client-safe export and rejects exports above 50 items.
 - backfill utility/API checks verify that the 124 interactive PDF annotation links are available and that missing legacy URLs are not fabricated.
 - legacy Supabase import-plan checks verify deterministic upsert batches, 124 monitoring rows, 124 report-item rows, 124 capture rows, and 124 openable original URLs.
 - production persistence checks verify the canonical legacy organization slug `legacy-hidayathon`, live row-count sanity SQL, protected admin persistence endpoint behavior, and owner-confirmed Supabase runtime mode.
 - client-report checks verify that X rows do not present official site links such as `hedayathon.com` as original tweet permalinks; those are exposed separately as content links until true `x.com/.../status/...` links are backfilled.
+- client-report export checks verify internal fields such as confidence, raw extraction text, backfill links, and extraction warnings are not included in the client export.
 
 Run:
 
@@ -113,7 +117,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in the browser.
 
-The server initializes Supabase lazily through `src/server/supabase-admin.ts`, so `next build` does not require database credentials. The current share-link service is the first persistence-ready slice: it uses the in-memory store locally, and switches to the `share_links` table when server Supabase credentials are available.
+The server initializes Supabase lazily through `src/server/supabase-admin.ts`, so `next build` does not require database credentials. The share-link service uses the in-memory store locally, and switches to the `share_links` table when server Supabase credentials are available. Current product policy allows owner/editor share-link management and blocks viewer management.
 
 Legacy persistence is mapped in `src/server/legacy-supabase-import.ts`. It creates deterministic UUIDs for the legacy organization, topic, template, report versions, monitoring items, captures, and report-item links, then upserts by `id` so re-running the import does not duplicate data. Original URLs now come from interactive PDF link annotations when present, with printed text URLs retained in `extracted_urls` for review context. Real writes are additionally protected by `RASD_ADMIN_IMPORT_TOKEN` because the prototype API is not yet behind full Supabase Auth.
 
@@ -125,7 +129,7 @@ This is a production-shaped foundation, not the full external integration layer 
 
 ## Supabase Activation Details
 
-The repository now has Supabase CLI configuration from `npx supabase init`. The initial migration `supabase/migrations/20260520134546_initial_rasd_schema.sql` is intentionally identical to the reviewed `supabase/schema.sql`; `tests/schema.test.ts` verifies this so the migration cannot drift silently.
+The repository now has Supabase CLI configuration from `npx supabase init`. The initial migration `supabase/migrations/20260520134546_initial_rasd_schema.sql` is intentionally identical to the reviewed `supabase/schema.sql`; `tests/schema.test.ts` verifies this so the migration cannot drift silently. The follow-up migration `supabase/migrations/20260521094823_allow_editor_share_links.sql` is an idempotent live-database correction for projects where the initial migration had already been applied with the older owner-only share-link policy.
 
 For project `ewunxfttbpqisspqthiz`, `.env.local` contains only public/non-secret setup values. Real schema application and legacy writes need server-only values:
 
@@ -152,3 +156,10 @@ Production confirmation on 2026-05-20:
 - Unauthenticated `/api/admin/persistence` returns `401 auth_required`.
 - Live Supabase row-count sanity check after Vercel redeploy showed 124 legacy monitoring items, 124 captures, 124 report-item links, 4 legacy reports, 3 legacy link overrides, 2 default manual items, and 0 public tables without RLS.
 - `share_links` was smoke-tested against Supabase by creating and revoking a test link for a legacy report; the usable token was not stored in `token_hash`.
+
+Production schema/RLS confirmation on 2026-05-21:
+
+- `npm run supabase:db:dry-run` detected one pending migration: `20260521094823_allow_editor_share_links.sql`.
+- `npm run supabase:db:push` applied that migration to project `ewunxfttbpqisspqthiz`.
+- Live `share_links` policy is now `owners and editors can manage share links`, with `owner` and `editor` allowed and `viewer` excluded.
+- Live Priority A row-count sanity query showed 124 legacy monitoring items, 124 captures, 124 report-item links, 124 openable original links, 4 legacy reports, 3 legacy link overrides, 3 default manual items, and 0 public tables without RLS.

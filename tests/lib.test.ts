@@ -9,6 +9,7 @@ import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey } from "../src/lib/
 import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
+import { buildClientReportExportHtml, clientReportExportLimit } from "../src/server/client-report-export";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "../src/server/url-metadata";
 
 describe("connector and budget utilities", () => {
@@ -139,6 +140,25 @@ describe("connector and budget utilities", () => {
     assert.equal(report.items.filter((item) => item.platform === "X" && item.contentUrl).length, 0);
     assert.equal(report.items.some((item) => item.extractedUrls.some((url) => url.includes("hedayathon.comسجّل"))), true);
     assert.equal(report.items.some((item) => item.originalUrl?.includes("hedayathon.comسجّل")), false);
+  });
+
+  it("builds a clean printable client export with the 50-item guardrail", () => {
+    const report = getHidayathonClientReportData();
+    const selected = report.items.slice(0, 3).map((item) => item.id);
+    const exportHtml = buildClientReportExportHtml(report, selected);
+    const tooMany = buildClientReportExportHtml(
+      report,
+      report.items.slice(0, clientReportExportLimit + 1).map((item) => item.id),
+    );
+
+    assert.equal(exportHtml.ok, true);
+    assert.equal(exportHtml.count, 3);
+    assert.match(exportHtml.html, /رصد هداية هاكاثون/);
+    assert.match(exportHtml.html, /حفظ PDF/);
+    assert.doesNotMatch(exportHtml.html, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
+    assert.equal(tooMany.ok, false);
+    assert.equal(tooMany.error, "export_item_limit_exceeded");
+    assert.equal(tooMany.maxItems, clientReportExportLimit);
   });
 
   it("builds a legacy link backfill queue without fabricating missing original URLs", () => {

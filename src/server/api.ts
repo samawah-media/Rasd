@@ -22,6 +22,7 @@ import {
 import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "@/server/url-metadata";
 import { renderEvidenceCardSvg } from "@/server/evidence-card";
+import { buildClientReportExportHtml } from "@/server/client-report-export";
 
 type AppBindings = {
   Variables: {
@@ -92,6 +93,26 @@ api.get("/audit-logs", async (c) => c.json(withRequestId(c, { audit_logs: await 
 api.get("/client-report/hidayathon", async (c) =>
   c.json(withRequestId(c, { report: await getPreferredHidayathonClientReportData() })),
 );
+
+api.get("/client-report/hidayathon/export-pdf", async (c) => {
+  const report = await getPreferredHidayathonClientReportData();
+  const ids = (c.req.query("ids") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const exportResult = buildClientReportExportHtml(report, ids);
+
+  if (!exportResult.ok) {
+    return c.json(withRequestId(c, exportResult), exportResult.error === "export_no_items" ? 404 : 400);
+  }
+
+  return new Response(exportResult.html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "x-rasd-request-id": c.get("requestId"),
+    },
+  });
+});
 
 api.get("/imports/legacy/status", (c) =>
   c.json(withRequestId(c, { legacy_import: store.legacyImportStatus() })),
