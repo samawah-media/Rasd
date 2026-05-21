@@ -7,7 +7,7 @@ This file lists the remaining work needed to make the platform operate efficient
 Current priority:
 
 ```text
-Post-A10 stabilization and quality gate
+B4 /ops simplification and production review
 ```
 
 Immediate prerequisite:
@@ -435,9 +435,9 @@ Status: first pass implemented by parallel agent on 2026-05-21; local quality ga
 - Show connector health.
 - Show latest errors and failed jobs.
 
-### B2. Improve `/imports`
+### B2. Legacy Import Tools
 
-Status: first pass implemented by parallel agent on 2026-05-21; lint cleanup completed and local quality gate passed.
+Status: deferred on 2026-05-21. Legacy archive import is not a daily workflow now; keep these pages as admin-only maintenance tools.
 
 - Make review faster with table + detail drawer.
 - Bulk approve legacy batches.
@@ -445,21 +445,36 @@ Status: first pass implemented by parallel agent on 2026-05-21; lint cleanup com
 - Preserve report/page/source context.
 - Add clear "imported to DB" state.
 
-### B3. Improve `/imports/backfill`
+### B3. Legacy Link Backfill
+
+Status: deferred on 2026-05-21. Current legacy report links are good enough for testing; use this only for future corrections.
 
 - Filter missing vs malformed vs fixed.
 - Show evidence page preview beside candidate search links.
 - Allow quick save of corrected URL.
 - Add verification status and notes.
 
-### B4. Improve `/feed`
+### B4. Improve `/ops`
+
+Status: first pass implemented locally on 2026-05-21; pending production review with the owner account.
+
+- [x] Convert `/ops` into a focused inbox-style workbench.
+- [x] Keep the main flow visible: paste link, review, capture, add to report.
+- [x] Replace heavy explanatory side panels with compact filters and a detail inspector.
+- [x] Use the current green/yellow RASD direction with Vercel/Linear-style spacing and controls.
+- [x] Preserve the existing API workflow and role protection.
+- [ ] Validate on production with owner login after deploy.
+
+### B5. Improve `/feed`
+
+Status: deferred until `/ops` is stable, because `/ops` is the actual daily workflow right now.
 
 - Connect buttons to real API.
 - Show review state machine clearly.
 - Support approve/reject/report-ready flow.
 - Add source/date/platform filters.
 
-### B5. Reports And Share Links
+### B6. Reports And Share Links
 
 - Generate report versions from approved items.
 - Create share links only for owner/editor.

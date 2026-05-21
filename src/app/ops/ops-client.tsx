@@ -2,22 +2,27 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
+  AlertTriangle,
   Archive,
   Camera,
   Check,
+  ChevronLeft,
+  CircleCheck,
   ExternalLink,
   Link as LinkIcon,
+  Loader2,
   RefreshCw,
+  Search,
   Sparkles,
 } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
 
 type MessageType = "success" | "error" | "info" | "warning";
+type WorkTab = "active" | "review" | "capture" | "report" | "done";
 
 type ApiState = {
   items: MonitoringItem[];
   metrics: HealthMetric[];
-  auditCount: number;
   capturesByItem: Record<string, Capture[]>;
   liveReport: ReportVersion | null;
 };
@@ -35,21 +40,28 @@ type IntakeResponse = {
 const emptyState: ApiState = {
   items: [],
   metrics: [],
-  auditCount: 0,
   capturesByItem: {},
   liveReport: null,
 };
 
 const arabicApiErrors: Record<string, string> = {
-  auth_required: "انتهت الجلسة. سجّل دخولك مجددًا ثم حاول مرة أخرى.",
+  auth_required: "انتهت الجلسة. سجّل دخولك مجددًا.",
   insufficient_role: "ليس لديك صلاحية لهذا الإجراء.",
   api_route_not_found_or_not_authorized: "المسار غير موجود أو غير مصرح.",
-  url_is_required: "يرجى لصق رابط صحيح.",
+  url_is_required: "الصق رابطًا صحيحًا.",
   item_not_found: "المادة غير موجودة.",
   item_not_report_ready: "المادة ليست جاهزة للتقرير بعد.",
   report_not_found: "التقرير غير موجود.",
   budget_exceeded: "تم تجاوز حد الاستخدام المسموح.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
+};
+
+const tabLabels: Record<WorkTab, string> = {
+  active: "الكل",
+  review: "تحتاج اعتماد",
+  capture: "تحتاج لقطة",
+  report: "جاهزة للتقرير",
+  done: "داخل التقرير",
 };
 
 function arabicError(key: string): string {
@@ -74,12 +86,12 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!contentType.includes("application/json")) {
     if (response.status === 401 || response.status === 403) {
-      throw new Error("انتهت الجلسة. سجّل دخولك مجددًا ثم حاول مرة أخرى.");
+      throw new Error("انتهت الجلسة. سجّل دخولك مجددًا.");
     }
     if (contentType.includes("text/html")) {
-      throw new Error("انتهت الجلسة أو حدث خطأ في السيرفر. أعد تحميل الصفحة وسجّل دخولك.");
+      throw new Error("انتهت الجلسة أو حدث خطأ في السيرفر. أعد تحميل الصفحة.");
     }
-    throw new Error("رد غير متوقع من السيرفر. حاول مرة أخرى.");
+    throw new Error("رد غير متوقع من السيرفر.");
   }
 
   let data: Record<string, unknown>;
@@ -99,15 +111,15 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 function stateLabel(state: MonitoringItem["state"]) {
   const labels: Record<MonitoringItem["state"], string> = {
-    ingested: "مجموع",
+    ingested: "محفوظ",
     normalized: "منظم",
     deduped: "مكرر",
     candidate: "مرشح",
-    needs_review: "بانتظار الاعتماد",
+    needs_review: "يحتاج اعتماد",
     rejected: "مرفوض",
-    approved_pending_capture: "بانتظار اللقطة",
-    capture_pending: "اللقطة جارية",
-    capture_failed: "فشل الالتقاط",
+    approved_pending_capture: "تحتاج لقطة",
+    capture_pending: "جاري الالتقاط",
+    capture_failed: "تعثر الالتقاط",
     report_ready: "جاهز للتقرير",
     added_to_report: "داخل التقرير",
     published: "منشور",
@@ -116,29 +128,29 @@ function stateLabel(state: MonitoringItem["state"]) {
   return labels[state];
 }
 
-function stateClass(state: MonitoringItem["state"]) {
-  if (state === "report_ready" || state === "added_to_report" || state === "published") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+function statusClass(state: MonitoringItem["state"]) {
+  if (state === "added_to_report" || state === "published") return "bg-[#e8f5ef] text-[#0f6b57]";
+  if (state === "report_ready") return "bg-[#fff4c2] text-[#765f00]";
+  if (state === "capture_failed" || state === "rejected") return "bg-[#fff1ed] text-[#a33a24]";
+  if (state === "approved_pending_capture" || state === "capture_pending") return "bg-[#eef4ff] text-[#315f9b]";
+  return "bg-[#f0f3ee] text-[#52605a]";
+}
+
+function tabForItem(item: MonitoringItem): WorkTab {
+  if (item.state === "needs_review" || item.state === "candidate") return "review";
+  if (item.state === "approved_pending_capture" || item.state === "capture_pending" || item.state === "capture_failed") {
+    return "capture";
   }
-  if (state === "capture_failed" || state === "rejected") return "border-red-200 bg-red-50 text-red-900";
-  if (state === "approved_pending_capture" || state === "needs_review") return "border-amber-200 bg-amber-50 text-amber-900";
-  return "border-stone-200 bg-stone-50 text-stone-800";
+  if (item.state === "report_ready") return "report";
+  if (item.state === "added_to_report" || item.state === "published") return "done";
+  return "active";
 }
 
 function sourceLabel(source?: IntakeResponse["metadata"]) {
   if (!source) return "تم حفظ الرابط.";
-  if (source.source === "x_oembed") return "تم جلب بيانات التغريدة من X.";
-  if (source.source === "html_metadata") return "تم جلب عنوان ووصف الصفحة.";
-  return "تم حفظ الرابط، ولم نستطع جلب النص تلقائيًا.";
-}
-
-function nextStepLabel(item: MonitoringItem) {
-  if (item.state === "needs_review" || item.state === "candidate") return "الخطوة التالية: اعتماد المادة";
-  if (item.state === "approved_pending_capture") return "الخطوة التالية: التقاط لقطة نهائية";
-  if (item.state === "report_ready" || item.state === "capture_failed") return "الخطوة التالية: إضافة المادة للتقرير";
-  if (item.state === "added_to_report" || item.state === "published") return "المادة موجودة في تقرير العميل";
-  if (item.state === "rejected") return "المادة مرفوضة";
-  return "المادة محفوظة";
+  if (source.source === "x_oembed") return "تم جلب بيانات التغريدة.";
+  if (source.source === "html_metadata") return "تم جلب بيانات الصفحة.";
+  return "تم حفظ الرابط.";
 }
 
 function captureAsset(captures: Capture[] | undefined) {
@@ -147,11 +159,47 @@ function captureAsset(captures: Capture[] | undefined) {
   )?.assetUrl;
 }
 
+function platformLabel(item: MonitoringItem) {
+  if (item.originalUrl.includes("x.com") || item.originalUrl.includes("twitter.com")) return "X";
+  if (item.sourceName.includes("خبر") || item.sourceType === "rss") return "خبر";
+  return "موقع";
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ar-SA", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function messageClass(type: MessageType) {
-  if (type === "error") return "rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900";
-  if (type === "info") return "rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900";
-  if (type === "warning") return "rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 font-semibold";
-  return "rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900";
+  if (type === "error") return "border-[#f1b6aa] bg-[#fff1ed] text-[#8f321d]";
+  if (type === "warning") return "border-[#eed478] bg-[#fff8dc] text-[#735d00]";
+  if (type === "success") return "border-[#b7ddce] bg-[#ecf7f2] text-[#0f6b57]";
+  return "border-[#c7d8f3] bg-[#f1f6ff] text-[#315f9b]";
+}
+
+function systemTone(metrics: HealthMetric[]) {
+  if (metrics.some((metric) => metric.status === "danger")) return "bg-[#fff1ed] text-[#8f321d]";
+  if (metrics.some((metric) => metric.status === "warning")) return "bg-[#fff8dc] text-[#735d00]";
+  return "bg-[#e8f5ef] text-[#0f6b57]";
+}
+
+function systemText(metrics: HealthMetric[]) {
+  if (!metrics.length) return "جاري الفحص";
+  if (metrics.some((metric) => metric.status === "danger")) return "تحتاج متابعة";
+  if (metrics.some((metric) => metric.status === "warning")) return "مستقرة مع تنبيه";
+  return "مستقرة";
+}
+
+function latestManualItems(items: MonitoringItem[], limit = 32) {
+  return items
+    .filter((item) => item.sourceType === "manual_url")
+    .filter((item) => item.state !== "archived")
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, limit);
 }
 
 export function OpsClient() {
@@ -161,35 +209,66 @@ export function OpsClient() {
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
-  const [lastItemId, setLastItemId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
+  const [tab, setTab] = useState<WorkTab>("active");
+  const [query, setQuery] = useState("");
 
   const liveReportId = state.liveReport?.id ?? "report-5";
-  const lastItem = useMemo(
-    () => state.items.find((item) => item.id === lastItemId) ?? null,
-    [lastItemId, state.items],
-  );
+
   const manualItems = useMemo(
-    () =>
-      state.items
-        .filter((item) => item.sourceType === "manual_url")
-        .filter((item) => item.state !== "archived")
-        .slice(0, 8),
+    () => latestManualItems(state.items),
     [state.items],
   );
 
+  const tabCounts = useMemo(() => {
+    const counts: Record<WorkTab, number> = {
+      active: manualItems.length,
+      review: 0,
+      capture: 0,
+      report: 0,
+      done: 0,
+    };
+    manualItems.forEach((item) => {
+      const itemTab = tabForItem(item);
+      if (itemTab !== "active") counts[itemTab] += 1;
+    });
+    return counts;
+  }, [manualItems]);
+
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return manualItems.filter((item) => {
+      const matchesTab = tab === "active" || tabForItem(item) === tab;
+      const matchesQuery =
+        !normalizedQuery ||
+        [item.title, item.summary, item.authorName, item.authorHandle, item.sourceName, item.originalUrl]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      return matchesTab && matchesQuery;
+    });
+  }, [manualItems, query, tab]);
+
+  const selectedItem = useMemo(
+    () => visibleItems.find((item) => item.id === selectedId) ?? manualItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null,
+    [manualItems, selectedId, visibleItems],
+  );
+
   async function fetchSnapshot(): Promise<ApiState> {
-    const [itemsData, healthData, auditData, liveReportData] = await Promise.all([
+    const [itemsData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
-      apiJson<{ audit_logs: unknown[] }>("/api/audit-logs"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
 
+    const manualCandidates = latestManualItems(itemsData.items);
+
     const capturePairs = await Promise.all(
-      itemsData.items.map(async (item) => {
+      manualCandidates.map(async (item) => {
         const result = await apiJson<{ captures: Capture[] }>(`/api/items/${item.id}/captures`);
         return [item.id, result.captures] as const;
       }),
@@ -198,7 +277,6 @@ export function OpsClient() {
     return {
       items: itemsData.items,
       metrics: healthData.metrics,
-      auditCount: auditData.audit_logs.length,
       capturesByItem: Object.fromEntries(capturePairs),
       liveReport: liveReportData.report,
     };
@@ -208,6 +286,9 @@ export function OpsClient() {
     setPending("refresh");
     try {
       setState(await fetchSnapshot());
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تحميل بيانات التشغيل.");
+      setMessageType("error");
     } finally {
       setPending(null);
     }
@@ -223,6 +304,7 @@ export function OpsClient() {
       .then((snapshot) => {
         if (!active) return;
         setState(snapshot);
+        setSelectedId((current) => current ?? snapshot.items.find((item) => item.sourceType === "manual_url")?.id ?? null);
       })
       .catch((error) => {
         if (!active) return;
@@ -237,7 +319,7 @@ export function OpsClient() {
   async function submitUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending("manual");
-    setMessage("جاري حفظ الرابط وإحضار بياناته...");
+    setMessage("جاري حفظ الرابط...");
     setMessageType("info");
 
     try {
@@ -252,7 +334,8 @@ export function OpsClient() {
         }),
       });
 
-      setLastItemId(result.item.id);
+      setSelectedId(result.item.id);
+      setTab("active");
       setUrl("");
       setTitle("");
       setText("");
@@ -260,24 +343,13 @@ export function OpsClient() {
       setPublishedAt("");
       await refreshSilently();
 
-      let msg = "";
-      let msgType: MessageType = "success";
-
       if (result.duplicate) {
-        if (result.duplicateType === "content") {
-          msg = "تنبيه: تم رصد محتوى مكرر منشور برابط آخر! قمنا بدمج البيانات وتحديثها لك هنا.";
-          msgType = "warning";
-        } else {
-          msg = "هذا الرابط موجود بالفعل وتم تحديث بياناته.";
-          msgType = "success";
-        }
+        setMessage(result.duplicateType === "content" ? "محتوى مكرر، تم تحديث المادة الموجودة." : "الرابط موجود، تم تحديث بياناته.");
+        setMessageType(result.duplicateType === "content" ? "warning" : "success");
       } else {
-        msg = sourceLabel(result.metadata);
-        msgType = "success";
+        setMessage(sourceLabel(result.metadata));
+        setMessageType("success");
       }
-
-      setMessage(msg);
-      setMessageType(msgType);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر حفظ الرابط.");
       setMessageType("error");
@@ -302,279 +374,359 @@ export function OpsClient() {
     }
   }
 
-  function itemActions(item: MonitoringItem, compact = false) {
-    const buttonClass = compact
-      ? "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-xs font-semibold disabled:opacity-50"
-      : "inline-flex h-10 items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold disabled:opacity-50";
-
-    return (
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            runItemAction(
-              `approve-${item.id}`,
-              () =>
-                apiJson(`/api/items/${item.id}/review`, {
-                  method: "POST",
-                  body: JSON.stringify({ action: "approve", review_notes: "اعتماد من صفحة التشغيل المبسطة." }),
-                }),
-              "تم اعتماد المادة. الخطوة التالية هي اللقطة النهائية.",
-            )
-          }
-          disabled={pending !== null || item.state === "added_to_report" || item.state === "published"}
-          className={`${buttonClass} border border-emerald-200 bg-emerald-50 text-emerald-900`}
-        >
-          <Check className="h-4 w-4" />
-          اعتماد
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            runItemAction(
-              `capture-${item.id}`,
-              () =>
-                apiJson(`/api/items/${item.id}/capture-report-grade`, {
-                  method: "POST",
-                  body: JSON.stringify({}),
-                }),
-              "تم تجهيز اللقطة. يمكنك الآن إضافة المادة للتقرير.",
-            )
-          }
-          disabled={pending !== null || item.state === "needs_review" || item.state === "added_to_report" || item.state === "published"}
-          className={`${buttonClass} border border-stone-300 bg-white text-stone-900`}
-        >
-          <Camera className="h-4 w-4" />
-          لقطة
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            runItemAction(
-              `report-${item.id}`,
-              () =>
-                apiJson(`/api/reports/${liveReportId}/items`, {
-                  method: "POST",
-                  body: JSON.stringify({ item_id: item.id, warning_accepted: true }),
-                }),
-              "تمت إضافة المادة للتقرير. ستظهر في واجهة العميل.",
-            )
-          }
-          disabled={pending !== null || item.state === "needs_review" || item.state === "approved_pending_capture"}
-          className={`${buttonClass} border border-stone-950 bg-stone-950 text-white`}
-        >
-          <Archive className="h-4 w-4" />
-          إضافة للتقرير
-        </button>
-        <a
-          href={item.originalUrl}
-          target="_blank"
-          rel="noreferrer"
-          className={`${buttonClass} border border-stone-300 bg-white text-stone-700`}
-        >
-          <ExternalLink className="h-4 w-4" />
-          فتح
-        </a>
-      </div>
+  function approveItem(item: MonitoringItem) {
+    return runItemAction(
+      `approve-${item.id}`,
+      () =>
+        apiJson(`/api/items/${item.id}/review`, {
+          method: "POST",
+          body: JSON.stringify({ action: "approve", review_notes: "اعتماد من صفحة التشغيل." }),
+        }),
+      "تم اعتماد المادة.",
     );
   }
 
+  function captureItem(item: MonitoringItem) {
+    return runItemAction(
+      `capture-${item.id}`,
+      () =>
+        apiJson(`/api/items/${item.id}/capture-report-grade`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "تم تجهيز اللقطة.",
+    );
+  }
+
+  function addToReport(item: MonitoringItem) {
+    return runItemAction(
+      `report-${item.id}`,
+      () =>
+        apiJson(`/api/reports/${liveReportId}/items`, {
+          method: "POST",
+          body: JSON.stringify({ item_id: item.id, warning_accepted: true }),
+        }),
+      "تمت إضافة المادة للتقرير.",
+    );
+  }
+
+  function primaryAction(item: MonitoringItem) {
+    if (item.state === "needs_review" || item.state === "candidate") {
+      return (
+        <button type="button" onClick={() => approveItem(item)} className="ops-primary" disabled={pending !== null}>
+          <Check className="h-4 w-4" />
+          اعتماد
+        </button>
+      );
+    }
+    if (item.state === "approved_pending_capture" || item.state === "capture_failed") {
+      return (
+        <button type="button" onClick={() => captureItem(item)} className="ops-primary" disabled={pending !== null}>
+          <Camera className="h-4 w-4" />
+          لقطة
+        </button>
+      );
+    }
+    if (item.state === "report_ready") {
+      return (
+        <button type="button" onClick={() => addToReport(item)} className="ops-primary" disabled={pending !== null}>
+          <Archive className="h-4 w-4" />
+          إضافة للتقرير
+        </button>
+      );
+    }
+    return null;
+  }
+
   return (
-    <main className="min-h-screen bg-[#f6f7f1] text-stone-950" dir="rtl">
-      <section className="border-b border-stone-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5">
+    <main className="min-h-screen bg-[#f7f8f4] text-[#17201d]" dir="rtl">
+      <style jsx global>{`
+        .ops-primary {
+          display: inline-flex;
+          height: 2.5rem;
+          align-items: center;
+          justify-content: center;
+          gap: 0.5rem;
+          border-radius: 0.5rem;
+          background: #116a5c;
+          padding: 0 1rem;
+          font-size: 0.875rem;
+          font-weight: 700;
+          color: white;
+          transition: background 0.18s ease;
+        }
+        .ops-primary:hover {
+          background: #0f594e;
+        }
+        .ops-primary:disabled {
+          opacity: 0.55;
+        }
+      `}</style>
+
+      <section className="border-b border-[#dfe3d9] bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-emerald-700">تشغيل الرصد</p>
-            <h1 className="mt-1 text-2xl font-bold">إضافة مادة جديدة</h1>
+            <div className="flex items-center gap-2 text-xs font-semibold text-[#66736d]">
+              <span>تشغيل الرصد</span>
+              <span className={`rounded-full px-2 py-1 ${systemTone(state.metrics)}`}>{systemText(state.metrics)}</span>
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal md:text-3xl">إضافة ومراجعة المحتوى</h1>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={pending !== null}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-50 disabled:opacity-50"
-          >
-            <RefreshCw className="h-4 w-4" />
-            تحديث
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href="/client-report"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm font-semibold transition hover:border-[#116a5c]/45"
+            >
+              واجهة العميل
+              <ChevronLeft className="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={pending !== null}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${pending === "refresh" ? "animate-spin" : ""}`} />
+              تحديث
+            </button>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <form onSubmit={submitUrl} className="rounded-lg border border-stone-200 bg-white p-5">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-5 w-5 text-emerald-700" />
-              <h2 className="text-lg font-bold">ألصق رابط التغريدة أو الخبر</h2>
-            </div>
-            <div className="mt-4 flex flex-col gap-3 md:flex-row">
+      <section className="mx-auto max-w-7xl px-5 py-5">
+        <form onSubmit={submitUrl} className="border-b border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03] md:rounded-lg md:border">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <label className="relative block">
+              <LinkIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
               <input
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://x.com/.../status/... أو رابط خبر"
-                className="h-12 min-w-0 flex-1 rounded-md border border-stone-300 px-3 text-left text-sm"
+                placeholder="الصق رابط X أو خبر"
+                className="h-12 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-10 pl-3 text-left text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
                 dir="ltr"
                 required
               />
-              <button
-                type="submit"
-                disabled={pending !== null}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-md bg-stone-950 px-5 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                <Sparkles className="h-4 w-4" />
-                إضافة وإحضار المحتوى
-              </button>
+            </label>
+            <button
+              type="submit"
+              disabled={pending !== null}
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-5 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+            >
+              {pending === "manual" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              إضافة
+            </button>
+          </div>
+
+          <details className="mt-3">
+            <summary className="inline-flex cursor-pointer rounded-md px-1 text-sm font-semibold text-[#66736d] transition hover:text-[#116a5c]">
+              تعديل يدوي
+            </summary>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="عنوان"
+                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
+              />
+              <input
+                value={authorName}
+                onChange={(event) => setAuthorName(event.target.value)}
+                placeholder="الناشر"
+                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
+              />
+              <input
+                value={publishedAt}
+                onChange={(event) => setPublishedAt(event.target.value)}
+                type="datetime-local"
+                className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm outline-none focus:border-[#116a5c]"
+              />
+              <textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="ملخص"
+                className="min-h-20 rounded-lg border border-[#dfe3d9] bg-white p-3 text-sm leading-6 outline-none focus:border-[#116a5c] md:col-span-3"
+              />
             </div>
+          </details>
 
-            <details className="mt-4 rounded-md border border-stone-200 bg-stone-50 p-3">
-              <summary className="cursor-pointer text-sm font-semibold text-stone-700">تعديل يدوي عند الحاجة</summary>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <input
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="عنوان بديل"
-                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
-                />
-                <input
-                  value={authorName}
-                  onChange={(event) => setAuthorName(event.target.value)}
-                  placeholder="اسم الناشر"
-                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
-                />
-                <input
-                  value={publishedAt}
-                  onChange={(event) => setPublishedAt(event.target.value)}
-                  type="datetime-local"
-                  className="h-10 rounded-md border border-stone-300 bg-white px-3 text-sm"
-                />
-                <textarea
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  placeholder="ملخص أو نص المادة"
-                  className="min-h-20 rounded-md border border-stone-300 bg-white p-3 text-sm leading-6 md:col-span-2"
-                />
-              </div>
-            </details>
+          {message ? (
+            <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-semibold ${messageClass(messageType)}`}>{message}</div>
+          ) : null}
+        </form>
+      </section>
 
-            {pending === "manual" ? (
-              <p className={messageClass("info")}>
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-sky-400 border-t-transparent align-middle" />{" "}
-                جاري حفظ الرابط وإحضار بياناته...
-              </p>
-            ) : message ? (
-              <p className={messageClass(messageType)}>{message}</p>
-            ) : null}
-          </form>
-
-          {lastItem ? (
-            <article className="rounded-lg border border-emerald-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${stateClass(lastItem.state)}`}>
-                  {stateLabel(lastItem.state)}
-                </span>
-                <span className="text-xs font-semibold text-emerald-700">{nextStepLabel(lastItem)}</span>
+      <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 rounded-lg border border-[#dfe3d9] bg-white">
+          <div className="border-b border-[#dfe3d9] p-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(tabLabels) as WorkTab[]).map((itemTab) => (
+                  <button
+                    key={itemTab}
+                    type="button"
+                    onClick={() => setTab(itemTab)}
+                    className={`inline-flex h-8 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
+                      tab === itemTab
+                        ? "border-[#116a5c] bg-[#e8f5ef] text-[#116a5c]"
+                        : "border-[#dfe3d9] bg-[#fbfbf8] text-[#66736d] hover:border-[#116a5c]/45"
+                    }`}
+                  >
+                    {tabLabels[itemTab]}
+                    <span>{tabCounts[itemTab].toLocaleString("ar-SA")}</span>
+                  </button>
+                ))}
               </div>
-              <h2 className="mt-4 text-xl font-bold leading-8">{lastItem.title}</h2>
-              <p className="mt-2 text-sm leading-7 text-stone-600">{lastItem.summary}</p>
-              {captureAsset(state.capturesByItem[lastItem.id]) ? (
-                <div className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt="صورة دليل المحتوى"
-                    className="h-auto w-full"
-                    src={captureAsset(state.capturesByItem[lastItem.id]) ?? ""}
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                  <p className="px-3 py-2 text-center text-xs text-stone-400">
-                    {captureAsset(state.capturesByItem[lastItem.id])?.includes("microlink.io")
-                      ? "صورة لقطة شاشة حقيقية ومباشرة"
-                      : "صورة دليل محتوى — ليست لقطة شاشة حقيقية"}
-                  </p>
-                </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
-                <span>{lastItem.authorName ?? "ناشر غير محدد"}</span>
-                <span>{lastItem.sourceName}</span>
-                <span>{new Date(lastItem.publishedAt).toLocaleString("ar-SA")}</span>
-              </div>
-              <div className="mt-5">{itemActions(lastItem)}</div>
-            </article>
-          ) : (
-            <div className="rounded-lg border border-dashed border-stone-300 bg-white p-6 text-center text-sm text-stone-500">
-              بعد إضافة الرابط ستظهر المادة هنا مباشرة، ومعها أزرار الاعتماد واللقطة والإضافة للتقرير.
+              <label className="relative block xl:w-72">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="بحث"
+                  className="h-9 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-9 pl-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
+                />
+              </label>
             </div>
-          )}
+          </div>
 
-          <section className="rounded-lg border border-stone-200 bg-white">
-            <div className="border-b border-stone-200 p-4">
-              <h2 className="text-lg font-bold">آخر المواد اليدوية</h2>
-            </div>
-            <div className="divide-y divide-stone-200">
-              {manualItems.length ? (
-                manualItems.map((item) => (
-                  <article key={item.id} className="p-4">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${stateClass(item.state)}`}>
-                          {stateLabel(item.state)}
-                        </span>
-                        <h3 className="mt-3 font-bold leading-7">{item.title}</h3>
-                        <p className="mt-1 line-clamp-2 text-sm leading-6 text-stone-600">{item.summary}</p>
-                        {captureAsset(state.capturesByItem[item.id]) ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            alt="صورة دليل المحتوى"
-                            className="mt-3 h-24 w-40 rounded-md border border-stone-200 object-cover object-top"
-                            src={captureAsset(state.capturesByItem[item.id]) ?? ""}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : null}
-                      </div>
-                      {itemActions(item, true)}
+          <div className="divide-y divide-[#edf0e9]">
+            {visibleItems.length ? (
+              visibleItems.map((item) => {
+                const asset = captureAsset(state.capturesByItem[item.id]);
+                const selected = selectedItem?.id === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedId(item.id)}
+                    className={`grid w-full gap-4 p-4 text-right transition md:grid-cols-[108px_minmax(0,1fr)] ${
+                      selected ? "bg-[#eef7f3]" : "hover:bg-[#fbfbf8]"
+                    }`}
+                  >
+                    <div className="h-24 overflow-hidden rounded-lg border border-[#dfe3d9] bg-[#f0f3ee]">
+                      {asset ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          alt=""
+                          className="h-full w-full object-cover object-top"
+                          src={asset}
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[#8a938d]">
+                          <Camera className="h-5 w-5" />
+                        </div>
+                      )}
                     </div>
-                  </article>
-                ))
-              ) : (
-                <p className="p-5 text-sm text-stone-500">لا توجد مواد يدوية بعد.</p>
-              )}
-            </div>
-          </section>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
+                        <span className="rounded-full bg-[#f0f3ee] px-2 py-1 text-xs font-semibold text-[#66736d]">{platformLabel(item)}</span>
+                        {item.warning ? <AlertTriangle className="h-4 w-4 text-[#b78a00]" /> : null}
+                      </div>
+                      <h2 className="mt-2 line-clamp-2 font-semibold leading-7">{item.title}</h2>
+                      <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#66736d]">{item.summary}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs font-semibold text-[#66736d]">
+                        <span>{item.authorHandle || item.authorName || item.sourceName}</span>
+                        <span>{formatDate(item.publishedAt)}</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="p-8 text-center">
+                <CircleCheck className="mx-auto h-7 w-7 text-[#116a5c]" />
+                <h2 className="mt-3 font-semibold">لا توجد مواد هنا</h2>
+              </div>
+            )}
+          </div>
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <h2 className="font-bold">أين تظهر المادة؟</h2>
-            <ol className="mt-3 space-y-2 text-sm leading-6 text-stone-600">
-              <li>1. تظهر فورًا في البطاقة الخضراء بعد الإضافة.</li>
-              <li>2. بعد الاعتماد واللقطة تصبح جاهزة للتقرير.</li>
-              <li>3. بعد «إضافة للتقرير» تظهر في واجهة العميل.</li>
-            </ol>
-          </div>
+        <aside className="min-w-0 rounded-lg border border-[#dfe3d9] bg-white lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)] lg:overflow-auto">
+          {selectedItem ? (
+            <div>
+              <div className="border-b border-[#dfe3d9] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(selectedItem.state)}`}>
+                      {stateLabel(selectedItem.state)}
+                    </span>
+                    <h2 className="mt-3 text-lg font-semibold leading-8">{selectedItem.title}</h2>
+                  </div>
+                  <a
+                    href={selectedItem.originalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] transition hover:border-[#116a5c]/45"
+                    aria-label="فتح الرابط الأصلي"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {primaryAction(selectedItem)}
+                  {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
+                    <button
+                      type="button"
+                      onClick={() => approveItem(selectedItem)}
+                      disabled={pending !== null}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm font-semibold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" />
+                      اعتماد
+                    </button>
+                  ) : null}
+                </div>
+              </div>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-4">
-            <h2 className="font-bold">تقرير هداية الحي</h2>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              {state.liveReport?.title ?? "جاري تحميل التقرير النشط..."}
-            </p>
-            <a
-              href="/client-report"
-              className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white"
-            >
-              فتح واجهة العميل
-            </a>
-          </div>
+              <div className="p-4">
+                <div className="overflow-hidden rounded-lg border border-[#dfe3d9] bg-[#f0f3ee]">
+                  {captureAsset(state.capturesByItem[selectedItem.id]) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt="صورة المحتوى"
+                      className="max-h-[420px] w-full object-contain object-top"
+                      src={captureAsset(state.capturesByItem[selectedItem.id]) ?? ""}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-64 items-center justify-center text-[#66736d]">
+                      <Camera className="h-7 w-7" />
+                    </div>
+                  )}
+                </div>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-600">
-            <div className="flex items-center justify-between">
-              <span>مواد يدوية</span>
-              <span className="font-bold text-stone-950">{manualItems.length}</span>
+                <p className="mt-4 text-sm leading-7 text-[#4f5a55]">{selectedItem.summary}</p>
+
+                <dl className="mt-5 grid gap-3 text-sm">
+                  <Info label="الناشر" value={selectedItem.authorHandle || selectedItem.authorName || selectedItem.sourceName} />
+                  <Info label="التاريخ" value={formatDate(selectedItem.publishedAt)} />
+                  <Info label="المنصة" value={platformLabel(selectedItem)} />
+                  <Info label="التقرير" value={state.liveReport?.title ?? "رصد هداية هاكاثون"} />
+                  {selectedItem.warning ? <Info label="تنبيه" value={selectedItem.warning} tone="warning" /> : null}
+                </dl>
+              </div>
             </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span>أحداث تدقيق</span>
-              <span className="font-bold text-stone-950">{state.auditCount}</span>
+          ) : (
+            <div className="flex min-h-96 items-center justify-center p-8 text-center text-sm text-[#66736d]">
+              اختر مادة من القائمة.
             </div>
-          </div>
+          )}
         </aside>
       </section>
     </main>
+  );
+}
+
+function Info({ label, value, tone }: { label: string; value: string; tone?: "warning" }) {
+  return (
+    <div className={`rounded-lg px-3 py-2 ${tone === "warning" ? "bg-[#fff8dc] text-[#735d00]" : "bg-[#fbfbf8] text-[#4f5a55]"}`}>
+      <dt className="text-xs font-semibold text-[#66736d]">{label}</dt>
+      <dd className="mt-1 font-semibold">{value}</dd>
+    </div>
   );
 }
