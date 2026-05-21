@@ -70,6 +70,11 @@ Partial run on 2026-05-21:
   - `/api/client-report/hidayathon` returns `401 auth_required`.
   - `/client-report` redirects to `/login?next=%2Fclient-report`.
 - Browser reached Google sign-in. The remaining checks below require completing owner login as `samawah.pod@gmail.com`.
+- Owner opened `/client-report` successfully in their authenticated browser session.
+- The client report loaded real production data and showed 126 visible items: 124 legacy archive items plus 2 live-report items.
+- Smoke finding: one old live test item, `اختبار رصد هداية هاكاثون`, had a historical placeholder report-grade asset `/window.svg`.
+- Fix added: `/window.svg` is no longer treated as client evidence; the UI should mark it as missing evidence instead of displaying a fake screenshot.
+- Remaining owner-side check: decide whether to remove/archive the old live test item from the customer-facing report.
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
 

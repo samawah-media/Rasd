@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  enrichClientReportItem,
   extractLegacyCaptureDateIso,
   extractLegacyPublishDateIso,
   getHidayathonClientReportData,
@@ -159,6 +160,41 @@ describe("connector and budget utilities", () => {
     assert.equal(tooMany.ok, false);
     assert.equal(tooMany.error, "export_item_limit_exceeded");
     assert.equal(tooMany.maxItems, clientReportExportLimit);
+  });
+
+  it("does not treat the old placeholder capture image as client evidence", () => {
+    const item = enrichClientReportItem({
+      id: "manual-placeholder",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Website",
+      sourceName: "Hidayathon",
+      authorName: "Hidayathon",
+      title: "اختبار رصد هداية هاكاثون",
+      summary: "مادة اختبارية قديمة.",
+      sentiment: "neutral",
+      publishedDateText: "2026-05-20T10:30:00.000Z",
+      capturedAtText: "2026-05-20T10:31:00.000Z",
+      originalUrl: "https://hedayathon.com",
+      extractedOriginalUrl: "https://hedayathon.com",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://hedayathon.com"],
+      evidenceImagePath: "/window.svg",
+      contentImagePath: "/window.svg",
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "Manual test item",
+      imageCount: 1,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.evidenceImagePath, null);
+    assert.equal(item.contentImagePath, null);
+    assert.equal(item.screenshotStatus, "missing");
   });
 
   it("builds a legacy link backfill queue without fabricating missing original URLs", () => {

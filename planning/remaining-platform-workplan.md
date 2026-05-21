@@ -369,6 +369,10 @@ Status update - 2026-05-21:
 - Vercel Git deployment `rasd-6jev465st-samawahs-projects.vercel.app` is `Ready` and aliased to `https://rasd-gamma.vercel.app`.
 - Unauthenticated protection passed: `/api/admin/persistence` and `/api/client-report/hidayathon` return `401 auth_required`, and `/client-report` redirects to `/login?next=%2Fclient-report`.
 - Browser login reached Google sign-in, but owner-authenticated smoke testing needs the owner to complete Google login in the browser session before the client report and `/ops` workflow can be verified live.
+- Owner confirmed `/client-report` opens in their authenticated browser session and shows the redesigned `رصد هداية هاكاثون` workspace.
+- The production client report currently shows 126 items: 124 legacy archive items plus 2 live-report items.
+- A10 found an old live test item using the historical `/window.svg` placeholder capture. Code now excludes `/window.svg` from client evidence so fake screenshots are not shown.
+- Follow-up decision: remove/archive the old live test item from the customer-facing report, or keep it as a known test artifact until after the current smoke pass.
 
 ## Priority B - Needed For Efficient Operations
 

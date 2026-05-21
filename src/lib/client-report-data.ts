@@ -201,7 +201,8 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
       .select("monitoring_item_id, asset_url, captured_at")
       .in("monitoring_item_id", itemIds)
       .eq("kind", "report_grade")
-      .eq("status", "success"),
+      .eq("status", "success")
+      .order("captured_at", { ascending: true }),
   ]);
 
   if (reportsResult.error) throw reportsResult.error;
@@ -468,13 +469,21 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
   const captureDateIso = extractLegacyCaptureDateIso(item.capturedAtText);
   const originalUrl = getClientOriginalUrl(item);
   const contentUrl = getClientContentUrl(item);
+  const evidenceImagePath = openableAssetUrl(item.evidenceImagePath);
+  const contentImagePath = openableAssetUrl(item.contentImagePath);
+  const publisherProfileImagePath = openableAssetUrl(item.publisherProfileImagePath);
+  const sourceEvidenceImagePath = openableAssetUrl(item.sourceEvidenceImagePath);
   const linkStatus = getClientLinkStatus({ ...item, originalUrl, contentUrl });
-  const screenshotStatus = item.evidenceImagePath ? "available" : "missing";
+  const screenshotStatus = evidenceImagePath ? "available" : "missing";
 
   return {
     ...item,
     originalUrl,
     contentUrl,
+    evidenceImagePath,
+    contentImagePath,
+    publisherProfileImagePath,
+    sourceEvidenceImagePath,
     reportLabel:
       item.sourcePdf === "live-hidayathon"
         ? "الرصد الحي"
@@ -658,6 +667,7 @@ function isXPostUrl(value: string) {
 
 function openableAssetUrl(value: string | null | undefined) {
   if (!value || value.startsWith("legacy://")) return null;
+  if (value === "/window.svg") return null;
   return value;
 }
 
