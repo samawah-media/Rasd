@@ -17,6 +17,11 @@ import {
   normalizeSourceCreateInput,
   type SourceCreateInput,
 } from "@/server/source-validation";
+import {
+  buildRssIngestionItem,
+  fetchRssFeed,
+  type RssIngestionItem,
+} from "@/server/rss-ingestion";
 import type {
   Capture,
   CaptureKind,
@@ -76,6 +81,10 @@ type ManualUrlInput = {
   authorName?: string;
   authorHandle?: string;
   publishedAt?: string;
+};
+
+type RssIngestOptions = {
+  fetcher?: typeof fetch;
 };
 
 const items = seedItems.map((item) => ({ ...item }));
@@ -307,6 +316,23 @@ function getItemOrThrow(id: string) {
   const item = items.find((entry) => entry.id === id);
   if (!item) throw new Error("item_not_found");
   return item;
+}
+
+function getRssSourceOrThrow(sourceId: string) {
+  const source = sources.find((entry) => entry.id === sourceId);
+  if (!source) throw new Error("source_not_found");
+  if (source.type !== "rss" || !source.feedUrl) throw new Error("source_not_rss");
+  return source;
+}
+
+function findRssDuplicate(ingested: RssIngestionItem) {
+  return items.find(
+    (entry) =>
+      entry.sourceType === "rss" &&
+      (entry.originalUrl === ingested.canonicalUrl ||
+        entry.sourceItemId === ingested.item.sourceItemId ||
+        entry.dedupeKey === ingested.item.dedupeKey),
+  );
 }
 
 export const store = {
@@ -543,6 +569,65 @@ export const store = {
     sources.unshift(source);
     audit("source.created", source.id, { type: source.type });
     return source;
+  },
+
+  async ingestRssSource(sourceId: string, options: RssIngestOptions = {}) {
+    const source = getRssSourceOrThrow(sourceId);
+    const checkedAt = now();
+    source.lastCheckedAt = checkedAt;
+
+    try {
+      const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
+      let created = 0;
+      let duplicates = 0;
+      let failed = 0;
+      const createdItems: MonitoringItem[] = [];
+
+      for (const entry of feed.entries) {
+        try {
+          const ingested = buildRssIngestionItem(source, entry, checkedAt);
+          const duplicate = findRssDuplicate(ingested);
+          if (duplicate) {
+            duplicates += 1;
+            continue;
+          }
+
+          items.unshift(ingested.item);
+          createdItems.push(ingested.item);
+          created += 1;
+          audit("item.ingested", ingested.item.id, {
+            sourceType: "rss",
+            sourceId: source.id,
+            canonicalUrl: ingested.canonicalUrl,
+          });
+        } catch {
+          failed += 1;
+        }
+      }
+
+      source.lastSuccessAt = now();
+      source.lastError = undefined;
+      audit("source.rss_polled", source.id, {
+        fetched: feed.entries.length,
+        created,
+        duplicates,
+        failed,
+      });
+
+      return {
+        source,
+        feed,
+        fetched: feed.entries.length,
+        created,
+        duplicates,
+        failed,
+        items: createdItems,
+      };
+    } catch (error) {
+      source.lastError = error instanceof Error ? error.message : "rss_ingestion_failed";
+      audit("source.rss_poll_failed", source.id, { error: source.lastError });
+      throw error;
+    }
   },
 
   ingestManualUrl(input: ManualUrlInput) {

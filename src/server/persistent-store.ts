@@ -31,6 +31,11 @@ import {
   normalizeSourceCreateInput,
   type SourceCreateInput,
 } from "@/server/source-validation";
+import {
+  buildRssIngestionItem,
+  fetchRssFeed,
+  type RssIngestionItem,
+} from "@/server/rss-ingestion";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -113,6 +118,10 @@ type ManualUrlInput = {
   authorName?: string;
   authorHandle?: string;
   publishedAt?: string;
+};
+
+type RssIngestOptions = {
+  fetcher?: typeof fetch;
 };
 
 function shouldUseSupabase() {
@@ -583,6 +592,33 @@ async function getItemOrThrow(supabase: SupabaseClient, id: string) {
   return (await toItems(supabase, [data as DbItemRow]))[0];
 }
 
+async function getRssSourceOrThrow(supabase: SupabaseClient, sourceId: string) {
+  const { data, error } = await supabase.from("sources").select("*").eq("id", sourceId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("source_not_found");
+  const source = toSource(data as DbSourceRow);
+  if (source.type !== "rss" || !source.feedUrl) throw new Error("source_not_rss");
+  return source;
+}
+
+async function findSupabaseRssDuplicate(supabase: SupabaseClient, ingested: RssIngestionItem) {
+  const canonicalHash = `rss:url:${await sha256(ingested.canonicalUrlHashInput)}`;
+  const sourceItemId = `rss:item:${await sha256(ingested.sourceItemKeyInput)}`;
+  const { data, error } = await supabase
+    .from("monitoring_items")
+    .select("id")
+    .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+    .or(`canonical_url_hash.eq.${canonicalHash},source_item_id.eq.${sourceItemId}`)
+    .limit(1);
+  if (error) throw error;
+
+  return {
+    canonicalHash,
+    sourceItemId,
+    duplicate: Boolean((data ?? [])[0]),
+  };
+}
+
 export const persistentStore = {
   async health() {
     if (!shouldUseSupabase()) return store.health();
@@ -717,6 +753,108 @@ export const persistentStore = {
     if (error) throw error;
     await audit(supabase, "source.created", "source", (data as DbSourceRow).id, { type: normalized.type });
     return toSource(data as DbSourceRow);
+  },
+
+  async ingestRssSource(sourceId: string, options: RssIngestOptions = {}) {
+    if (!shouldUseSupabase()) return store.ingestRssSource(sourceId, options);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const source = await getRssSourceOrThrow(supabase, sourceId);
+    const checkedAt = now();
+
+    await supabase.from("sources").update({ last_checked_at: checkedAt }).eq("id", source.id);
+
+    try {
+      const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
+      let created = 0;
+      let duplicates = 0;
+      let failed = 0;
+      const createdItems: MonitoringItem[] = [];
+
+      for (const entry of feed.entries) {
+        try {
+          const ingested = buildRssIngestionItem(source, entry, checkedAt);
+          const duplicate = await findSupabaseRssDuplicate(supabase, ingested);
+          if (duplicate.duplicate) {
+            duplicates += 1;
+            continue;
+          }
+
+          const { data, error } = await supabase
+            .from("monitoring_items")
+            .insert({
+              organization_id: DEFAULT_ORGANIZATION_ID,
+              topic_id: DEFAULT_TOPIC_ID,
+              source_id: source.id,
+              source_type: "rss",
+              state: ingested.item.state,
+              title: ingested.item.title,
+              original_url: ingested.item.originalUrl,
+              canonical_url_hash: duplicate.canonicalHash,
+              source_item_id: duplicate.sourceItemId,
+              normalized_text_hash: await sha256(ingested.normalizedText),
+              author_name: ingested.item.authorName ?? null,
+              author_handle: ingested.item.authorHandle ?? null,
+              published_at: ingested.item.publishedAt,
+              summary: ingested.item.summary,
+              summary_source_text: ingested.item.summarySourceText,
+              sentiment: ingested.item.sentiment,
+              sentiment_confidence: ingested.item.sentimentConfidence,
+              relevance_score: ingested.item.relevanceScore,
+              relevance_reason: ingested.item.relevanceReason,
+              matched_terms: ingested.item.matchedTerms,
+              raw_response: ingested.rawResponse,
+              warning: ingested.item.warning ?? null,
+            })
+            .select("*, sources(name)")
+            .single();
+          if (error) throw error;
+
+          const item = (await toItems(supabase, [data as DbItemRow]))[0];
+          createdItems.push(item);
+          created += 1;
+          await audit(supabase, "item.ingested", "monitoring_item", item.id, {
+            sourceType: "rss",
+            sourceId: source.id,
+            canonicalUrl: ingested.canonicalUrl,
+          });
+        } catch {
+          failed += 1;
+        }
+      }
+
+      const successAt = now();
+      await supabase
+        .from("sources")
+        .update({ last_success_at: successAt, last_error: null })
+        .eq("id", source.id);
+      await audit(supabase, "source.rss_polled", "source", source.id, {
+        fetched: feed.entries.length,
+        created,
+        duplicates,
+        failed,
+      });
+
+      return {
+        source: {
+          ...source,
+          lastCheckedAt: checkedAt,
+          lastSuccessAt: successAt,
+          lastError: undefined,
+        },
+        feed,
+        fetched: feed.entries.length,
+        created,
+        duplicates,
+        failed,
+        items: createdItems,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "rss_ingestion_failed";
+      await supabase.from("sources").update({ last_error: message }).eq("id", source.id);
+      await audit(supabase, "source.rss_poll_failed", "source", source.id, { error: message });
+      throw error;
+    }
   },
 
   async ingestManualUrl(input: ManualUrlInput) {

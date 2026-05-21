@@ -494,14 +494,16 @@ Detailed execution plan: [priority-c-real-source-integrations-plan.md](priority-
 
 ### C1. RSS/News Sources
 
-Status: C1.0 source registry foundation completed on 2026-05-21. Next: C1.1 RSS fetch and normalize.
+Status: C1.0 and C1.1 completed on 2026-05-21. Next: C1.2 manual admin polling.
 
 - [x] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
 - [x] Use the existing `source_credibility` enum instead of adding a second reliability model.
 - [x] Add public `feed_url` validation before any fetch attempt.
 - [x] Extend source types and persistent mapping for polling fields.
-- [ ] Build RSS fetch/normalize utility with safe URL checks and timeout.
-- [ ] Dedupe by canonical URL and source item ID.
+- [x] Build RSS fetch/normalize utility with safe URL checks and timeout.
+- [x] Normalize RSS entries into review-ready monitoring items while preserving compact raw metadata.
+- [x] Dedupe by canonical URL and source item ID.
+- [x] Add RSS parsing, malformed feed, missing field, and duplicate ingestion tests.
 - [ ] Add owner/editor manual polling endpoint before scheduled cron.
 - [ ] Add scheduled cron only after confirming Vercel plan limits and `CRON_SECRET`.
 - [ ] Keep initial official/media items in review flow; avoid broad auto-approve until real QA passes.

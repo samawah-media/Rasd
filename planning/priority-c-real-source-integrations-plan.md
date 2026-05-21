@@ -163,17 +163,24 @@ Outcome: the server can fetch one configured RSS feed and normalize entries into
 
 Tasks:
 
-- [ ] Add RSS parser utility with timeout and safe URL checks.
-- [ ] Normalize RSS fields into existing `MonitoringItem` shape.
-- [ ] Store RSS source metadata in `raw_response`.
-- [ ] Dedupe by canonical URL and source item ID.
-- [ ] Add tests for RSS item parsing, date extraction, duplicate handling, and malformed feeds.
+- [x] Add RSS parser utility with timeout and safe URL checks.
+- [x] Normalize RSS fields into existing `MonitoringItem` shape.
+- [x] Store RSS source metadata in `raw_response`.
+- [x] Dedupe by canonical URL and source item ID.
+- [x] Add tests for RSS item parsing, date extraction, duplicate handling, and malformed feeds.
 
 Acceptance checks:
 
-- A test RSS feed creates items once.
-- Re-running the same feed does not duplicate items.
-- Missing title/date/image does not crash ingestion.
+- [x] A test RSS feed creates items once.
+- [x] Re-running the same feed does not duplicate items.
+- [x] Missing title/date/image does not crash ingestion.
+
+Implementation notes:
+
+- RSS parsing uses `rss-parser` behind `src/server/rss-ingestion.ts`.
+- `store.ingestRssSource` and `persistentStore.ingestRssSource` can ingest one configured RSS source.
+- Created RSS items enter the review workflow, not the live client report automatically.
+- Manual UI/API triggering remains in Phase C1.2.
 
 ## Phase C1.2 - Manual Admin Polling
 
