@@ -525,9 +525,10 @@ api.post("/items/manual-url", async (c) => {
     providedTitle && providedText && providedAuthorName
       ? null
       : await fetchUrlMetadata(url);
+  const intakeUrl = metadata?.canonicalUrl ?? url;
 
   const result = await persistentStore.ingestManualUrl({
-    url,
+    url: intakeUrl,
     title: providedTitle ?? metadata?.title,
     text: providedText ?? metadata?.text,
     authorName: providedAuthorName ?? metadata?.authorName,
@@ -586,6 +587,37 @@ api.post("/items/:id/review", async (c) => {
     return c.json(withRequestId(c, result));
   } catch {
     return c.json(withRequestId(c, { error: "item_not_found" }), 404);
+  }
+});
+
+api.patch("/items/:id", async (c) => {
+  const body = await readJson(c);
+  const originalUrl = optionalString(body.original_url, body.originalUrl);
+  if (originalUrl && !isSafePublicHttpUrl(originalUrl)) {
+    return c.json(withRequestId(c, { error: "original_url_not_public" }), 400);
+  }
+
+  try {
+    const result = await persistentStore.updateItem(c.req.param("id"), {
+      title: optionalString(body.title),
+      summary: optionalString(body.summary, body.text),
+      authorName: optionalString(body.author_name, body.authorName),
+      authorHandle: typeof body.author_handle === "string" ? body.author_handle : typeof body.authorHandle === "string" ? body.authorHandle : undefined,
+      publishedAt: optionalString(body.published_at, body.publishedAt),
+      originalUrl,
+    });
+    return c.json(withRequestId(c, result));
+  } catch (error) {
+    if (error instanceof Error && error.message === "item_not_found") {
+      return c.json(withRequestId(c, { error: "item_not_found" }), 404);
+    }
+    if (error instanceof Error && error.message === "published_at_invalid") {
+      return c.json(withRequestId(c, { error: "published_at must be a valid date" }), 400);
+    }
+    if (error instanceof Error && error.message === "original_url_not_public") {
+      return c.json(withRequestId(c, { error: "original_url_not_public" }), 400);
+    }
+    throw error;
   }
 });
 

@@ -540,16 +540,37 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(inserted.json.ok, true);
     assert.equal(inserted.json.reportItem.itemId, manual.json.item.id);
 
+    const corrected = await requestJson(`/api/items/${manual.json.item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        title: "عنوان محرر لرصد هاكاثون هداية",
+        summary: "ملخص محرر يظهر للعميل بعد تصحيح بيانات المادة من الأدمن.",
+        author_name: "ناشر محرر",
+        author_handle: "@edited_source",
+        published_at: "2026-05-21T07:15:00.000Z",
+        original_url: "https://x.com/Hidayathon/status/123456790?utm_source=edit",
+      }),
+    });
+
+    assert.equal(corrected.response.status, 200);
+    assert.deepEqual(
+      new Set(corrected.json.changed),
+      new Set(["title", "summary", "authorName", "authorHandle", "publishedAt", "originalUrl"]),
+    );
+    assert.equal(corrected.json.item.title, "عنوان محرر لرصد هاكاثون هداية");
+    assert.equal(corrected.json.item.originalUrl, "https://x.com/Hidayathon/status/123456790");
+
     const clientReport = await requestJson("/api/client-report/hidayathon");
     const manualReportItem = clientReport.json.report.items.find((item: { id: string }) => item.id === manual.json.item.id);
 
     assert.equal(clientReport.response.status, 200);
     assert.equal(clientReport.json.report.summary.items, 125);
-    assert.equal(manualReportItem.title, "متابعة هاكاثون هداية عبر اختبار API");
-    assert.equal(manualReportItem.authorName, "فريق اختبار رصد");
+    assert.equal(manualReportItem.title, "عنوان محرر لرصد هاكاثون هداية");
+    assert.equal(manualReportItem.summary, "ملخص محرر يظهر للعميل بعد تصحيح بيانات المادة من الأدمن.");
+    assert.equal(manualReportItem.authorName, "ناشر محرر");
     assert.equal(manualReportItem.platform, "X");
     assert.equal(manualReportItem.reportLabel, "الرصد الحي");
-    assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456789");
+    assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456790");
     assert.equal(manualReportItem.linkStatus, "openable");
     assert.equal(manualReportItem.screenshotStatus, "available");
     assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);

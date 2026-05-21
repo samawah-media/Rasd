@@ -6,6 +6,8 @@ export type UrlMetadata = {
   authorName?: string;
   authorHandle?: string;
   publishedAt?: string;
+  canonicalUrl?: string;
+  imageUrl?: string;
   platform: "X" | "Website" | "Unknown";
   source: "x_oembed" | "html_metadata" | "url_only";
   warning?: string;
@@ -146,6 +148,7 @@ async function fetchXMetadata(url: string, fetcher: FetchLike): Promise<UrlMetad
     authorName: cleanText(data.author_name),
     authorHandle,
     publishedAt: publishedAtFromXEmbed(html),
+    canonicalUrl,
     platform: "X",
     source: "x_oembed",
   };
@@ -180,9 +183,22 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   const publishedAt = isoDate(
     firstPresent(
       metaContent(html, "property", "article:published_time"),
+      metaContent(html, "property", "og:published_time"),
       metaContent(html, "name", "date"),
       metaContent(html, "name", "pubdate"),
+      metaContent(html, "name", "publishdate"),
+      metaContent(html, "name", "DC.date.issued"),
+      metaContent(html, "itemprop", "datePublished"),
     ),
+  );
+  const canonicalUrl = firstSafePublicUrl(linkHref(html, "canonical"), url);
+  const imageUrl = firstSafePublicUrl(
+    firstPresent(
+      metaContent(html, "property", "og:image"),
+      metaContent(html, "name", "twitter:image"),
+      metaContent(html, "property", "twitter:image"),
+    ),
+    url,
   );
 
   return {
@@ -190,6 +206,8 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
     text: description ?? title ?? url,
     authorName,
     publishedAt,
+    canonicalUrl,
+    imageUrl,
     platform: "Website",
     source: "html_metadata",
   };
@@ -217,7 +235,7 @@ function tagContent(html: string, tagName: string) {
   return match ? htmlToText(match[1]) : null;
 }
 
-function metaContent(html: string, attr: "name" | "property", value: string) {
+function metaContent(html: string, attr: "name" | "property" | "itemprop", value: string) {
   const escaped = escapeRegex(value);
   const pattern = new RegExp(
     `<meta\\b(?=[^>]*\\b${attr}=["']${escaped}["'])(?=[^>]*\\bcontent=["']([^"']*)["'])[^>]*>`,
@@ -225,6 +243,26 @@ function metaContent(html: string, attr: "name" | "property", value: string) {
   );
   const match = html.match(pattern);
   return match ? decodeHtml(match[1]).trim() || null : null;
+}
+
+function linkHref(html: string, rel: string) {
+  const escaped = escapeRegex(rel);
+  const pattern = new RegExp(
+    `<link\\b(?=[^>]*\\brel=["'][^"']*\\b${escaped}\\b[^"']*["'])(?=[^>]*\\bhref=["']([^"']*)["'])[^>]*>`,
+    "iu",
+  );
+  const match = html.match(pattern);
+  return match ? decodeHtml(match[1]).trim() || null : null;
+}
+
+function firstSafePublicUrl(value: string | null | undefined, baseUrl: string) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value, baseUrl).toString();
+    return isSafePublicHttpUrl(url) ? url : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function htmlToText(value: string) {

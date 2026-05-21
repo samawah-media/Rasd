@@ -86,6 +86,15 @@ type ManualUrlInput = {
   publishedAt?: string;
 };
 
+type ItemCorrectionInput = {
+  title?: string;
+  summary?: string;
+  authorName?: string;
+  authorHandle?: string;
+  publishedAt?: string;
+  originalUrl?: string;
+};
+
 type RssIngestOptions = {
   fetcher?: typeof fetch;
 };
@@ -794,6 +803,72 @@ export const store = {
     });
 
     return { item, auditLog: event };
+  },
+
+  updateItem(id: string, input: ItemCorrectionInput) {
+    const item = getItemOrThrow(id);
+    const previous = {
+      title: item.title,
+      summary: item.summary,
+      authorName: item.authorName,
+      authorHandle: item.authorHandle,
+      publishedAt: item.publishedAt,
+      originalUrl: item.originalUrl,
+    };
+    const changed: string[] = [];
+
+    if (typeof input.title === "string" && input.title.trim() && input.title.trim() !== item.title) {
+      item.title = input.title.trim();
+      changed.push("title");
+    }
+    if (typeof input.summary === "string" && input.summary.trim() && input.summary.trim() !== item.summary) {
+      item.summary = input.summary.trim();
+      item.summarySourceText = input.summary.trim();
+      changed.push("summary");
+    }
+    if (typeof input.authorName === "string" && input.authorName.trim() && input.authorName.trim() !== item.authorName) {
+      item.authorName = input.authorName.trim();
+      changed.push("authorName");
+    }
+    if (typeof input.authorHandle === "string") {
+      const nextHandle = input.authorHandle.trim() || undefined;
+      if (nextHandle !== item.authorHandle) {
+        item.authorHandle = nextHandle;
+        changed.push("authorHandle");
+      }
+    }
+    if (typeof input.publishedAt === "string" && input.publishedAt.trim()) {
+      const timestamp = Date.parse(input.publishedAt);
+      if (!Number.isNaN(timestamp)) {
+        const nextPublishedAt = new Date(timestamp).toISOString();
+        if (nextPublishedAt !== item.publishedAt) {
+          item.publishedAt = nextPublishedAt;
+          changed.push("publishedAt");
+        }
+      }
+    }
+    if (typeof input.originalUrl === "string" && input.originalUrl.trim()) {
+      const canonicalUrl = canonicalizeUrl(input.originalUrl.trim());
+      if (isSafePublicHttpUrl(canonicalUrl) && canonicalUrl !== item.originalUrl) {
+        item.originalUrl = canonicalUrl;
+        changed.push("originalUrl");
+      }
+    }
+
+    if (changed.length) {
+      const match = explainKeywordMatch(`${item.title} ${item.summary} ${item.originalUrl}`, keywordRules[0]);
+      item.relevanceScore = match.score;
+      item.relevanceReason = match.reason;
+      item.matchedTerms = match.matchedTerms;
+      item.sentiment = estimateSentiment(match.score);
+      item.sentimentConfidence = Math.max(50, Math.min(95, match.score));
+    }
+
+    const auditLog = audit("item.corrected", item.id, {
+      changed,
+      previous,
+    });
+    return { item, auditLog, changed };
   },
 
   mergeItem(id: string, targetId?: string) {

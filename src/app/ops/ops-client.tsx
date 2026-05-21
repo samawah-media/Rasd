@@ -222,6 +222,13 @@ function formatDate(value: string) {
   });
 }
 
+function formatDateTimeLocal(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 function messageClass(type: MessageType) {
   if (type === "error") return "border-[#f1b6aa] bg-[#fff1ed] text-[#8f321d]";
   if (type === "warning") return "border-[#eed478] bg-[#fff8dc] text-[#735d00]";
@@ -473,6 +480,29 @@ export function OpsClient() {
     } finally {
       setPending(null);
     }
+  }
+
+  async function saveItemEdits(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedItem) return;
+    const formData = new FormData(event.currentTarget);
+
+    return runItemAction(
+      `edit-${selectedItem.id}`,
+      () =>
+        apiJson(`/api/items/${selectedItem.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: String(formData.get("title") ?? ""),
+            summary: String(formData.get("summary") ?? ""),
+            author_name: String(formData.get("author_name") ?? ""),
+            author_handle: String(formData.get("author_handle") ?? ""),
+            published_at: String(formData.get("published_at") ?? "") || undefined,
+            original_url: String(formData.get("original_url") ?? ""),
+          }),
+        }),
+      "تم تحديث بيانات المادة.",
+    );
   }
 
   async function submitRssSource(event: FormEvent<HTMLFormElement>) {
@@ -1173,6 +1203,76 @@ export function OpsClient() {
                 </div>
 
                 <p className="mt-4 text-sm leading-7 text-[#4f5a55]">{selectedItem.summary}</p>
+
+                <details className="mt-4 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] p-3">
+                  <summary className="cursor-pointer text-sm font-bold text-[#17201d]">تعديل بيانات المادة</summary>
+                  <form key={selectedItem.id} onSubmit={saveItemEdits} className="mt-3 grid gap-3">
+                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                      العنوان
+                      <input
+                        name="title"
+                        defaultValue={selectedItem.title}
+                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
+                        required
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                      الملخص
+                      <textarea
+                        name="summary"
+                        defaultValue={selectedItem.summary}
+                        className="min-h-24 rounded-lg border border-[#dfe3d9] bg-white p-3 text-sm font-semibold leading-6 text-[#17201d] outline-none focus:border-[#116a5c]"
+                        required
+                      />
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                        الناشر
+                        <input
+                          name="author_name"
+                          defaultValue={selectedItem.authorName ?? ""}
+                          className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                        المعرف
+                        <input
+                          name="author_handle"
+                          defaultValue={selectedItem.authorHandle ?? ""}
+                          className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-left text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
+                          dir="ltr"
+                        />
+                      </label>
+                    </div>
+                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                      التاريخ
+                      <input
+                        name="published_at"
+                        defaultValue={formatDateTimeLocal(selectedItem.publishedAt)}
+                        type="datetime-local"
+                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs font-bold text-[#52605a]">
+                      الرابط الأصلي
+                      <input
+                        name="original_url"
+                        defaultValue={selectedItem.originalUrl}
+                        className="h-10 rounded-lg border border-[#dfe3d9] bg-white px-3 text-left text-sm font-semibold text-[#17201d] outline-none focus:border-[#116a5c]"
+                        dir="ltr"
+                        required
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={pending !== null}
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-bold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+                    >
+                      {pending === `edit-${selectedItem.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      حفظ التعديل
+                    </button>
+                  </form>
+                </details>
 
                 <dl className="mt-5 grid gap-3 text-sm">
                   <Info label="الناشر" value={selectedItem.authorHandle || selectedItem.authorName || selectedItem.sourceName} />

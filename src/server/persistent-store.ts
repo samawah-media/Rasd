@@ -136,6 +136,15 @@ type ManualUrlInput = {
   publishedAt?: string;
 };
 
+type ItemCorrectionInput = {
+  title?: string;
+  summary?: string;
+  authorName?: string;
+  authorHandle?: string;
+  publishedAt?: string;
+  originalUrl?: string;
+};
+
 type RssIngestOptions = {
   fetcher?: typeof fetch;
 };
@@ -1177,6 +1186,154 @@ export const persistentStore = {
       nextState,
     });
     return { item, auditLog };
+  },
+
+  async updateItem(id: string, input: ItemCorrectionInput) {
+    if (!shouldUseSupabase()) return store.updateItem(id, input);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const { data: currentRow, error: currentError } = await supabase
+      .from("monitoring_items")
+      .select("*, sources(name)")
+      .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+      .eq("id", id)
+      .maybeSingle();
+    if (currentError) throw currentError;
+    if (!currentRow) throw new Error("item_not_found");
+
+    const row = currentRow as DbItemRow;
+    const previous = {
+      title: row.title,
+      summary: row.summary,
+      authorName: row.author_name,
+      authorHandle: row.author_handle,
+      publishedAt: row.published_at,
+      originalUrl: row.original_url,
+    };
+    const patch: DbRow = {};
+    const changed: string[] = [];
+
+    if (typeof input.title === "string" && input.title.trim() && input.title.trim() !== row.title) {
+      patch.title = input.title.trim();
+      changed.push("title");
+    }
+    if (typeof input.summary === "string" && input.summary.trim() && input.summary.trim() !== row.summary) {
+      patch.summary = input.summary.trim();
+      patch.summary_source_text = input.summary.trim();
+      patch.normalized_text_hash = await sha256(input.summary.trim());
+      changed.push("summary");
+    }
+    if (typeof input.authorName === "string" && input.authorName.trim() && input.authorName.trim() !== row.author_name) {
+      patch.author_name = input.authorName.trim();
+      changed.push("authorName");
+    }
+    if (typeof input.authorHandle === "string") {
+      const nextHandle = input.authorHandle.trim() || null;
+      if (nextHandle !== row.author_handle) {
+        patch.author_handle = nextHandle;
+        changed.push("authorHandle");
+      }
+    }
+    if (typeof input.publishedAt === "string" && input.publishedAt.trim()) {
+      const timestamp = Date.parse(input.publishedAt);
+      if (Number.isNaN(timestamp)) throw new Error("published_at_invalid");
+      const nextPublishedAt = new Date(timestamp).toISOString();
+      if (nextPublishedAt !== row.published_at) {
+        patch.published_at = nextPublishedAt;
+        changed.push("publishedAt");
+      }
+    }
+    if (typeof input.originalUrl === "string" && input.originalUrl.trim()) {
+      const canonicalUrl = canonicalizeUrl(input.originalUrl.trim());
+      if (!isSafePublicHttpUrl(canonicalUrl)) throw new Error("original_url_not_public");
+      if (canonicalUrl !== row.original_url) {
+        patch.original_url = canonicalUrl;
+        patch.canonical_url_hash = `${row.source_type}:editor:${await sha256(canonicalUrl)}`;
+        patch.source_item_id = patch.canonical_url_hash;
+        changed.push("originalUrl");
+      }
+    }
+
+    const nextTitle = String(patch.title ?? row.title ?? "");
+    const nextSummary = String(patch.summary ?? row.summary ?? "");
+    const nextUrl = String(patch.original_url ?? row.original_url);
+    if (changed.length) {
+      const match = explainKeywordMatch(`${nextTitle} ${nextSummary} ${nextUrl}`, keywordRules[0]);
+      patch.relevance_score = match.score;
+      patch.relevance_reason = match.reason;
+      patch.matched_terms = match.matchedTerms;
+      patch.sentiment = estimateSentiment(match.score);
+      patch.sentiment_confidence = Math.max(50, Math.min(95, match.score));
+      patch.raw_response = {
+        ...rawObject(row.raw_response),
+        sourcePdf: rawObject(row.raw_response).sourcePdf ?? "live-hidayathon",
+        platform: rawObject(row.raw_response).platform ?? platformFromUrl(nextUrl),
+        publishedDateText: String(patch.published_at ?? row.published_at ?? now()),
+        extractedUrls: Array.from(new Set([nextUrl, row.original_url].filter(Boolean))),
+        editorCorrections: [
+          ...((rawObject(row.raw_response).editorCorrections as unknown[]) ?? []),
+          {
+            correctedAt: now(),
+            changed,
+            previous,
+            next: {
+              title: patch.title ?? row.title,
+              summary: patch.summary ?? row.summary,
+              authorName: patch.author_name ?? row.author_name,
+              authorHandle: patch.author_handle ?? row.author_handle,
+              publishedAt: patch.published_at ?? row.published_at,
+              originalUrl: patch.original_url ?? row.original_url,
+            },
+          },
+        ],
+      };
+    }
+
+    if (!changed.length) {
+      const item = (await toItems(supabase, [row]))[0];
+      const auditLog = await audit(supabase, "item.corrected", "monitoring_item", item.id, { changed });
+      return { item, auditLog, changed };
+    }
+
+    const { data, error } = await supabase
+      .from("monitoring_items")
+      .update(patch)
+      .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+      .eq("id", id)
+      .select("*, sources(name)")
+      .single();
+    if (error) throw error;
+
+    const item = (await toItems(supabase, [data as DbItemRow]))[0];
+    const { data: reportRows, error: reportRowsError } = await supabase
+      .from("report_items")
+      .select("id, card_data")
+      .eq("monitoring_item_id", id);
+    if (reportRowsError) throw reportRowsError;
+
+    for (const reportItem of (reportRows ?? []) as Array<{ id: string; card_data: Record<string, unknown> | null }>) {
+      const { error: reportUpdateError } = await supabase
+        .from("report_items")
+        .update({
+          card_data: {
+            ...(reportItem.card_data ?? {}),
+            title: item.title,
+            summary: item.summary,
+            sentiment: item.sentiment,
+            original_url: item.originalUrl,
+            source_name: item.authorName ?? item.sourceName,
+          },
+        })
+        .eq("id", reportItem.id);
+      if (reportUpdateError) throw reportUpdateError;
+    }
+
+    const auditLog = await audit(supabase, "item.corrected", "monitoring_item", item.id, {
+      changed,
+      previous,
+    });
+    return { item, auditLog, changed };
   },
 
   async mergeItem(id: string, targetId?: string) {

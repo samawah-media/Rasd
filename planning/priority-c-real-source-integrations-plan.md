@@ -247,15 +247,15 @@ Outcome: manual URL extraction has clear internal vs client-safe fields.
 
 Tasks:
 
-- [ ] Define a compact `ExtractionResult` type.
-- [ ] Keep client-safe fields on `monitoring_items`.
-- [ ] Keep internal extraction details in `raw_response`.
-- [ ] Add tests that raw fields do not appear in `/client-report` or PDF export.
+- [x] Keep client-safe fields on `monitoring_items`.
+- [x] Keep internal correction details in `raw_response.editorCorrections`.
+- [x] Add tests that corrected client-safe fields appear in `/client-report` after report insertion.
+- [ ] Define a fuller compact `ExtractionResult` type before Readability work.
 
 Acceptance checks:
 
-- Client report stays clean.
-- Admin review can inspect extraction warnings.
+- [x] Client report stays clean and reads corrected client-safe fields.
+- [x] Admin review can edit the client-safe fields without exposing raw extraction fields to viewers.
 
 ## Phase C2.1 - Article Metadata Improvements
 
@@ -263,17 +263,17 @@ Outcome: public article URLs extract better title, summary, author, date, image,
 
 Tasks:
 
-- [ ] Improve `src/server/url-metadata.ts` with canonical URL and image extraction.
-- [ ] Add common Arabic/news meta tags.
+- [x] Improve `src/server/url-metadata.ts` with canonical URL and image extraction.
+- [x] Add common news meta tags for published date.
 - [ ] Add publisher/source fallback from URL hostname.
-- [ ] Add tests for Saudi/news article samples.
-- [ ] Keep X oEmbed behavior unchanged.
+- [x] Add deterministic metadata tests for article canonical URL, image, and publish date.
+- [x] Keep X oEmbed behavior unchanged.
 
 Acceptance checks:
 
-- Website URLs produce useful title/summary/date when metadata exists.
-- X URLs continue to produce tweet metadata.
-- Private/internal URLs remain blocked.
+- [x] Website URLs produce useful title/summary/date when metadata exists.
+- [x] X URLs continue to produce tweet metadata.
+- [x] Private/internal URLs remain blocked.
 
 ## Phase C2.2 - Editor Correction
 
@@ -281,18 +281,18 @@ Outcome: editor can fix extracted article fields before approval.
 
 Tasks:
 
-- [ ] Add `PATCH /api/items/:id` for owner/editor field corrections.
-- [ ] Allow corrections for title, summary, author, date, and original URL.
-- [ ] Validate URLs and dates.
-- [ ] Preserve previous/extracted values in `raw_response`.
-- [ ] Add audit log entries for corrections.
-- [ ] Add inline edit controls to the review detail UI.
+- [x] Add `PATCH /api/items/:id` for owner/editor field corrections.
+- [x] Allow corrections for title, summary, author, date, and original URL.
+- [x] Validate URLs and dates.
+- [x] Preserve previous/extracted values in `raw_response.editorCorrections` for Supabase-backed items.
+- [x] Add audit log entries for corrections.
+- [x] Add inline edit controls to the review detail UI.
 
 Acceptance checks:
 
-- Corrected fields appear in `/ops` and `/client-report` after approval/report insertion.
-- Viewer cannot edit.
-- Invalid URL/date corrections are rejected.
+- [x] Corrected fields appear in `/ops` and `/client-report` after approval/report insertion.
+- [x] Viewer cannot edit because `/api/items/*` remains owner/editor-only.
+- [x] Invalid URL/date corrections are rejected.
 
 ## Phase C2.3 - Readability Extraction
 

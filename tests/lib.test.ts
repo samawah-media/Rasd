@@ -248,12 +248,13 @@ describe("connector and budget utilities", () => {
     assert.equal(metadata.authorHandle, "@Hidayathon");
     assert.equal(metadata.text, "تجربة رصد جديدة لهاكاثون هداية & متابعة التفاعل.");
     assert.equal(metadata.publishedAt, "2026-05-20T00:00:00.000Z");
+    assert.equal(metadata.canonicalUrl, "https://x.com/Hidayathon/status/123456789");
   });
 
-  it("extracts webpage title and description metadata for manual URL intake", async () => {
+  it("extracts webpage title, image, canonical URL, and date metadata for manual URL intake", async () => {
     const metadata = await fetchUrlMetadata("https://example.com/news/hidayathon", async () => {
       return new Response(
-        '<html><head><title>خبر هداية</title><meta name="description" content="متابعة إعلامية لهاكاثون هداية"><meta name="author" content="فريق الأخبار"></head></html>',
+        '<html><head><title>خبر هداية</title><link rel="canonical" href="/canonical-hidayathon"><meta name="description" content="متابعة إعلامية لهاكاثون هداية"><meta name="author" content="فريق الأخبار"><meta property="og:image" content="/image.jpg"><meta itemprop="datePublished" content="2026-05-21T09:30:00+03:00"></head></html>',
         { status: 200, headers: { "content-type": "text/html" } },
       );
     });
@@ -263,6 +264,9 @@ describe("connector and budget utilities", () => {
     assert.equal(metadata.title, "خبر هداية");
     assert.equal(metadata.text, "متابعة إعلامية لهاكاثون هداية");
     assert.equal(metadata.authorName, "فريق الأخبار");
+    assert.equal(metadata.canonicalUrl, "https://example.com/canonical-hidayathon");
+    assert.equal(metadata.imageUrl, "https://example.com/image.jpg");
+    assert.equal(metadata.publishedAt, "2026-05-21T06:30:00.000Z");
   });
 
   it("blocks private or credentialed URLs before server-side metadata fetching", () => {
