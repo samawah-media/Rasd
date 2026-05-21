@@ -296,6 +296,22 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manualReportItem.linkStatus, "openable");
     assert.equal(manualReportItem.screenshotStatus, "available");
     assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);
+
+    const archived = await requestJson(`/api/items/${manual.json.item.id}/archive`, {
+      method: "POST",
+      body: JSON.stringify({ reason: "bad test item" }),
+    });
+
+    assert.equal(archived.response.status, 200);
+    assert.equal(archived.json.item.state, "archived");
+    assert.equal(archived.json.removedReportItems, 1);
+
+    const clientReportAfterArchive = await requestJson("/api/client-report/hidayathon");
+    const archivedReportItem = clientReportAfterArchive.json.report.items.find((item: { id: string }) => item.id === manual.json.item.id);
+
+    assert.equal(clientReportAfterArchive.response.status, 200);
+    assert.equal(clientReportAfterArchive.json.report.summary.items, 124);
+    assert.equal(archivedReportItem, undefined);
   });
 
   it("preserves warning gates for failed captures", async () => {

@@ -891,6 +891,35 @@ export const persistentStore = {
     return { item, auditLog };
   },
 
+  async archiveItem(id: string, reason?: string) {
+    if (!shouldUseSupabase()) return store.archiveItem(id, reason);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    await getItemOrThrow(supabase, id);
+
+    const { count, error: reportDeleteError } = await supabase
+      .from("report_items")
+      .delete({ count: "exact" })
+      .eq("monitoring_item_id", id);
+    if (reportDeleteError) throw reportDeleteError;
+
+    const archiveReason = reason ?? "تمت أرشفة المادة من صفحة التشغيل.";
+    const { data, error } = await supabase
+      .from("monitoring_items")
+      .update({ state: "archived", warning: archiveReason })
+      .eq("id", id)
+      .select("*, sources(name)")
+      .single();
+    if (error) throw error;
+
+    const item = (await toItems(supabase, [data as DbItemRow]))[0];
+    const auditLog = await audit(supabase, "item.archived", "monitoring_item", item.id, {
+      reason: reason ?? null,
+      removedReportItems: count ?? 0,
+    });
+    return { item, auditLog, removedReportItems: count ?? 0 };
+  },
+
   async requestCapture(id: string, kind: Exclude<CaptureKind, "evidence_lite">, shouldFail = false) {
     if (!shouldUseSupabase()) return store.requestCapture(id, kind, shouldFail);
     const supabase = getSupabaseAdmin();

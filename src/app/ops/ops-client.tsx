@@ -54,6 +54,7 @@ const arabicApiErrors: Record<string, string> = {
   report_not_found: "التقرير غير موجود.",
   budget_exceeded: "تم تجاوز حد الاستخدام المسموح.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
+  archive_failed: "تعذرت أرشفة المادة.",
 };
 
 const tabLabels: Record<WorkTab, string> = {
@@ -410,6 +411,21 @@ export function OpsClient() {
     );
   }
 
+  function archiveItem(item: MonitoringItem) {
+    const confirmed = window.confirm("أرشفة هذه المادة؟ ستختفي من صفحة التشغيل وتقرير العميل بدون حذف نهائي.");
+    if (!confirmed) return undefined;
+
+    return runItemAction(
+      `archive-${item.id}`,
+      () =>
+        apiJson(`/api/items/${item.id}/archive`, {
+          method: "POST",
+          body: JSON.stringify({ reason: "أرشفة من صفحة التشغيل." }),
+        }),
+      "تمت أرشفة المادة وإزالتها من التقرير.",
+    );
+  }
+
   function primaryAction(item: MonitoringItem) {
     if (item.state === "needs_review" || item.state === "candidate") {
       return (
@@ -667,6 +683,15 @@ export function OpsClient() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {primaryAction(selectedItem)}
+                  <button
+                    type="button"
+                    onClick={() => archiveItem(selectedItem)}
+                    disabled={pending !== null}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-sm font-semibold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
+                  >
+                    <Archive className="h-4 w-4" />
+                    أرشفة
+                  </button>
                   {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
                     <button
                       type="button"

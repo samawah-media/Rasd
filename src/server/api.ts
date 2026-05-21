@@ -368,6 +368,16 @@ api.post("/items/:id/merge", async (c) => {
   }
 });
 
+api.post("/items/:id/archive", async (c) => {
+  const body = await readJson(c);
+  try {
+    const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined;
+    return c.json(withRequestId(c, await persistentStore.archiveItem(c.req.param("id"), reason)));
+  } catch {
+    return c.json(withRequestId(c, { error: "item_not_found" }), 404);
+  }
+});
+
 api.post("/items/:id/capture-preview", async (c) => {
   const body = await readJson(c);
   try {

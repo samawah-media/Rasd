@@ -68,6 +68,7 @@ type DbMonitoringItemRow = {
   source_id: string | null;
   external_id: string | null;
   source_type: string;
+  state: string | null;
   title: string | null;
   original_url: string;
   original_url_extracted: string | null;
@@ -193,7 +194,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
     supabase
       .from("monitoring_items")
       .select(
-        "id, source_id, external_id, source_type, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
+        "id, source_id, external_id, source_type, state, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
       )
       .in("id", itemIds),
     supabase
@@ -209,7 +210,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
   if (itemsResult.error) throw itemsResult.error;
   if (capturesResult.error) throw capturesResult.error;
 
-  const itemRows = (itemsResult.data ?? []) as DbMonitoringItemRow[];
+  const itemRows = ((itemsResult.data ?? []) as DbMonitoringItemRow[]).filter((row) => row.state !== "archived");
   const sourceIds = unique(itemRows.map((row) => row.source_id).filter((id): id is string => Boolean(id)));
   const sources = new Map<string, string>();
 
@@ -255,7 +256,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
         report.organization_id === DEFAULT_ORGANIZATION_ID
           ? "live-hidayathon"
           : firstSourcePdfByReportId.get(report.id) ?? report.id,
-      count: reportItemRows.filter((link) => link.report_id === report.id).length,
+      count: reportItemRows.filter((link) => link.report_id === report.id && itemsById.has(link.monitoring_item_id)).length,
     }));
 
   return buildClientReportData(clientItems, reportSummaries);
@@ -271,7 +272,7 @@ function getLocalLiveClientReportItems() {
     links.forEach((link, index) => {
       if (link.itemId.startsWith("legacy-item-")) return;
       const item = itemsById.get(link.itemId);
-      if (!item) return;
+      if (!item || item.state === "archived") return;
       const capture = store
         .listCaptures(item.id)
         .find((entry) => entry.kind === "report_grade" && entry.status === "success");
@@ -286,9 +287,13 @@ function getLocalLiveReportSummaries() {
   return store
     .listReports()
     .map((report) => {
+      const itemsById = new Map(store.listItems().map((item) => [item.id, item]));
       const count = store
         .listReportItems(report.id)
-        .filter((link) => !link.itemId.startsWith("legacy-item-")).length;
+        .filter((link) => {
+          if (link.itemId.startsWith("legacy-item-")) return false;
+          return itemsById.get(link.itemId)?.state !== "archived";
+        }).length;
       return {
         issue: null,
         label: "الرصد الحي",

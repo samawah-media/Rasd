@@ -625,6 +625,18 @@ export const store = {
     return { item, auditLog: event };
   },
 
+  archiveItem(id: string, reason?: string) {
+    const item = getItemOrThrow(id);
+    const removedReportItems = reportItems.filter((entry) => entry.itemId === id).length;
+    for (let index = reportItems.length - 1; index >= 0; index -= 1) {
+      if (reportItems[index].itemId === id) reportItems.splice(index, 1);
+    }
+    item.state = "archived";
+    item.warning = reason ?? "تمت أرشفة المادة من صفحة التشغيل.";
+    const event = audit("item.archived", item.id, { reason: reason ?? null, removedReportItems });
+    return { item, auditLog: event, removedReportItems };
+  },
+
   requestCapture(id: string, kind: Exclude<CaptureKind, "evidence_lite">, shouldFail = false) {
     const item = getItemOrThrow(id);
     const budget = checkBudget(usageLimit, usage, { type: "screenshot", units: 1 });
