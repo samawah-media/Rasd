@@ -26,6 +26,7 @@ import {
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type ReviewAction = "approve" | "reject";
 type DbRow = Record<string, unknown>;
@@ -395,7 +396,11 @@ async function refreshSupabaseManualDuplicate(
   platform: string,
 ) {
   const patch: DbRow = {};
-  const cardUrl = evidenceCardUrl(row.id);
+  let screenshotUrl = evidenceCardUrl(row.id);
+  const targetUrl = canonicalUrl || row.original_url;
+  if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
+    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+  }
 
   if (input.title && (isWeakManualTitle(row) || input.title.length > (row.title ?? "").length)) {
     patch.title = input.title;
@@ -438,7 +443,7 @@ async function refreshSupabaseManualDuplicate(
     if (row.state === "candidate") patch.state = "needs_review";
   }
 
-  patch.evidence_image_path = cardUrl;
+  patch.evidence_image_path = screenshotUrl;
   patch.raw_response = {
     ...rawObject(row.raw_response),
     manual: true,
@@ -450,8 +455,8 @@ async function refreshSupabaseManualDuplicate(
       ...rawObject(rawObject(row.raw_response).input),
       ...input,
     },
-    contentImagePath: cardUrl,
-    sourceEvidenceImagePath: cardUrl,
+    contentImagePath: screenshotUrl,
+    sourceEvidenceImagePath: screenshotUrl,
   };
 
   const { data, error } = await supabase
@@ -476,7 +481,7 @@ async function refreshSupabaseManualDuplicate(
   if (staleCaptureIds.length) {
     const { error: captureUpdateError } = await supabase
       .from("captures")
-      .update({ asset_url: cardUrl })
+      .update({ asset_url: screenshotUrl })
       .in("id", staleCaptureIds);
     if (captureUpdateError) throw captureUpdateError;
   }
@@ -497,8 +502,8 @@ async function refreshSupabaseManualDuplicate(
           summary: patch.summary ?? row.summary,
           original_url: patch.original_url ?? row.original_url,
           source_name: input.authorName ?? row.author_name ?? sourceLabel(row.source_type),
-          screenshot_url: cardUrl,
-          content_image_url: cardUrl,
+          screenshot_url: screenshotUrl,
+          content_image_url: screenshotUrl,
         },
       })
       .eq("id", reportItem.id);
@@ -805,15 +810,18 @@ export const persistentStore = {
     if (error) throw error;
 
     const insertedRow = row as DbItemRow;
-    const cardUrl = evidenceCardUrl(insertedRow.id);
+    let screenshotUrl = evidenceCardUrl(insertedRow.id);
+    if (insertedRow.original_url && isSafePublicHttpUrl(insertedRow.original_url)) {
+      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(insertedRow.original_url)}&screenshot=true&embed=screenshot.url`;
+    }
     const { data: hydratedRow, error: hydrationError } = await supabase
       .from("monitoring_items")
       .update({
-        evidence_image_path: cardUrl,
+        evidence_image_path: screenshotUrl,
         raw_response: {
           ...rawObject(insertedRow.raw_response),
-          contentImagePath: cardUrl,
-          sourceEvidenceImagePath: cardUrl,
+          contentImagePath: screenshotUrl,
+          sourceEvidenceImagePath: screenshotUrl,
         },
       })
       .eq("id", insertedRow.id)
@@ -830,7 +838,7 @@ export const persistentStore = {
         kind: "evidence_lite",
         status: "success",
         captured_at: now(),
-        asset_url: cardUrl,
+        asset_url: screenshotUrl,
       })
       .select("*")
       .single();
@@ -886,12 +894,17 @@ export const persistentStore = {
     if (!shouldUseSupabase()) return store.requestCapture(id, kind, shouldFail);
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
-    await getItemOrThrow(supabase, id);
+    const item = await getItemOrThrow(supabase, id);
     const usage = await getUsageSnapshot(supabase);
     const budget = checkBudget(usageLimit, usage, { type: "screenshot", units: 1 });
     if (!budget.allowed) return { allowed: false as const, budget };
 
     await supabase.from("monitoring_items").update({ state: "capture_pending" }).eq("id", id);
+    let screenshotUrl = evidenceCardUrl(id);
+    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+    }
+
     const captureInput: DbRow = shouldFail
       ? {
           organization_id: DEFAULT_ORGANIZATION_ID,
@@ -908,7 +921,7 @@ export const persistentStore = {
           kind,
           status: "success",
           captured_at: now(),
-          asset_url: evidenceCardUrl(id),
+          asset_url: screenshotUrl,
           failure_reason: null,
         };
     const { data: captureRow, error: captureError } = await supabase.from("captures").insert(captureInput).select("*").single();
@@ -917,7 +930,7 @@ export const persistentStore = {
     const capture = toCapture(captureRow as DbCaptureRow);
     const nextPatch =
       capture.status === "success" && kind === "report_grade"
-        ? { state: "report_ready", warning: null, evidence_image_path: capture.assetUrl ?? evidenceCardUrl(id) }
+        ? { state: "report_ready", warning: null, evidence_image_path: capture.assetUrl ?? screenshotUrl }
         : capture.status === "failed"
           ? { state: "capture_failed", warning: "فشل الالتقاط. يمكن إعادة المحاولة أو رفع لقطة يدويًا." }
           : {};
@@ -986,6 +999,19 @@ export const persistentStore = {
     if (existingError) throw existingError;
     if (existing) return { ok: true as const, reportItem: toReportItem(existing as DbReportItemRow), duplicate: true };
 
+    let screenshotUrl: string | undefined = undefined;
+    if (item.hasReportGradeCapture) {
+      const { data: captures, error: captureQueryError } = await supabase
+        .from("captures")
+        .select("asset_url")
+        .eq("monitoring_item_id", itemId)
+        .eq("kind", "report_grade")
+        .eq("status", "success")
+        .limit(1);
+      if (captureQueryError) throw captureQueryError;
+      screenshotUrl = ((captures ?? []) as Array<{ asset_url: string | null }>)[0]?.asset_url ?? evidenceCardUrl(item.id);
+    }
+
     const { data, error } = await supabase
       .from("report_items")
       .insert({
@@ -998,8 +1024,8 @@ export const persistentStore = {
           sentiment: item.sentiment,
           original_url: item.originalUrl,
           source_name: item.sourceName,
-          screenshot_url: item.hasReportGradeCapture ? evidenceCardUrl(item.id) : undefined,
-          content_image_url: item.hasReportGradeCapture ? evidenceCardUrl(item.id) : undefined,
+          screenshot_url: screenshotUrl,
+          content_image_url: screenshotUrl,
           warning: warningAccepted ? item.warning : undefined,
         },
         warning: warningAccepted ? item.warning ?? "تمت الموافقة مع التحذير." : null,
