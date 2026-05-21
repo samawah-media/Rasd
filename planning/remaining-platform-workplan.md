@@ -370,9 +370,10 @@ Status update - 2026-05-21:
 - Unauthenticated protection passed: `/api/admin/persistence` and `/api/client-report/hidayathon` return `401 auth_required`, and `/client-report` redirects to `/login?next=%2Fclient-report`.
 - Browser login reached Google sign-in, but owner-authenticated smoke testing needs the owner to complete Google login in the browser session before the client report and `/ops` workflow can be verified live.
 - Owner confirmed `/client-report` opens in their authenticated browser session and shows the redesigned `رصد هداية هاكاثون` workspace.
-- The production client report currently shows 126 items: 124 legacy archive items plus 2 live-report items.
+- The production client report initially showed 126 items: 124 legacy archive items plus 2 live-report items.
 - A10 found an old live test item using the historical `/window.svg` placeholder capture. Code now excludes `/window.svg` from client evidence so fake screenshots are not shown.
-- Follow-up decision: remove/archive the old live test item from the customer-facing report, or keep it as a known test artifact until after the current smoke pass.
+- Owner chose to remove the old test artifact. Production cleanup deleted the `https://hedayathon.com` test monitoring item, its report link, and two old captures.
+- Post-cleanup state should show 125 client report items after refresh: 124 legacy archive items plus 1 live X report item.
 
 ## Priority B - Needed For Efficient Operations
 
