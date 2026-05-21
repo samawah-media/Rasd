@@ -44,6 +44,14 @@ type MembershipRow = {
 };
 
 export async function getCurrentAuthContext(): Promise<AuthContext | null> {
+  const user = await getCurrentSupabaseUser();
+  if (!user) return null;
+
+  const membership = await resolveMembershipForUser(user);
+  return membership ? { user, membership } : null;
+}
+
+export async function getCurrentSupabaseUser(): Promise<User | null> {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
@@ -51,9 +59,7 @@ export async function getCurrentAuthContext(): Promise<AuthContext | null> {
   } = await supabase.auth.getUser();
 
   if (error || !user) return null;
-
-  const membership = await resolveMembershipForUser(user);
-  return membership ? { user, membership } : null;
+  return user;
 }
 
 export async function requireRole(allowed: readonly Role[], nextPath = "/") {
@@ -71,8 +77,13 @@ export async function requireRole(allowed: readonly Role[], nextPath = "/") {
 }
 
 export async function redirectAuthenticatedUser() {
-  const context = await getCurrentAuthContext();
-  if (context) redirect(defaultPathForRole(context.membership.role));
+  const user = await getCurrentSupabaseUser();
+  if (!user) return;
+
+  const membership = await resolveMembershipForUser(user);
+  if (membership) redirect(defaultPathForRole(membership.role));
+
+  redirect("/unauthorized");
 }
 
 async function resolveMembershipForUser(user: User): Promise<AuthMembership | null> {

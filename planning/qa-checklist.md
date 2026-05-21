@@ -143,7 +143,7 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 ## Current Residual Risks
 
-- Viewer-role behavior still needs a real viewer account or invite flow test.
+- Viewer-role behavior still needs a real viewer account or invite flow test. Production Auth currently has only the owner user, so the test requires inviting/creating the second Google email and adding a `viewer` membership first.
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
 - The redesigned production client report has owner-side acceptance for the refreshed data/filter/export flow, but the latest manual item still needs confirmation after the screenshot worker fix lands.
 - Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.

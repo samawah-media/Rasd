@@ -386,6 +386,10 @@ Status update - 2026-05-21:
   - `npm run test` passed with 75 tests, including share-link token privacy, view limits, revocation, expiry, client export guardrails, auth routing, and Supabase RLS/schema checks.
   - `npm run typecheck` passed.
   - `npm run lint` is currently blocked by the in-progress `/imports` work from the parallel agent (`src/app/imports/imports-client.tsx`), so it is not treated as an A10 regression until that work is merged/fixed.
+- Viewer-account finding on 2026-05-21:
+  - Live Supabase Auth currently contains only the owner user `samawah.pod@gmail.com`; the attempted second Google account did not create an Auth user and therefore has no membership row yet.
+  - The login flow now redirects signed-in users without a membership to `/unauthorized` instead of leaving them on the login page.
+  - A real Viewer browser test still requires inviting or creating the second Google email, then adding `viewer` membership for the Hidayathon organization.
 
 ## Priority B - Needed For Efficient Operations
 
