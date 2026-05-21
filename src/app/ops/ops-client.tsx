@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import type { Capture, HealthMetric, KeywordRule, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 
@@ -56,6 +57,15 @@ type SourcePollResponse = {
 type SourceCreateResponse = {
   source: Source;
   duplicate?: boolean;
+};
+
+type WorkflowCleanupResponse = {
+  cleanup: {
+    archived: number;
+    requested: number;
+    removedReportItems: number;
+    itemIds: string[];
+  };
 };
 
 const emptyState: ApiState = {
@@ -230,6 +240,21 @@ function systemText(metrics: HealthMetric[]) {
   if (metrics.some((metric) => metric.status === "danger")) return "تحتاج متابعة";
   if (metrics.some((metric) => metric.status === "warning")) return "مستقرة مع تنبيه";
   return "مستقرة";
+}
+
+function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
+  const fetched = poll.fetched.toLocaleString("ar-SA");
+  const created = poll.created.toLocaleString("ar-SA");
+  const duplicates = poll.duplicates.toLocaleString("ar-SA");
+  const skipped = (poll.skipped ?? 0).toLocaleString("ar-SA");
+  const failed = poll.failed.toLocaleString("ar-SA");
+  const base = `${prefix}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، غير مطابق ${skipped}، متعثر ${failed}.`;
+
+  if (poll.fetched > 0 && poll.created === 0 && (poll.skipped ?? 0) > 0 && poll.failed === 0) {
+    return `${base} لم تدخل مواد جديدة لأن الأخبار لا تطابق كلمات الرصد الحالية.`;
+  }
+
+  return base;
 }
 
 function latestWorkflowItems(items: MonitoringItem[], limit = 48) {
@@ -520,13 +545,8 @@ export function OpsClient() {
         body: JSON.stringify({}),
       });
       await refreshSilently();
-      const fetched = result.poll.fetched.toLocaleString("ar-SA");
-      const created = result.poll.created.toLocaleString("ar-SA");
-      const duplicates = result.poll.duplicates.toLocaleString("ar-SA");
-      const skipped = (result.poll.skipped ?? 0).toLocaleString("ar-SA");
-      const failed = result.poll.failed.toLocaleString("ar-SA");
-      setMessage(`تم تشغيل ${source.name}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، غير مطابق ${skipped}، متعثر ${failed}.`);
-      setMessageType(result.poll.failed > 0 ? "warning" : "success");
+      setMessage(rssPollMessage(`تم تشغيل ${source.name}`, result.poll));
+      setMessageType(result.poll.failed > 0 || (result.poll.created === 0 && (result.poll.skipped ?? 0) > 0) ? "warning" : "success");
       setSelectedId(result.poll.items?.[0]?.id ?? selectedId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصدر.");
@@ -547,10 +567,8 @@ export function OpsClient() {
         body: JSON.stringify({ limit: 5 }),
       });
       await refreshSilently();
-      setMessage(
-        `تم فحص ${result.poll.sources ?? 0} مصدر: جلب ${result.poll.fetched.toLocaleString("ar-SA")}، جديد ${result.poll.created.toLocaleString("ar-SA")}، مكرر ${result.poll.duplicates.toLocaleString("ar-SA")}، غير مطابق ${(result.poll.skipped ?? 0).toLocaleString("ar-SA")}، متعثر ${result.poll.failed.toLocaleString("ar-SA")}.`,
-      );
-      setMessageType(result.poll.failed > 0 ? "warning" : "success");
+      setMessage(rssPollMessage(`تم فحص ${(result.poll.sources ?? 0).toLocaleString("ar-SA")} مصدر`, result.poll));
+      setMessageType(result.poll.failed > 0 || (result.poll.created === 0 && (result.poll.skipped ?? 0) > 0) ? "warning" : "success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
       setMessageType("error");
@@ -608,6 +626,39 @@ export function OpsClient() {
         }),
       "تمت أرشفة المادة وإزالتها من التقرير.",
     );
+  }
+
+  async function archiveVisibleItems() {
+    if (!visibleItems.length) return;
+    const confirmed = window.confirm(
+      `تنظيف ${visibleItems.length.toLocaleString("ar-SA")} مادة ظاهرة الآن؟ ستختفي من صفحة التشغيل وتزال من التقرير إن كانت مضافة، بدون لمس أرشيف التقارير القديم.`,
+    );
+    if (!confirmed) return;
+
+    setPending("archive-visible");
+    setMessage("جاري تنظيف المواد الظاهرة...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<WorkflowCleanupResponse>("/api/items/archive-workflow", {
+        method: "POST",
+        body: JSON.stringify({
+          ids: visibleItems.map((item) => item.id),
+          reason: "تنظيف المواد الظاهرة من صفحة إضافة ومراجعة المحتوى.",
+        }),
+      });
+      setSelectedId(null);
+      await refreshSilently();
+      setMessage(
+        `تم تنظيف ${result.cleanup.archived.toLocaleString("ar-SA")} مادة، وإزالة ${result.cleanup.removedReportItems.toLocaleString("ar-SA")} ربط من التقرير.`,
+      );
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تنظيف المواد الظاهرة.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
   }
 
   function primaryAction(item: MonitoringItem) {
@@ -903,15 +954,26 @@ export function OpsClient() {
                   </button>
                 ))}
               </div>
-              <label className="relative block xl:w-72">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="بحث"
-                  className="h-9 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-9 pl-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
-                />
-              </label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={archiveVisibleItems}
+                  disabled={pending !== null || !visibleItems.length}
+                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
+                >
+                  {pending === "archive-visible" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  تنظيف المواد الظاهرة
+                </button>
+                <label className="relative block xl:w-72">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="بحث"
+                    className="h-9 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-9 pl-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
+                  />
+                </label>
+              </div>
             </div>
           </div>
 

@@ -342,6 +342,18 @@ function findRssDuplicate(ingested: RssIngestionItem) {
   );
 }
 
+function isWorkflowItem(item: MonitoringItem) {
+  return (item.sourceType === "manual_url" || item.sourceType === "rss") && item.state !== "archived";
+}
+
+function latestWorkflowItemIds(limit = 48) {
+  return items
+    .filter(isWorkflowItem)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .slice(0, limit)
+    .map((item) => item.id);
+}
+
 export const store = {
   resetForTest() {
     items.splice(0, items.length, ...cloneList(seedItems));
@@ -782,6 +794,37 @@ export const store = {
     item.warning = reason ?? "تمت أرشفة المادة من صفحة التشغيل.";
     const event = audit("item.archived", item.id, { reason: reason ?? null, removedReportItems });
     return { item, auditLog: event, removedReportItems };
+  },
+
+  archiveWorkflowItems(input?: { ids?: string[]; limit?: number; reason?: string }) {
+    const explicitIds = Array.from(new Set((input?.ids ?? []).filter(Boolean)));
+    const limit = Math.max(1, Math.min(48, Math.trunc(input?.limit ?? 48)));
+    const targetIds = explicitIds.length ? explicitIds : latestWorkflowItemIds(limit);
+    let removedReportItems = 0;
+    const archivedIds: string[] = [];
+    const reason = input?.reason ?? "تنظيف مواد التشغيل الظاهرة من صفحة إضافة ومراجعة المحتوى.";
+
+    for (const id of targetIds) {
+      const item = items.find((entry) => entry.id === id);
+      if (!item || !isWorkflowItem(item)) continue;
+      const result = this.archiveItem(id, reason);
+      removedReportItems += result.removedReportItems;
+      archivedIds.push(id);
+    }
+
+    const event = audit("items.workflow_archived", "workflow-items", {
+      requested: targetIds.length,
+      archived: archivedIds.length,
+      removedReportItems,
+    });
+
+    return {
+      archived: archivedIds.length,
+      requested: targetIds.length,
+      removedReportItems,
+      itemIds: archivedIds,
+      auditLog: event,
+    };
   },
 
   requestCapture(id: string, kind: Exclude<CaptureKind, "evidence_lite">, shouldFail = false) {

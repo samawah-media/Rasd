@@ -494,6 +494,43 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(archivedReportItem, undefined);
   });
 
+  it("bulk archives only visible workflow items without touching legacy archive data", async () => {
+    store.importLegacyReports();
+    const first = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://example.com/cleanup-one",
+        title: "مادة تنظيف أولى عن هداية هاكاثون",
+        text: "مادة تجريبية عن هداية هاكاثون لتنظيف قائمة التشغيل الظاهرة.",
+      }),
+    });
+    const second = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://example.com/cleanup-two",
+        title: "مادة تنظيف ثانية عن هداية هاكاثون",
+        text: "مادة تجريبية ثانية عن هداية هاكاثون لتنظيف قائمة التشغيل الظاهرة.",
+      }),
+    });
+    const legacyItem = store.listItems().find((item) => item.id.startsWith("legacy-item-"));
+
+    const result = await requestJson("/api/items/archive-workflow", {
+      method: "POST",
+      body: JSON.stringify({
+        ids: [first.json.item.id, second.json.item.id, legacyItem?.id],
+      }),
+    });
+    const listed = await requestJson("/api/items");
+
+    assert.equal(result.response.status, 200);
+    assert.equal(result.json.cleanup.requested, 3);
+    assert.equal(result.json.cleanup.archived, 2);
+    assert.deepEqual(new Set(result.json.cleanup.itemIds), new Set([first.json.item.id, second.json.item.id]));
+    assert.equal(listed.json.items.find((item: { id: string; state: string }) => item.id === first.json.item.id)?.state, "archived");
+    assert.equal(listed.json.items.find((item: { id: string; state: string }) => item.id === second.json.item.id)?.state, "archived");
+    assert.equal(listed.json.items.find((item: { id: string; state: string }) => item.id === legacyItem?.id)?.state, "published");
+  });
+
   it("preserves warning gates for failed captures", async () => {
     const blocked = await requestJson("/api/reports/report-5/items", {
       method: "POST",

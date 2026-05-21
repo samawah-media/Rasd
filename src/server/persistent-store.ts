@@ -1186,6 +1186,81 @@ export const persistentStore = {
     return { item, auditLog, removedReportItems: count ?? 0 };
   },
 
+  async archiveWorkflowItems(input?: { ids?: string[]; limit?: number; reason?: string }) {
+    if (!shouldUseSupabase()) return store.archiveWorkflowItems(input);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const explicitIds = Array.from(new Set((input?.ids ?? []).filter(Boolean)));
+    const limit = Math.max(1, Math.min(48, Math.trunc(input?.limit ?? 48)));
+
+    let query = supabase
+      .from("monitoring_items")
+      .select("id")
+      .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+      .in("source_type", ["manual_url", "rss"])
+      .neq("state", "archived")
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(limit);
+
+    if (explicitIds.length) {
+      query = supabase
+        .from("monitoring_items")
+        .select("id")
+        .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+        .in("id", explicitIds)
+        .in("source_type", ["manual_url", "rss"])
+        .neq("state", "archived")
+        .limit(48);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const itemIds = ((data ?? []) as Array<{ id: string }>).map((row) => row.id);
+    if (!itemIds.length) {
+      const auditLog = await audit(supabase, "items.workflow_archived", "monitoring_item", undefined, {
+        requested: explicitIds.length || limit,
+        archived: 0,
+        removedReportItems: 0,
+      });
+      return {
+        archived: 0,
+        requested: explicitIds.length || limit,
+        removedReportItems: 0,
+        itemIds,
+        auditLog,
+      };
+    }
+
+    const { count, error: reportDeleteError } = await supabase
+      .from("report_items")
+      .delete({ count: "exact" })
+      .in("monitoring_item_id", itemIds);
+    if (reportDeleteError) throw reportDeleteError;
+
+    const reason = input?.reason ?? "تنظيف مواد التشغيل الظاهرة من صفحة إضافة ومراجعة المحتوى.";
+    const { error: archiveError } = await supabase
+      .from("monitoring_items")
+      .update({ state: "archived", warning: reason })
+      .in("id", itemIds);
+    if (archiveError) throw archiveError;
+
+    const auditLog = await audit(supabase, "items.workflow_archived", "monitoring_item", undefined, {
+      requested: explicitIds.length || limit,
+      archived: itemIds.length,
+      removedReportItems: count ?? 0,
+    });
+
+    return {
+      archived: itemIds.length,
+      requested: explicitIds.length || limit,
+      removedReportItems: count ?? 0,
+      itemIds,
+      auditLog,
+    };
+  },
+
   async requestCapture(id: string, kind: Exclude<CaptureKind, "evidence_lite">, shouldFail = false) {
     if (!shouldUseSupabase()) return store.requestCapture(id, kind, shouldFail);
     const supabase = getSupabaseAdmin();

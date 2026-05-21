@@ -92,6 +92,11 @@ function stringArray(value: unknown) {
   return undefined;
 }
 
+function positiveInteger(value: unknown, fallback: number, max: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(max, Math.trunc(value)));
+}
+
 function isAuthorizedAdminImport(c: { req: { header(name: string): string | undefined } }, body: JsonBody) {
   const expectedToken = process.env.RASD_ADMIN_IMPORT_TOKEN;
   void body;
@@ -536,6 +541,22 @@ api.post("/items/:id/archive", async (c) => {
   } catch {
     return c.json(withRequestId(c, { error: "item_not_found" }), 404);
   }
+});
+
+api.post("/items/archive-workflow", async (c) => {
+  const body = await readJson(c);
+  const ids = stringArray(body.ids);
+  const limit = positiveInteger(body.limit, 48, 48);
+  const reason =
+    typeof body.reason === "string" && body.reason.trim()
+      ? body.reason.trim()
+      : "تنظيف مواد التشغيل الظاهرة من صفحة إضافة ومراجعة المحتوى.";
+
+  return c.json(
+    withRequestId(c, {
+      cleanup: await persistentStore.archiveWorkflowItems({ ids, limit, reason }),
+    }),
+  );
 });
 
 api.post("/items/:id/capture-preview", async (c) => {
