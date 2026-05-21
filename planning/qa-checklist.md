@@ -7,7 +7,7 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-Authenticated production smoke after /ops and /sources simplification
+Authenticated production smoke after Supabase Storage evidence persistence
 ```
 
 ## Premium UI Refresh Quality Gate
@@ -48,6 +48,23 @@ Status: deployed on 2026-05-22; pending authenticated production owner smoke.
 Local checks passed:
 
 - `npm run test`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+
+## Evidence Storage Quality Gate
+
+Status: local checks passed on 2026-05-22; production smoke pending after deploy.
+
+- New live/manual capture assets can be uploaded into private Supabase Storage.
+- Private stored assets are served through `/api/captures/:id/asset` for authenticated members.
+- `captures.html_archive_url` stores the private `supabase://bucket/path` reference.
+- `captures.asset_url` stays client-safe and does not expose service-role credentials or raw private storage paths.
+- If storage is unavailable, capture falls back to the current evidence URL instead of blocking the report workflow.
+
+Local checks passed:
+
+- `npm run test`: 101 tests, 0 failures.
 - `npm run typecheck`
 - `npm run lint`
 - `npm run build`
@@ -181,6 +198,19 @@ Use this after the PDF crop production path is changed:
 - Confirm no live capture is run for all 124 links before a separate live-capture sample succeeds.
 - Confirm weak/failed crops are marked and do not replace trusted evidence.
 - Confirm client report prefers content crop when available and keeps full-page PDF evidence as fallback metadata.
+
+## Supabase Storage Evidence Smoke Test
+
+Use this after the evidence storage deploy:
+
+- As owner/editor, add or choose one fresh live/manual item in `/ops`.
+- Approve it and run `لقطة`.
+- Confirm the item reaches `جاهزة للتقرير`.
+- Confirm `/api/items/:id/captures` returns a successful report-grade capture whose `assetUrl` is either `/api/captures/:captureId/asset` when storage succeeded or the existing source evidence URL when storage fell back.
+- If `assetUrl` is `/api/captures/:captureId/asset`, open it while logged in and confirm it returns an image response.
+- Confirm a signed-out request to `/api/captures/:captureId/asset` returns `401 auth_required`.
+- Add the item to `/client-report` and confirm the content image renders.
+- Confirm Supabase Storage has bucket `rasd-evidence` or the configured `RASD_EVIDENCE_STORAGE_BUCKET`.
 
 ## Automated Local Checks
 

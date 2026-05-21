@@ -11,6 +11,13 @@ import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
 import { buildClientReportExportHtml, clientReportExportLimit } from "../src/server/client-report-export";
+import {
+  evidenceAssetProxyUrl,
+  evidenceStoragePath,
+  evidenceStorageReference,
+  persistEvidenceAsset,
+  parseEvidenceStorageReference,
+} from "../src/server/evidence-storage";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "../src/server/url-metadata";
 
 describe("connector and budget utilities", () => {
@@ -85,6 +92,87 @@ describe("connector and budget utilities", () => {
 
     assert.equal(result.allowed, false);
     assert.equal(result.violations.length, 1);
+  });
+
+  it("builds stable protected evidence storage references", () => {
+    const storagePath = evidenceStoragePath({
+      organizationId: "org-1",
+      topicId: "topic-1",
+      itemId: "item-1",
+      captureId: "capture-1",
+      kind: "report_grade",
+      extension: "webp",
+      nowIso: "2026-05-22T00:00:00.000Z",
+    });
+    const reference = evidenceStorageReference("rasd-evidence", storagePath);
+
+    assert.equal(
+      storagePath,
+      "organizations/org-1/topics/topic-1/items/item-1/captures/2026-05-22T00-00-00-000Z-report_grade-capture-1.webp",
+    );
+    assert.deepEqual(parseEvidenceStorageReference(reference), {
+      bucket: "rasd-evidence",
+      path: storagePath,
+    });
+    assert.equal(parseEvidenceStorageReference("https://example.com/image.webp"), null);
+    assert.equal(evidenceAssetProxyUrl("capture-1"), "/api/captures/capture-1/asset");
+  });
+
+  it("uploads evidence assets to Supabase Storage behind a protected proxy URL", async () => {
+    const uploads: Array<{ bucket: string; path: string; contentType?: string; bytes: number }> = [];
+    const fakeSupabase = {
+      storage: {
+        getBucket: async () => ({ data: { id: "rasd-evidence" }, error: null }),
+        from: (bucket: string) => ({
+          upload: async (path: string, body: Uint8Array, options: { contentType?: string }) => {
+            uploads.push({ bucket, path, contentType: options.contentType, bytes: body.byteLength });
+            return { data: { path }, error: null };
+          },
+        }),
+      },
+    };
+
+    const result = await persistEvidenceAsset({
+      supabase: fakeSupabase as never,
+      item: {
+        id: "item-1",
+        sourceId: "source-1",
+        sourceName: "Hidayathon",
+        sourceType: "manual_url",
+        state: "needs_review",
+        title: "خبر هداية",
+        originalUrl: "https://example.com/hidayathon",
+        publishedAt: "2026-05-22T00:00:00.000Z",
+        summary: "ملخص المادة",
+        summarySourceText: "ملخص المادة",
+        sentiment: "positive",
+        sentimentConfidence: 90,
+        relevanceScore: 80,
+        relevanceReason: "matched",
+        matchedTerms: ["هداية"],
+        dedupeKey: "manual_url:https://example.com/hidayathon",
+        hasReportGradeCapture: false,
+      },
+      captureId: "capture-1",
+      kind: "report_grade",
+      sourceUrl: "https://cdn.example.com/evidence.webp",
+      nowIso: "2026-05-22T00:00:00.000Z",
+      fetcher: async () =>
+        new Response(new Uint8Array([1, 2, 3, 4]), {
+          status: 200,
+          headers: { "content-type": "image/webp" },
+        }),
+    });
+
+    assert.equal(result.persisted, true);
+    assert.equal(result.assetUrl, "/api/captures/capture-1/asset");
+    assert.equal(result.bucket, "rasd-evidence");
+    assert.equal(result.contentType, "image/webp");
+    assert.equal(result.sizeBytes, 4);
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].contentType, "image/webp");
+    assert.equal(uploads[0].bytes, 4);
+    assert.match(uploads[0].path, /items\/item-1\/captures\/2026-05-22T00-00-00-000Z-report_grade-capture-1\.webp$/);
   });
 
   it("derives publish and capture dates from legacy Arabic report text", () => {

@@ -1,6 +1,6 @@
 # Content Screenshot Pipeline Plan
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 This plan turns the existing link-correct Hidayathon archive into a visual client experience where each item can show the best available content image.
 
@@ -23,7 +23,9 @@ For every report item, show a useful visual proof image in the platform:
 - Production crop extraction now generated 124 content images and 124 publisher profile images under `public/imports/legacy-content-crops/full`.
 - Supabase `captures.asset_url` and `monitoring_items.evidence_image_path` now point to the cropped content images for the legacy archive.
 - The original full report-page evidence image remains in import metadata as `sourceEvidenceImagePath` and as each crop manifest fallback.
-- The API endpoint `/api/items/:id/capture-report-grade` records capture workflow state, but the current implementation stores a placeholder asset (`/window.svg`) rather than a real browser screenshot.
+- The API endpoint `/api/items/:id/capture-report-grade` records capture workflow state and no longer stores the old `/window.svg` placeholder.
+- New live/manual captures can persist image bytes into private Supabase Storage and expose them through the authenticated proxy route `/api/captures/:id/asset`.
+- If Supabase Storage upload or source-image fetching fails, capture continues with the current source image URL so review/report workflow is not blocked.
 
 ## Evidence Types
 
@@ -127,9 +129,11 @@ Recommended first implementation:
 
 Later production implementation:
 
-- Move generated images to Supabase Storage.
-- Keep only signed/public storage paths in `captures.asset_url` or a dedicated asset field.
-- Add storage RLS/policies only when the client access model is final.
+- [x] Move live/manual evidence images to Supabase Storage when capture runs in the Supabase-backed runtime.
+- [x] Keep private storage references in `captures.html_archive_url` as `supabase://bucket/path`.
+- [x] Keep client-visible `captures.asset_url` as an authenticated app proxy path, not a raw service-role or storage URL.
+- [x] Keep legacy public crop paths unchanged for the already-imported archive.
+- Add dedicated storage RLS/policies only if the platform later needs direct client-side uploads.
 
 Tasks:
 
@@ -140,6 +144,8 @@ Tasks:
   2. `live_report_capture`
   3. `legacy_page_evidence`
 - [x] Update tests to assert image fallback order.
+- [x] Add private Supabase Storage persistence for new live/manual capture assets.
+- [x] Add authenticated proxy delivery for stored capture images.
 
 Acceptance:
 
@@ -147,6 +153,7 @@ Acceptance:
 - Client report can display the publisher username/profile identity beside the content without exposing extraction details.
 - Full-page evidence remains reachable.
 - Re-running the import is idempotent.
+- New live/manual capture images can survive redeploy through Supabase Storage when storage upload succeeds.
 
 ## Phase 4 - Live Screenshot Trial
 
@@ -182,6 +189,11 @@ Goal:
 
 Replace the placeholder capture behavior with a real capture pipeline.
 
+Status:
+
+- Partially completed on 2026-05-22 for persistence: successful live/manual captures now attempt to store image bytes in private Supabase Storage and serve them through `/api/captures/:id/asset`.
+- Still pending: a dedicated browser capture worker/service that produces the image bytes directly instead of relying on the current screenshot source URL.
+
 Tasks:
 
 - Implement a server-side capture worker or admin-only script.
@@ -203,6 +215,7 @@ Acceptance:
 - `/api/items/:id/capture-report-grade` no longer creates `/window.svg` placeholder captures.
 - Failed captures are visible and do not break the client report.
 - Usage counters reflect real capture attempts.
+- Persisted capture assets are private by default and only served through authenticated app routes.
 
 ## Phase 6 - Client Report UI Integration
 

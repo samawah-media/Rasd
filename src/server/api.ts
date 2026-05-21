@@ -783,3 +783,20 @@ api.get("/items", async (c) => c.json(withRequestId(c, { items: await persistent
 api.get("/items/:id/captures", async (c) =>
   c.json(withRequestId(c, { captures: await persistentStore.listCaptures(c.req.param("id")) })),
 );
+
+api.get("/captures/:id/asset", async (c) => {
+  try {
+    const asset = await persistentStore.getCaptureAsset(c.req.param("id"));
+    const body = asset.body.buffer.slice(asset.body.byteOffset, asset.body.byteOffset + asset.body.byteLength) as ArrayBuffer;
+    return new Response(body, {
+      headers: {
+        "content-type": asset.contentType,
+        "cache-control": "private, max-age=3600",
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "capture_asset_not_found";
+    const status = message === "capture_not_found" ? 404 : 409;
+    return c.json(withRequestId(c, { error: message }), status);
+  }
+});

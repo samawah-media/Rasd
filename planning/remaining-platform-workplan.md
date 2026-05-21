@@ -7,7 +7,7 @@ This file lists the remaining work needed to make the platform operate efficient
 Current priority:
 
 ```text
-Production smoke test for simplified /ops and new /sources split
+Production smoke test for Supabase Storage evidence persistence
 ```
 
 Immediate prerequisite:
@@ -254,6 +254,14 @@ Status update - 2026-05-21:
 - Supabase was upserted with cropped content image paths in `monitoring_items.evidence_image_path`, `captures.asset_url`, and report card data while preserving full-page fallback paths in metadata.
 - Automated coverage now asserts full production crop assets, Supabase mapping, and client-report image fields.
 
+Status update - 2026-05-22:
+
+- New live/manual captures now attempt to persist the produced evidence image into private Supabase Storage.
+- Stored capture objects are referenced internally in `captures.html_archive_url` as `supabase://bucket/path`.
+- Client-visible `captures.asset_url` uses a protected proxy route: `/api/captures/:id/asset`.
+- If storage upload or source image fetching fails, the workflow falls back to the existing evidence URL so capture/review/report insertion does not break.
+- Automated coverage now includes stable storage path/reference generation, protected proxy URL generation, Supabase Storage upload behavior with a fake storage client, and member-only API authorization for `/api/captures/:id/asset`.
+
 Tasks:
 
 - [x] Build a PDF crop proof of concept for 10 representative items.
@@ -261,6 +269,8 @@ Tasks:
 - [x] Keep full-page report evidence as fallback for every item.
 - [x] Add crop metadata and confidence before running all 124 items.
 - [x] Persist chosen content image paths through the legacy import/Supabase path.
+- [x] Persist new live/manual evidence images into private Supabase Storage when available.
+- [x] Serve stored capture assets through an authenticated app route instead of exposing raw private storage paths.
 - Trial live Playwright screenshots on a 10-link sample only after PDF crops are reviewed.
 - Replace placeholder capture behavior with real capture only after the sample succeeds.
 
@@ -270,6 +280,7 @@ Acceptance:
 - Missing or weak crops do not remove the historical full-page evidence.
 - No expensive all-link live capture is run before a sample proves value.
 - Screenshot references survive redeploy.
+- Stored live/manual capture bytes survive redeploy when Supabase Storage upload succeeds.
 
 ### A8. Minimum Real Monitoring Input
 
@@ -586,11 +597,17 @@ Later:
 
 ### C4. Screenshot And Evidence Pipeline
 
-- Decide storage: Supabase Storage, Vercel Blob, or Cloudflare R2.
-- Store report-page evidence for legacy items.
-- Capture preview evidence for review.
-- Capture report-grade screenshots only for approved/report items.
-- Avoid capturing every raw candidate.
+Status: C4.1 evidence storage foundation implemented locally on 2026-05-22; pending production smoke.
+
+- [x] Decide first storage target: Supabase Storage, because the app already uses Supabase service-role server runtime and membership-protected APIs.
+- [x] Add private evidence storage helper with stable object paths.
+- [x] Persist live/manual capture images into Supabase Storage when available.
+- [x] Keep `captures.asset_url` client-safe through `/api/captures/:id/asset`.
+- [x] Keep fallback behavior when storage is unavailable.
+- [ ] Store report-page evidence for future legacy imports in Storage instead of repository public assets.
+- [ ] Capture preview evidence for review.
+- [ ] Capture report-grade screenshots only for approved/report items from a real browser capture worker.
+- [x] Avoid capturing every raw candidate.
 
 ## Priority D - Client Experience Readiness
 

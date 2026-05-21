@@ -27,6 +27,11 @@ import {
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import {
+  evidenceStorageReference,
+  parseEvidenceStorageReference,
+  persistEvidenceAsset,
+} from "@/server/evidence-storage";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 import {
   normalizeSourceCreateInput,
@@ -116,6 +121,7 @@ type DbCaptureRow = {
   status: "pending" | "success" | "failed" | "retrying";
   captured_at: string | null;
   asset_url: string | null;
+  html_archive_url: string | null;
   failure_reason: string | null;
 };
 
@@ -144,6 +150,11 @@ type ItemCorrectionInput = {
   authorHandle?: string;
   publishedAt?: string;
   originalUrl?: string;
+};
+
+export type StoredCaptureAsset = {
+  body: Uint8Array;
+  contentType: string;
 };
 
 type RssIngestOptions = {
@@ -827,6 +838,28 @@ export const persistentStore = {
     return ((data ?? []) as DbCaptureRow[]).map(toCapture);
   },
 
+  async getCaptureAsset(captureId: string): Promise<StoredCaptureAsset> {
+    if (!shouldUseSupabase()) throw new Error("capture_asset_not_in_storage");
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const { data, error } = await supabase.from("captures").select("*").eq("id", captureId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error("capture_not_found");
+
+    const capture = data as DbCaptureRow;
+    const reference = parseEvidenceStorageReference(capture.html_archive_url);
+    if (!reference) throw new Error("capture_asset_not_in_storage");
+
+    const { data: blob, error: downloadError } = await supabase.storage.from(reference.bucket).download(reference.path);
+    if (downloadError) throw downloadError;
+
+    return {
+      body: new Uint8Array(await blob.arrayBuffer()),
+      contentType: blob.type || "application/octet-stream",
+    };
+  },
+
   async listReportItems(reportId: string) {
     if (!shouldUseSupabase()) return store.listReportItems(reportId);
     const supabase = getSupabaseAdmin();
@@ -1126,18 +1159,35 @@ export const persistentStore = {
     if (error) throw error;
 
     const insertedRow = row as DbItemRow;
+    const initialItem = (await toItems(supabase, [insertedRow]))[0];
+    const captureId = crypto.randomUUID();
     let screenshotUrl = evidenceCardUrl(insertedRow.id);
     if (insertedRow.original_url && isSafePublicHttpUrl(insertedRow.original_url)) {
       screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(insertedRow.original_url)}&screenshot=true&embed=screenshot.url`;
     }
+    const storedEvidence = await persistEvidenceAsset({
+      supabase,
+      item: initialItem,
+      captureId,
+      kind: "evidence_lite",
+      sourceUrl: screenshotUrl,
+    });
     const { data: hydratedRow, error: hydrationError } = await supabase
       .from("monitoring_items")
       .update({
-        evidence_image_path: screenshotUrl,
+        evidence_image_path: storedEvidence.assetUrl,
         raw_response: {
           ...rawObject(insertedRow.raw_response),
-          contentImagePath: screenshotUrl,
-          sourceEvidenceImagePath: screenshotUrl,
+          contentImagePath: storedEvidence.assetUrl,
+          sourceEvidenceImagePath: storedEvidence.assetUrl,
+          evidenceStorage: {
+            persisted: storedEvidence.persisted,
+            bucket: storedEvidence.bucket,
+            path: storedEvidence.storagePath,
+            contentType: storedEvidence.contentType,
+            sizeBytes: storedEvidence.sizeBytes,
+            failureReason: storedEvidence.failureReason,
+          },
         },
       })
       .eq("id", insertedRow.id)
@@ -1149,12 +1199,17 @@ export const persistentStore = {
     const { data: captureRow, error: captureError } = await supabase
       .from("captures")
       .insert({
+        id: captureId,
         organization_id: DEFAULT_ORGANIZATION_ID,
         monitoring_item_id: item.id,
         kind: "evidence_lite",
         status: "success",
         captured_at: now(),
-        asset_url: screenshotUrl,
+        asset_url: storedEvidence.assetUrl,
+        html_archive_url:
+          storedEvidence.persisted && storedEvidence.bucket && storedEvidence.storagePath
+            ? evidenceStorageReference(storedEvidence.bucket, storedEvidence.storagePath)
+            : null,
       })
       .select("*")
       .single();
@@ -1473,9 +1528,20 @@ export const persistentStore = {
     if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
       screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
     }
+    const captureId = crypto.randomUUID();
+    const storedEvidence = shouldFail
+      ? null
+      : await persistEvidenceAsset({
+          supabase,
+          item,
+          captureId,
+          kind,
+          sourceUrl: screenshotUrl,
+        });
 
     const captureInput: DbRow = shouldFail
       ? {
+          id: captureId,
           organization_id: DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
           kind,
@@ -1485,12 +1551,17 @@ export const persistentStore = {
           asset_url: null,
         }
       : {
+          id: captureId,
           organization_id: DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
           kind,
           status: "success",
           captured_at: now(),
-          asset_url: screenshotUrl,
+          asset_url: storedEvidence?.assetUrl ?? screenshotUrl,
+          html_archive_url:
+            storedEvidence?.persisted && storedEvidence.bucket && storedEvidence.storagePath
+              ? evidenceStorageReference(storedEvidence.bucket, storedEvidence.storagePath)
+              : null,
           failure_reason: null,
         };
     const { data: captureRow, error: captureError } = await supabase.from("captures").insert(captureInput).select("*").single();
@@ -1523,8 +1594,16 @@ export const persistentStore = {
         organization_id: DEFAULT_ORGANIZATION_ID,
         topic_id: DEFAULT_TOPIC_ID,
         event_type: "storage_mb",
-        units: 2,
-        metadata: { itemId: id, captureId: capture.id, kind },
+        units: storedEvidence?.sizeBytes ? Math.max(1, Math.ceil(storedEvidence.sizeBytes / (1024 * 1024))) : 2,
+        metadata: {
+          itemId: id,
+          captureId: capture.id,
+          kind,
+          persisted: storedEvidence?.persisted ?? false,
+          bucket: storedEvidence?.bucket,
+          path: storedEvidence?.storagePath,
+          failureReason: storedEvidence?.failureReason,
+        },
       },
     ]);
     const auditLog = await audit(supabase, "capture.requested", "capture", capture.id, {

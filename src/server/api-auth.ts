@@ -13,6 +13,7 @@ const apiRules: ApiRule[] = [
   { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon$/, roles: memberRoles },
   { methods: ["GET"], pattern: /^\/api\/client-report\/hidayathon\/export-pdf$/, roles: memberRoles },
   { methods: ["GET"], pattern: /^\/api\/items\/[^/]+\/evidence-card\.svg$/, roles: memberRoles },
+  { methods: ["GET"], pattern: /^\/api\/captures\/[^/]+\/asset$/, roles: memberRoles },
   { pattern: /^\/api\/cron(?:\/|$)/, roles: "public" },
   { pattern: /^\/api\/admin(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/access(?:\/|$)/, roles: ownerRoles },
