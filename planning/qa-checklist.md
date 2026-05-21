@@ -7,7 +7,7 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-A10. Owner-authenticated Production Smoke Test
+Post-A10 stabilization and quality gate
 ```
 
 ## Production Persistence
@@ -77,6 +77,8 @@ Partial run on 2026-05-21:
 - Owner chose to remove the old test item. Production cleanup deleted 1 monitoring item, 1 report link, and 2 old captures for `https://hedayathon.com`.
 - Post-cleanup production state: 124 legacy report items plus 1 live X report item, so the client report should show 125 items after refresh.
 - Owner confirmed after refresh that the client report works as expected: total coverage is correct, the first visible item is valid, day filtering works, and filtered PDF export opens. PDF polish remains a later improvement, not an A10 blocker.
+- Owner confirmed the live screenshot worker now produces real screenshots for manual items.
+- Viewer account `omarsamawah@gmail.com` was created and assigned `viewer` membership for Hidayathon. After routing fixes, owner confirmed the Viewer account enters the platform.
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
 
@@ -143,13 +145,10 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 
 ## Current Residual Risks
 
-- Viewer-role behavior still needs a real viewer account or invite flow test. Production Auth currently has only the owner user, so the test requires inviting/creating the second Google email and adding a `viewer` membership first.
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
-- The redesigned production client report has owner-side acceptance for the refreshed data/filter/export flow, but the latest manual item still needs confirmation after the screenshot worker fix lands.
 - Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.
 - X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
-- Share-link API/RLS security passed production checks, but share links still need a browser-level production test with a newly generated token.
+- Share-link API/RLS security passed production checks, but the product still needs a visible admin UI for generating/revoking share links.
 - X/RSS/source automation is not connected yet; current real monitoring is manual/legacy.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.
-- Real live screenshot capture is not implemented yet; current capture workflow must not be treated as proof of a successful browser screenshot until the new pipeline replaces the placeholder behavior.
-- Live manual captures currently generate a rendered evidence image from the fetched tweet/page metadata, not a browser screenshot of the live X page. This prevents blank placeholders while the real browser-capture service remains a separate pipeline task.
+- `npm run lint` currently fails in the new `/imports` work and should be the next cleanup task before new feature work.

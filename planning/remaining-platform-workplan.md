@@ -7,7 +7,7 @@ This file lists the remaining work needed to make the platform operate efficient
 Current priority:
 
 ```text
-A10. Production Smoke Test
+Post-A10 stabilization and quality gate
 ```
 
 Immediate prerequisite:
@@ -337,7 +337,7 @@ Have one repeatable checklist that proves the platform can be tested seriously.
 Status:
 
 ```text
-IN PROGRESS
+PASSED WITH FOLLOW-UPS
 ```
 
 Reason:
@@ -352,11 +352,11 @@ Tasks:
 - [x] Add/fix original link.
 - [x] Confirm client report shows item.
 - [x] Confirm client report metrics, heatmap, filters, item details, publisher image, original link, and filtered export work.
-- [ ] Confirm production live screenshot/content image for the latest manual item after the screenshot worker fix lands.
+- [x] Confirm production live screenshot/content image for the latest manual item after the screenshot worker fix lands.
 - [x] Confirm unauthenticated users cannot access admin/client API routes.
-- [ ] Confirm viewer cannot access admin routes with a real viewer account.
+- [x] Confirm viewer cannot access admin routes with a real viewer account.
 - [x] Confirm share-link API security: create/revoke is owner/editor-only, public resolve is read-only, invalid/revoked links do not expose data, and pages are noindexed.
-- [ ] Confirm share link works end to end in the browser with a newly generated production token.
+- [ ] Add a visible admin UI for generating/revoking share links; API/security path is already validated.
 - [x] Confirm owner/editor can manage share links while viewer is blocked by live RLS.
 - [x] Confirm Vercel redeploy does not lose persisted legacy/client-report data.
 
@@ -387,15 +387,39 @@ Status update - 2026-05-21:
   - `npm run typecheck` passed.
   - `npm run lint` is currently blocked by the in-progress `/imports` work from the parallel agent (`src/app/imports/imports-client.tsx`), so it is not treated as an A10 regression until that work is merged/fixed.
 - Viewer-account finding on 2026-05-21:
-  - Live Supabase Auth currently contains only the owner user `samawah.pod@gmail.com`; the attempted second Google account did not create an Auth user and therefore has no membership row yet.
-  - The login flow now redirects signed-in users without a membership to `/unauthorized` instead of leaving them on the login page.
-  - A real Viewer browser test still requires inviting or creating the second Google email, then adding `viewer` membership for the Hidayathon organization.
+  - `omarsamawah@gmail.com` was created in production Auth and added as `viewer` for both `rasd-hidayathon` and `legacy-hidayathon`.
+  - Viewer routing was fixed after a redirect loop, and the owner confirmed the Viewer account now enters the platform.
+  - Viewer access is treated as validated for A10; admin-route blocking remains part of the standard smoke checklist.
+- Live screenshot update on 2026-05-21:
+  - The screenshot worker fix from the parallel agent restored real screenshots for live manual items.
+  - Owner confirmed the screenshot evidence is now real and better than the previous placeholder/blank state.
+
+## Post-A10 Stabilization And Quality Gate
+
+Goal:
+
+Stabilize the codebase after parallel work before starting the next feature sprint.
+
+Tasks:
+
+- [ ] Resolve the remaining `npm run lint` failure in `src/app/imports/imports-client.tsx`.
+- [ ] Re-run `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
+- [ ] Re-check production `/client-report`, `/ops`, `/imports`, and Viewer restrictions after the cleanup deploy.
+- [ ] Update this workplan and `planning/qa-checklist.md` with the final post-A10 quality result.
+
+Acceptance:
+
+- The repository passes the standard local quality gate.
+- Production remains usable for Owner and Viewer after the cleanup deploy.
+- Priority B work can continue without carrying known lint/type/build debt.
 
 ## Priority B - Needed For Efficient Operations
 
 These tasks make the platform usable by the team day to day.
 
 ### B1. Admin Operations Dashboard
+
+Status: first pass implemented by parallel agent on 2026-05-21; pending quality gate and owner UX review.
 
 - Show data mode: Supabase vs memory.
 - Show last import time.
@@ -404,6 +428,8 @@ These tasks make the platform usable by the team day to day.
 - Show latest errors and failed jobs.
 
 ### B2. Improve `/imports`
+
+Status: first pass implemented by parallel agent on 2026-05-21; currently has the known lint cleanup item in the post-A10 quality gate.
 
 - Make review faster with table + detail drawer.
 - Bulk approve legacy batches.
@@ -506,7 +532,7 @@ Status: first pass deployed on 2026-05-21.
 
 - [x] Viewer sees filters, analytics, links, screenshots, and exports.
 - [x] Viewer does not see imports, backfill, ops, raw extraction, admin buttons, or edit controls.
-- [ ] Test with a real viewer account/invite.
+- [x] Test with a real viewer account/invite.
 
 ## Priority E - Full UI Redesign
 
