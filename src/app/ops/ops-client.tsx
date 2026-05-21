@@ -83,7 +83,7 @@ const arabicApiErrors: Record<string, string> = {
   "type must be a supported source type": "نوع المصدر غير مدعوم.",
   rss_fetch_failed: "تعذر جلب موجز RSS.",
   rss_fetch_timeout: "انتهت مهلة جلب موجز RSS.",
-  rss_parse_failed: "تعذر قراءة موجز RSS.",
+  rss_parse_failed: "هذا ليس موجز RSS. لاختبار خبر واحد استخدم خانة رابط مادة واحدة بالأعلى.",
   rss_feed_empty: "موجز RSS فارغ.",
   rss_feed_too_large: "موجز RSS كبير جدًا.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
@@ -644,13 +644,17 @@ export function OpsClient() {
 
       <section className="mx-auto max-w-7xl px-5 py-5">
         <form onSubmit={submitUrl} className="border-b border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03] md:rounded-lg md:border">
+          <div className="mb-3">
+            <h2 className="text-sm font-bold">رابط مادة واحدة</h2>
+            <p className="mt-1 text-xs font-semibold text-[#66736d]">استخدمها لتجربة خبر أو تغريدة من التقارير.</p>
+          </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
             <label className="relative block">
               <LinkIcon className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#66736d]" />
               <input
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
-                placeholder="الصق رابط X أو خبر"
+                placeholder="الصق رابط خبر أو تغريدة واحدة"
                 className="h-12 w-full rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] pr-10 pl-3 text-left text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
                 dir="ltr"
                 required
@@ -707,7 +711,7 @@ export function OpsClient() {
             <div>
               <h2 className="text-sm font-bold">مصادر الأخبار</h2>
               <p className="mt-1 text-xs font-semibold text-[#66736d]">
-                أضف موجز RSS حقيقي، ثم شغله يدويًا. المواد الجديدة تظهر في قائمة المراجعة.
+                للموجزات فقط، وليس روابط الأخبار الفردية. المواد الجديدة تظهر في قائمة المراجعة.
               </p>
             </div>
             <form onSubmit={submitRssSource} className="grid w-full gap-2 md:max-w-2xl md:grid-cols-[160px_minmax(0,1fr)_auto]">

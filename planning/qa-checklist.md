@@ -160,6 +160,7 @@ npx --yes supabase db query --db-url $env:SUPABASE_DB_URL --file scripts/verify_
 Use this after C1.2 deploy:
 
 - As owner/editor, open `https://rasd-gamma.vercel.app/ops`.
+- For one article/tweet from legacy reports, use `رابط مادة واحدة`; do not paste article URLs into the RSS source form.
 - If no source exists, add one from `/ops` using a public RSS feed URL and confirm the source appears without opening Supabase.
 - Add the same RSS feed again and confirm the UI reports that the source already exists rather than creating another active source.
 - Confirm the `مصادر الأخبار` block shows active RSS sources.
