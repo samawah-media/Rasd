@@ -475,7 +475,7 @@ async function refreshSupabaseManualDuplicate(
   if (staleCaptureError) throw staleCaptureError;
 
   const staleCaptureIds = ((staleCaptures ?? []) as Array<{ id: string; asset_url: string | null }>)
-    .filter((capture) => !capture.asset_url || capture.asset_url === "/window.svg")
+    .filter((capture) => !capture.asset_url || capture.asset_url === "/window.svg" || capture.asset_url.includes("evidence-card.svg"))
     .map((capture) => capture.id);
 
   if (staleCaptureIds.length) {

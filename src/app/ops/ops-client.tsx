@@ -484,7 +484,11 @@ export function OpsClient() {
                     src={captureAsset(state.capturesByItem[lastItem.id]) ?? ""}
                     onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
-                  <p className="px-3 py-2 text-center text-xs text-stone-400">صورة دليل محتوى — ليست لقطة شاشة حقيقية</p>
+                  <p className="px-3 py-2 text-center text-xs text-stone-400">
+                    {captureAsset(state.capturesByItem[lastItem.id])?.includes("microlink.io")
+                      ? "صورة لقطة شاشة حقيقية ومباشرة"
+                      : "صورة دليل محتوى — ليست لقطة شاشة حقيقية"}
+                  </p>
                 </div>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
