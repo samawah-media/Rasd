@@ -129,9 +129,9 @@ function sourceLabel(type: SourceType) {
 }
 
 function estimateSentiment(score: number) {
-  if (score >= 80) return "positive";
   if (score <= 30) return "negative";
-  return "neutral";
+  if (score < 40) return "neutral";
+  return "positive";
 }
 
 function platformFromUrl(value: string) {
