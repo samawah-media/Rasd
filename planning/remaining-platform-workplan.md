@@ -494,7 +494,7 @@ Detailed execution plan: [priority-c-real-source-integrations-plan.md](priority-
 
 ### C1. RSS/News Sources
 
-Status: C1.0, C1.1, and C1.2 completed on 2026-05-21. Next: C1.3 scheduled polling, only after confirming schedule/plan limits.
+Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron that respects each source schedule. Next: C2 extraction/correction cleanup.
 
 - [x] Add source registry fields to the existing `sources` table: `feed_url`, `is_active`, `last_checked_at`, `last_success_at`, `last_error`, `poll_interval_minutes`.
 - [x] Use the existing `source_credibility` enum instead of adding a second reliability model.
@@ -511,7 +511,8 @@ Status: C1.0, C1.1, and C1.2 completed on 2026-05-21. Next: C1.3 scheduled polli
 - [x] Add owner/editor keyword tuning for RSS relevance from `/ops`.
 - [x] Add `/ops` cleanup for visible live workflow items so test manual/RSS content can be removed safely.
 - [x] Verify API auth rules keep RSS polling owner/editor-only and block Viewer.
-- [ ] Add scheduled cron only after confirming Vercel plan limits and `CRON_SECRET`.
+- [x] Add scheduled cron with `CRON_SECRET`; Vercel calls daily and the app only polls due sources.
+- [x] Add admin schedule controls per RSS source: daily, every 2 days, every 3 days, weekly, plus active/inactive.
 - [ ] Keep initial official/media items in review flow; avoid broad auto-approve until real QA passes.
 
 ### C2. Manual Web Extraction

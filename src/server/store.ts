@@ -15,6 +15,7 @@ import { evidenceCardUrl } from "@/server/evidence-card";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 import {
   normalizeSourceCreateInput,
+  SourceValidationError,
   type SourceCreateInput,
 } from "@/server/source-validation";
 import {
@@ -616,6 +617,25 @@ export const store = {
     };
     sources.unshift(source);
     audit("source.created", source.id, { type: source.type });
+    return source;
+  },
+
+  updateSourceSchedule(id: string, input: { isActive?: boolean; pollIntervalMinutes?: number }) {
+    const source = sources.find((entry) => entry.id === id);
+    if (!source) throw new Error("source_not_found");
+
+    if (typeof input.isActive === "boolean") source.isActive = input.isActive;
+    if (typeof input.pollIntervalMinutes === "number") {
+      if (!Number.isInteger(input.pollIntervalMinutes) || input.pollIntervalMinutes < 15 || input.pollIntervalMinutes > 10080) {
+        throw new SourceValidationError("poll_interval_minutes must be between 15 and 10080");
+      }
+      source.pollIntervalMinutes = input.pollIntervalMinutes;
+    }
+
+    audit("source.schedule_updated", source.id, {
+      isActive: source.isActive,
+      pollIntervalMinutes: source.pollIntervalMinutes,
+    });
     return source;
   },
 

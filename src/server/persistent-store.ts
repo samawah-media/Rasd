@@ -30,6 +30,7 @@ import { evidenceCardUrl } from "@/server/evidence-card";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 import {
   normalizeSourceCreateInput,
+  SourceValidationError,
   type SourceCreateInput,
 } from "@/server/source-validation";
 import {
@@ -853,6 +854,44 @@ export const persistentStore = {
     if (error) throw error;
     await audit(supabase, "source.created", "source", (data as DbSourceRow).id, { type: normalized.type });
     return toSource(data as DbSourceRow);
+  },
+
+  async updateSourceSchedule(id: string, input: { isActive?: boolean; pollIntervalMinutes?: number }) {
+    if (!shouldUseSupabase()) return store.updateSourceSchedule(id, input);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const patch: DbRow = {};
+    if (typeof input.isActive === "boolean") patch.is_active = input.isActive;
+    if (typeof input.pollIntervalMinutes === "number") {
+      if (!Number.isInteger(input.pollIntervalMinutes) || input.pollIntervalMinutes < 15 || input.pollIntervalMinutes > 10080) {
+        throw new SourceValidationError("poll_interval_minutes must be between 15 and 10080");
+      }
+      patch.poll_interval_minutes = input.pollIntervalMinutes;
+    }
+
+    if (!Object.keys(patch).length) {
+      const source = (await this.listSources()).find((entry) => entry.id === id);
+      if (!source) throw new Error("source_not_found");
+      return source;
+    }
+
+    const { data, error } = await supabase
+      .from("sources")
+      .update(patch)
+      .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error("source_not_found");
+
+    const source = toSource(data as DbSourceRow);
+    await audit(supabase, "source.schedule_updated", "source", source.id, {
+      isActive: source.isActive,
+      pollIntervalMinutes: source.pollIntervalMinutes,
+    });
+    return source;
   },
 
   async ingestRssSource(sourceId: string, options: RssIngestOptions = {}) {

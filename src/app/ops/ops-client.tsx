@@ -257,6 +257,17 @@ function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
   return base;
 }
 
+const sourceScheduleOptions = [
+  { label: "كل 3 أيام", value: 4320 },
+  { label: "كل يومين", value: 2880 },
+  { label: "يوميًا", value: 1440 },
+  { label: "أسبوعيًا", value: 10080 },
+] as const;
+
+function scheduleLabel(minutes: number) {
+  return sourceScheduleOptions.find((option) => option.value === minutes)?.label ?? `كل ${minutes.toLocaleString("ar-SA")} دقيقة`;
+}
+
 function latestWorkflowItems(items: MonitoringItem[], limit = 48) {
   return items
     .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss")
@@ -293,6 +304,11 @@ export function OpsClient() {
 
   const activeRssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.isActive && source.feedUrl),
+    [state.sources],
+  );
+
+  const rssSources = useMemo(
+    () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
     [state.sources],
   );
 
@@ -485,7 +501,7 @@ export function OpsClient() {
           url: feedUrl,
           feed_url: feedUrl,
           credibility: "media",
-          poll_interval_minutes: 1440,
+          poll_interval_minutes: 4320,
         }),
       });
 
@@ -550,6 +566,32 @@ export function OpsClient() {
       setSelectedId(result.poll.items?.[0]?.id ?? selectedId);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصدر.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function updateSourceSchedule(source: Source, input: { isActive?: boolean; pollIntervalMinutes?: number }) {
+    setPending(`source-schedule-${source.id}`);
+    setMessage("جاري تحديث جدولة المصدر...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<{ source: Source }>(`/api/sources/${source.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          is_active: input.isActive,
+          poll_interval_minutes: input.pollIntervalMinutes,
+        }),
+      });
+      await refreshSilently();
+      setMessage(
+        `${result.source.name}: ${result.source.isActive ? "نشط" : "متوقف"}، الجدولة ${scheduleLabel(result.source.pollIntervalMinutes)}.`,
+      );
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تحديث جدولة المصدر.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -842,13 +884,13 @@ export function OpsClient() {
             </form>
           </div>
 
-          {activeRssSources.length ? (
+          {rssSources.length ? (
             <>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <button
                 type="button"
                 onClick={pollActiveSources}
-                disabled={pending !== null}
+                disabled={pending !== null || !activeRssSources.length}
                 className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#116a5c]/25 bg-[#e8f5ef] px-3 text-sm font-semibold text-[#116a5c] transition hover:border-[#116a5c]/60 disabled:opacity-50"
               >
                 {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -856,26 +898,58 @@ export function OpsClient() {
               </button>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
-              {activeRssSources.map((source) => (
+              {rssSources.map((source) => (
                 <div
                   key={source.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-[#edf0e9] bg-[#fbfbf8] px-3 py-2"
+                  className={`flex flex-col gap-3 rounded-lg border border-[#edf0e9] px-3 py-2 ${
+                    source.isActive ? "bg-[#fbfbf8]" : "bg-[#f5f1ed] opacity-80"
+                  }`}
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-bold">{source.name}</div>
-                    <div className="mt-1 text-xs font-semibold text-[#66736d]">
-                      آخر نجاح: {source.lastSuccessAt ? formatDate(source.lastSuccessAt) : "لم يعمل بعد"}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="truncate text-sm font-bold">{source.name}</div>
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${source.isActive ? "bg-[#e8f5ef] text-[#116a5c]" : "bg-[#fff1ed] text-[#9a341f]"}`}>
+                          {source.isActive ? "نشط" : "متوقف"}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-[#66736d]">
+                        آخر نجاح: {source.lastSuccessAt ? formatDate(source.lastSuccessAt) : "لم يعمل بعد"}
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => pollSource(source)}
+                      disabled={pending !== null || !source.isActive}
+                      className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+                    >
+                      {pending === `poll-${source.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                      تشغيل
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => pollSource(source)}
-                    disabled={pending !== null}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
-                  >
-                    {pending === `poll-${source.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    تشغيل
-                  </button>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <select
+                      value={source.pollIntervalMinutes}
+                      onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
+                      disabled={pending !== null}
+                      className="h-9 rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold outline-none transition focus:border-[#116a5c] disabled:opacity-50"
+                      aria-label="جدولة المصدر"
+                    >
+                      {sourceScheduleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                      disabled={pending !== null}
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-[#dfe3d9] bg-white px-3 text-xs font-bold transition hover:border-[#116a5c]/45 disabled:opacity-50"
+                    >
+                      {source.isActive ? "إيقاف" : "تشغيل تلقائي"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

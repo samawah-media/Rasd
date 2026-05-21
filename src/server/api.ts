@@ -125,6 +125,55 @@ function sourcePollErrorStatus(error: unknown) {
   return { status: 500 as const, error: "source_poll_failed" };
 }
 
+function isCronAuthorized(c: { req: { header(name: string): string | undefined } }) {
+  const expected = process.env.CRON_SECRET;
+  const provided = c.req.header("authorization");
+  return Boolean(expected && provided === `Bearer ${expected}`);
+}
+
+function isSourceDue(source: { isActive: boolean; feedUrl?: string; lastCheckedAt?: string; pollIntervalMinutes: number }, nowMs = Date.now()) {
+  if (!source.isActive || !source.feedUrl) return false;
+  if (!source.lastCheckedAt) return true;
+  const lastCheckedMs = Date.parse(source.lastCheckedAt);
+  if (Number.isNaN(lastCheckedMs)) return true;
+  return nowMs - lastCheckedMs >= source.pollIntervalMinutes * 60 * 1000;
+}
+
+async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore.listSources>>) {
+  const runs: Array<Record<string, unknown>> = [];
+  let fetched = 0;
+  let created = 0;
+  let duplicates = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const source of sources) {
+    try {
+      const result = sourcePollPayload(await persistentStore.ingestRssSource(source.id));
+      fetched += result.fetched;
+      created += result.created;
+      duplicates += result.duplicates;
+      skipped += typeof result.skipped === "number" ? result.skipped : 0;
+      failed += result.failed;
+      runs.push({ ok: true, sourceId: source.id, sourceName: source.name, ...result });
+    } catch (error) {
+      const mapped = sourcePollErrorStatus(error);
+      failed += 1;
+      runs.push({ ok: false, sourceId: source.id, sourceName: source.name, error: mapped.error });
+    }
+  }
+
+  return {
+    sources: sources.length,
+    fetched,
+    created,
+    duplicates,
+    skipped,
+    failed,
+    runs,
+  };
+}
+
 api.get("/admin/health", async (c) => c.json(withRequestId(c, await persistentStore.health())));
 
 api.get("/admin/persistence", async (c) =>
@@ -345,6 +394,30 @@ api.post("/sources", async (c) => {
   }
 });
 
+api.patch("/sources/:id", async (c) => {
+  const body = await readJson(c);
+  try {
+    const source = await persistentStore.updateSourceSchedule(c.req.param("id"), {
+      isActive: typeof body.is_active === "boolean" ? body.is_active : typeof body.isActive === "boolean" ? body.isActive : undefined,
+      pollIntervalMinutes:
+        typeof body.poll_interval_minutes === "number"
+          ? body.poll_interval_minutes
+          : typeof body.pollIntervalMinutes === "number"
+            ? body.pollIntervalMinutes
+            : undefined,
+    });
+    return c.json(withRequestId(c, { source }));
+  } catch (error) {
+    if (error instanceof SourceValidationError) {
+      return c.json(withRequestId(c, { error: error.message }), 400);
+    }
+    if (error instanceof Error && error.message === "source_not_found") {
+      return c.json(withRequestId(c, { error: "source_not_found" }), 404);
+    }
+    throw error;
+  }
+});
+
 api.post("/sources/poll-active", async (c) => {
   const body = await readJson(c);
   const requestedLimit = typeof body.limit === "number" ? Math.trunc(body.limit) : 5;
@@ -353,39 +426,33 @@ api.post("/sources/poll-active", async (c) => {
     .filter((source) => source.type === "rss" && source.isActive && source.feedUrl)
     .slice(0, limit);
 
-  const runs: Array<Record<string, unknown>> = [];
-  let fetched = 0;
-  let created = 0;
-  let duplicates = 0;
-  let skipped = 0;
-  let failed = 0;
+  return c.json(
+    withRequestId(c, {
+      poll: await pollRssSources(sources),
+    }),
+  );
+});
 
-  for (const source of sources) {
-    try {
-      const result = sourcePollPayload(await persistentStore.ingestRssSource(source.id));
-      fetched += result.fetched;
-      created += result.created;
-      duplicates += result.duplicates;
-      skipped += typeof result.skipped === "number" ? result.skipped : 0;
-      failed += result.failed;
-      runs.push({ ok: true, sourceId: source.id, sourceName: source.name, ...result });
-    } catch (error) {
-      const mapped = sourcePollErrorStatus(error);
-      failed += 1;
-      runs.push({ ok: false, sourceId: source.id, sourceName: source.name, error: mapped.error });
-    }
+api.get("/cron/poll-sources", async (c) => {
+  if (!process.env.CRON_SECRET) {
+    return c.json(withRequestId(c, { error: "cron_not_configured" }), 503);
   }
+  if (!isCronAuthorized(c)) {
+    return c.json(withRequestId(c, { error: "cron_unauthorized" }), 401);
+  }
+
+  const requestedLimit = c.req.query("limit") ? Number(c.req.query("limit")) : 5;
+  const limit = Math.max(1, Math.min(10, Number.isFinite(requestedLimit) ? Math.trunc(requestedLimit) : 5));
+  const nowMs = Date.now();
+  const dueSources = (await persistentStore.listSources())
+    .filter((source) => source.type === "rss" && isSourceDue(source, nowMs))
+    .slice(0, limit);
 
   return c.json(
     withRequestId(c, {
       poll: {
-        sources: sources.length,
-        fetched,
-        created,
-        duplicates,
-        skipped,
-        failed,
-        runs,
+        due: dueSources.length,
+        ...(await pollRssSources(dueSources)),
       },
     }),
   );

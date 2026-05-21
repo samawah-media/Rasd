@@ -205,6 +205,31 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(second.json.source.id, first.json.source.id);
   });
 
+  it("lets admins update source automation schedule from the API", async () => {
+    const created = await requestJson("/api/sources", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Scheduled Feed",
+        type: "rss",
+        feed_url: "https://schedule.example.com/rss.xml",
+        credibility: "media",
+      }),
+    });
+    const updated = await requestJson(`/api/sources/${created.json.source.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        is_active: false,
+        poll_interval_minutes: 2880,
+      }),
+    });
+
+    assert.equal(created.response.status, 201);
+    assert.equal(created.json.source.pollIntervalMinutes, 4320);
+    assert.equal(updated.response.status, 200);
+    assert.equal(updated.json.source.isActive, false);
+    assert.equal(updated.json.source.pollIntervalMinutes, 2880);
+  });
+
   it("lets admins update keyword rules used by RSS relevance", async () => {
     const listed = await requestJson("/api/keyword-rules");
     const updated = await requestJson("/api/keyword-rules", {
@@ -300,6 +325,58 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(result.json.poll.runs[0].ok, true);
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("runs scheduled RSS polling only for due sources behind CRON_SECRET", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "cron_test_secret";
+    for (const source of store.listSources()) {
+      if (source.type === "rss") source.isActive = false;
+    }
+
+    const due = store.createSource({
+      name: "Due Scheduled RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/due.xml",
+      credibility: "media",
+      pollIntervalMinutes: 2880,
+    });
+    const notDue = store.createSource({
+      name: "Fresh Scheduled RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/fresh.xml",
+      credibility: "media",
+      pollIntervalMinutes: 2880,
+    });
+    notDue.lastCheckedAt = new Date().toISOString();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        rssFeed({
+          guid: "cron-story-1",
+          link: "https://news.example.com/hidayathon/cron-story-1",
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+
+    try {
+      const unauthorized = await requestJson("/api/cron/poll-sources");
+      const result = await requestJson("/api/cron/poll-sources", {
+        headers: { authorization: "Bearer cron_test_secret" },
+      });
+
+      assert.equal(unauthorized.response.status, 401);
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.poll.due, 1);
+      assert.equal(result.json.poll.created, 1);
+      assert.equal(result.json.poll.runs[0].sourceId, due.id);
+      assert.equal(result.json.poll.runs.some((run: { sourceId: string }) => run.sourceId === notDue.id), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
     }
   });
 

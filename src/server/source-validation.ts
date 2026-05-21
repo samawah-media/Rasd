@@ -31,6 +31,7 @@ const sourceTypes = new Set<SourceType>([
 ]);
 
 const credibilityLevels = new Set<SourceCredibility>(["official", "media", "influencer", "public"]);
+const defaultRssPollIntervalMinutes = 4320;
 
 export function normalizeSourceCreateInput(input: SourceCreateInput): NormalizedSourceCreateInput {
   const type = input.type ?? "manual_url";
@@ -39,7 +40,7 @@ export function normalizeSourceCreateInput(input: SourceCreateInput): Normalized
   const credibility = input.credibility ?? "public";
   if (!credibilityLevels.has(credibility)) throw new SourceValidationError("credibility must be supported");
 
-  const pollIntervalMinutes = input.pollIntervalMinutes ?? 1440;
+  const pollIntervalMinutes = input.pollIntervalMinutes ?? (type === "rss" ? defaultRssPollIntervalMinutes : 1440);
   if (!Number.isInteger(pollIntervalMinutes) || pollIntervalMinutes < 15 || pollIntervalMinutes > 10080) {
     throw new SourceValidationError("poll_interval_minutes must be between 15 and 10080");
   }

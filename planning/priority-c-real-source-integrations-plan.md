@@ -226,17 +226,20 @@ Outcome: source polling can run without a human click.
 
 Tasks:
 
-- [ ] Add `/api/cron/rss`.
-- [ ] Protect with `CRON_SECRET`.
-- [ ] Add `vercel.json` only after confirming desired schedule and plan limits.
-- [ ] Start daily if on Hobby.
+- [x] Add `/api/cron/poll-sources`.
+- [x] Protect with `CRON_SECRET`.
+- [x] Add `vercel.json` with a daily production cron.
+- [x] Let owner/editor control each RSS source schedule from `/ops`.
+- [x] Default new RSS sources to every 3 days, with admin options for daily, every 2 days, every 3 days, and weekly.
+- [x] Cron only runs sources that are due according to `last_checked_at` and `poll_interval_minutes`.
+- [x] Start daily if on Hobby.
 - [ ] Move to 15-30 minutes only if Vercel Pro or another scheduler is confirmed.
 
 Acceptance checks:
 
-- Missing/wrong `CRON_SECRET` returns unauthorized.
-- Cron run respects batch and budget limits.
-- Logs show a useful summary per run.
+- [x] Missing/wrong `CRON_SECRET` returns unauthorized.
+- [x] Cron run respects the capped batch limit and per-source schedule.
+- [x] Logs/API response show a useful summary per run.
 
 ## Phase C2.0 - Extraction Model Cleanup
 
