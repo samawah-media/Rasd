@@ -1,19 +1,19 @@
 # RASD Remaining Platform Workplan
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 This file lists the remaining work needed to make the platform operate efficiently and become testable with real Hidayathon monitoring data.
 
 Current priority:
 
 ```text
-B4 /ops simplification and production review
+Production owner smoke test after premium UI refresh
 ```
 
 Immediate prerequisite:
 
 ```text
-Completed: sync deployed local changes to GitHub
+Completed: premium UI refresh synced to GitHub and deployed
 ```
 
 The 2026-05-21 production deploy was originally made directly from the local working tree. Commit `87575f5` synced those deployed changes to GitHub `main`, and Vercel redeployed from GitHub to production.
@@ -21,9 +21,10 @@ The 2026-05-21 production deploy was originally made directly from the local wor
 Why this is next:
 
 - The production client experience was redesigned and deployed to Vercel on 2026-05-21.
+- The premium admin/client shell refresh was merged and deployed to Vercel production on 2026-05-22 with commit `6896679`.
 - The legacy archive, links, content crops, and publisher crops are already wired into the client report path.
 - Manual intake and evidence-lite capture have automated coverage, but the full production browser loop still needs owner-side confirmation.
-- Before building more UI or automation, the team needs one trusted production pass proving the deployed app works with the real Supabase runtime.
+- Before building more UI or automation, the team needs one trusted owner-side production pass proving the refreshed UI works with the real Supabase runtime.
 
 ## North Star
 
@@ -46,6 +47,7 @@ Status: done enough for the next operational phase.
 - Owner login with `samawah.pod@gmail.com` works according to user confirmation.
 - Admin/client route protection exists.
 - Client report redesign was deployed to production on Vercel on 2026-05-21.
+- Premium admin/client shell refresh was deployed to production on Vercel on 2026-05-22.
 - Initial legacy Hidayathon reports are extracted.
 - Legacy backfill workflow exists for missing links.
 - Local docs exist for auth/deployment and UI redesign.
@@ -415,10 +417,22 @@ Local quality result - 2026-05-21:
 - `npm run build` passed with Next.js production build.
 - `npm audit --audit-level=moderate` still reports a moderate `postcss` advisory through Next; npm suggests a breaking force fix, so this is tracked as a dependency follow-up instead of being applied.
 
+Production UI refresh quality result - 2026-05-22:
+
+- Commit `6896679` deployed to Vercel production and `https://rasd-gamma.vercel.app` is `Ready`.
+- `npm run test` passed: 99 tests, 0 failures.
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+- Signed-out browser smoke passed: `/login` renders with no console errors, and `/overview` redirects to `/login` instead of returning 404.
+- `/overview` and `/directory` are now production routes behind role protection.
+- `npm audit --audit-level=moderate` still reports the known Next/PostCSS advisory; the suggested force fix is breaking and remains deferred.
+
 Acceptance:
 
 - [x] The repository passes the standard local quality gate.
 - Production remains usable for Owner and Viewer after the cleanup deploy.
+- The refreshed production UI still needs an authenticated owner walkthrough.
 - Priority B work can continue without carrying known lint/type/build debt.
 
 ## Priority B - Needed For Efficient Operations
@@ -427,7 +441,7 @@ These tasks make the platform usable by the team day to day.
 
 ### B1. Admin Operations Dashboard
 
-Status: first pass implemented by parallel agent on 2026-05-21; local quality gate passed, pending owner UX review.
+Status: premium first pass deployed on 2026-05-22 with commit `6896679`; pending authenticated owner UX review.
 
 - Show data mode: Supabase vs memory.
 - Show last import time.
@@ -456,13 +470,14 @@ Status: deferred on 2026-05-21. Current legacy report links are good enough for 
 
 ### B4. Improve `/ops`
 
-Status: first pass implemented locally on 2026-05-21; pending production review with the owner account.
+Status: premium first pass deployed on 2026-05-22; pending production review with the owner account.
 
 - [x] Convert `/ops` into a focused inbox-style workbench.
 - [x] Keep the main flow visible: paste link, review, capture, add to report.
 - [x] Replace heavy explanatory side panels with compact filters and a detail inspector.
 - [x] Use the current green/yellow RASD direction with Vercel/Linear-style spacing and controls.
 - [x] Preserve the existing API workflow and role protection.
+- [x] Keep RSS source schedule controls visible in the refreshed `/ops` UI.
 - [ ] Validate on production with owner login after deploy.
 
 ### B5. Improve `/feed`
@@ -517,7 +532,7 @@ Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron
 
 ### C2. Manual Web Extraction
 
-Status: C2.0, C2.1 metadata baseline, C2.2 editor correction, and C2.3 Readability extraction completed on 2026-05-21. Remaining: production build verification after the parallel `/ops` UI work is fixed, then optional external fallbacks.
+Status: C2.0, C2.1 metadata baseline, C2.2 editor correction, and C2.3 Readability extraction completed. Production build verification passed after the UI refresh on 2026-05-22. Remaining: optional external fallbacks only if real sites need them.
 
 - [x] Use existing `monitoring_items.raw_response` for compact internal correction details.
 - [x] Do not add a new `raw_data` column now.
@@ -560,7 +575,7 @@ These tasks make the platform useful to the client after the data loop is workin
 
 ### D1. Client Report Product
 
-Status: first pass deployed on 2026-05-21.
+Status: refreshed premium pass deployed on 2026-05-22; pending owner UX review.
 
 - [x] Show live/private platform feel.
 - [x] Add executive metric band.
@@ -592,7 +607,7 @@ Status: first pass deployed on 2026-05-21.
 
 ## Priority E - Full UI Redesign
 
-Start only after Priority A is testable.
+Status: first premium shell pass deployed on 2026-05-22; now needs production owner review and focused iteration rather than broad redesign churn.
 
 Design direction:
 
@@ -613,13 +628,13 @@ Color direction:
 
 Implementation order:
 
-1. Design tokens and font.
-2. Shared app shell.
-3. Client report redesign.
-4. Admin shell redesign.
-5. Loading/empty states.
-6. Mobile/responsive pass.
-7. Accessibility/contrast pass.
+1. [x] Design tokens and IBM Plex Sans Arabic font.
+2. [x] Shared app shell.
+3. [x] Client report premium refresh.
+4. [x] Admin shell and operations refresh.
+5. [ ] Owner-authenticated production UX pass.
+6. [ ] Mobile/responsive pass on real authenticated screens.
+7. [ ] Accessibility/contrast pass.
 
 ## Priority F - SaaS Readiness Later
 
@@ -669,9 +684,9 @@ Definition of done:
 Next recommended task:
 
 ```text
-A10. Production Smoke Test
+Authenticated production smoke test for the refreshed UI
 ```
 
 Concrete first step:
 
-Open `https://rasd-gamma.vercel.app/client-report` as owner and confirm the redesigned client workspace loads real data. Then use `/ops` with one fresh public X/news URL and follow the item through review, capture, live report insertion, client report visibility, and filtered export.
+Open `https://rasd-gamma.vercel.app` as owner, then verify `/overview`, `/ops`, `/client-report`, `/directory`, and `/access`. After the visual pass, use `/ops` with one fresh public X/news URL and follow the item through review, capture, live report insertion, client report visibility, and filtered export.

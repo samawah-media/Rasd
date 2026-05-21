@@ -1,6 +1,6 @@
 # Priority C Real Source Integrations Plan
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 ## Goal
 
@@ -312,7 +312,7 @@ Acceptance checks:
 
 - [x] Long pages do not block the function.
 - [x] Extraction improves weak metadata cases.
-- [ ] Build size and function runtime remain acceptable after the parallel `/ops` UI work is fixed enough for `next build`.
+- [x] Build size and function runtime remain acceptable after the parallel `/ops` UI work is fixed enough for `next build`.
 
 Implementation notes:
 
@@ -320,6 +320,7 @@ Implementation notes:
 - Metadata fields still win first. Readability only fills missing/weak title, excerpt/text, byline, and site name.
 - The extractor caps HTML processed for metadata and skips Readability on oversized pages.
 - Manual intake keeps compact extraction evidence in `raw_response.input.extraction` instead of storing full HTML.
+- Production build verification passed on 2026-05-22 after the premium UI refresh: `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build` all passed.
 
 ## Phase C2.4 - Optional External Fallback
 

@@ -1,14 +1,37 @@
 # RASD QA Checklist
 
-Last updated: 2026-05-21
+Last updated: 2026-05-22
 
 This checklist is the short production smoke test for RASD. Use it after each production deploy and before starting large UI work.
 
 Current next check:
 
 ```text
-Post-cleanup production smoke after deploy
+Authenticated production smoke after premium UI refresh
 ```
+
+## Premium UI Refresh Quality Gate
+
+Status: passed on 2026-05-22.
+
+- GitHub `main` includes commit `6896679` for the premium admin/client shell refresh.
+- Vercel production deployment is `Ready` and aliased to `https://rasd-gamma.vercel.app`.
+- `npm run test` passed: 99 tests, 0 failures.
+- `npm run typecheck` passed.
+- `npm run lint` passed.
+- `npm run build` passed.
+- `npm audit --audit-level=moderate` still reports the known Next/PostCSS advisory; npm's suggested force fix is breaking and remains deferred.
+- Signed-out browser smoke passed: `/login` renders with no console errors.
+- Signed-out protected route smoke passed: `/overview` redirects to `/login` instead of returning 404.
+- New protected routes `/overview` and `/directory` are included in the production build.
+
+Current owner-side smoke target:
+
+1. Open `https://rasd-gamma.vercel.app` as owner.
+2. Confirm `/overview`, `/ops`, `/client-report`, `/directory`, and `/access` render cleanly after login.
+3. Run one fresh `/ops` URL through intake, review, capture, live report insertion, and `/client-report` visibility.
+4. Confirm RSS source schedule controls remain visible and usable in `/ops`.
+5. Confirm Viewer still lands on `/client-report` and remains blocked from admin routes.
 
 ## Post-A10 Local Quality Gate
 
@@ -91,6 +114,8 @@ Partial run on 2026-05-21:
 - Viewer account `omarsamawah@gmail.com` was created and assigned `viewer` membership for Hidayathon. After routing fixes, owner confirmed the Viewer account enters the platform.
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
+
+0. Open `https://rasd-gamma.vercel.app/overview` and `https://rasd-gamma.vercel.app/directory`; confirm both pages render after login and use the refreshed shell.
 
 1. Open `https://rasd-gamma.vercel.app/api/admin/persistence`.
 2. Confirm the JSON matches the Production Persistence expectations above.
