@@ -60,6 +60,18 @@ Use it to track:
 - What can be verified automatically from the local machine.
 - Which Priority A checks are done before UI redesign begins.
 
+### `project-status-and-roadmap.md`
+
+The current consolidated project map.
+
+Use it to quickly see:
+
+- What is done.
+- What is in progress.
+- What is blocked by owner-side testing.
+- Which tasks can run safely in parallel.
+- The next recommended sequence after C3 lands.
+
 ### `content-screenshot-pipeline-plan.md`
 
 Plan for turning legacy report evidence into useful content images.
