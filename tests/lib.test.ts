@@ -264,9 +264,31 @@ describe("connector and budget utilities", () => {
     assert.equal(metadata.title, "خبر هداية");
     assert.equal(metadata.text, "متابعة إعلامية لهاكاثون هداية");
     assert.equal(metadata.authorName, "فريق الأخبار");
+    assert.equal(metadata.publisherName, "Example");
     assert.equal(metadata.canonicalUrl, "https://example.com/canonical-hidayathon");
     assert.equal(metadata.imageUrl, "https://example.com/image.jpg");
     assert.equal(metadata.publishedAt, "2026-05-21T06:30:00.000Z");
+  });
+
+  it("uses site metadata or hostname as a publisher fallback for webpages", async () => {
+    const withSiteName = await fetchUrlMetadata("https://www.okaz.com.sa/news/hidayathon", async () => {
+      return new Response(
+        '<html><head><title>Hidayathon story</title><meta property="og:site_name" content="Okaz"><meta name="description" content="Coverage"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } },
+      );
+    });
+    const fromHostname = await fetchUrlMetadata("https://www.alriyadh.com/news/hidayathon", async () => {
+      return new Response(
+        '<html><head><title>Hidayathon story</title><meta name="description" content="Coverage"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } },
+      );
+    });
+
+    assert.equal(withSiteName.publisherName, "Okaz");
+    assert.equal(withSiteName.siteName, "Okaz");
+    assert.equal(withSiteName.authorName, "Okaz");
+    assert.equal(fromHostname.publisherName, "Alriyadh");
+    assert.equal(fromHostname.authorName, "Alriyadh");
   });
 
   it("blocks private or credentialed URLs before server-side metadata fetching", () => {

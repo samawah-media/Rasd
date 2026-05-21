@@ -517,11 +517,13 @@ Status: C1.0 through C1.3 completed on 2026-05-21 for a low-frequency daily cron
 
 ### C2. Manual Web Extraction
 
-Status: C2.0, C2.1 metadata baseline, and C2.2 editor correction completed on 2026-05-21. Remaining: richer Readability extraction and optional fallbacks.
+Status: C2.0, C2.1 metadata baseline, and C2.2 editor correction completed on 2026-05-21. C2.1 now also includes publisher fallback from site metadata or hostname. Remaining: richer Readability extraction and optional fallbacks.
 
 - [x] Use existing `monitoring_items.raw_response` for compact internal correction details.
 - [x] Do not add a new `raw_data` column now.
 - [x] Improve URL extraction for title, summary, author, date, image, and canonical URL when metadata exists.
+- [x] Add compact `ExtractionResult` typing for extraction output before Readability expansion.
+- [x] Add publisher/source fallback from `og:site_name`, application metadata, or hostname when author metadata is missing.
 - [x] Keep X oEmbed behavior unchanged.
 - [x] Add editor correction endpoint for title, summary, author, date, and original URL.
 - [x] Preserve old extracted values in `raw_response.editorCorrections` and audit logs for Supabase-backed items.

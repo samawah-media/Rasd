@@ -250,7 +250,7 @@ Tasks:
 - [x] Keep client-safe fields on `monitoring_items`.
 - [x] Keep internal correction details in `raw_response.editorCorrections`.
 - [x] Add tests that corrected client-safe fields appear in `/client-report` after report insertion.
-- [ ] Define a fuller compact `ExtractionResult` type before Readability work.
+- [x] Define a fuller compact `ExtractionResult` type before Readability work.
 
 Acceptance checks:
 
@@ -265,13 +265,15 @@ Tasks:
 
 - [x] Improve `src/server/url-metadata.ts` with canonical URL and image extraction.
 - [x] Add common news meta tags for published date.
-- [ ] Add publisher/source fallback from URL hostname.
+- [x] Add publisher/source fallback from site metadata or URL hostname.
 - [x] Add deterministic metadata tests for article canonical URL, image, and publish date.
+- [x] Add deterministic metadata tests for publisher fallback behavior.
 - [x] Keep X oEmbed behavior unchanged.
 
 Acceptance checks:
 
 - [x] Website URLs produce useful title/summary/date when metadata exists.
+- [x] Website URLs still produce a useful publisher name when author metadata is missing.
 - [x] X URLs continue to produce tweet metadata.
 - [x] Private/internal URLs remain blocked.
 

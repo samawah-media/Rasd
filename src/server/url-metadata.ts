@@ -1,17 +1,22 @@
 import { isIP } from "node:net";
 
-export type UrlMetadata = {
+export type ExtractionResult = {
   title?: string;
   text?: string;
   authorName?: string;
   authorHandle?: string;
+  publisherName?: string;
+  siteName?: string;
   publishedAt?: string;
   canonicalUrl?: string;
   imageUrl?: string;
   platform: "X" | "Website" | "Unknown";
   source: "x_oembed" | "html_metadata" | "url_only";
+  warnings?: string[];
   warning?: string;
 };
+
+export type UrlMetadata = ExtractionResult;
 
 type FetchLike = typeof fetch;
 
@@ -25,6 +30,7 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch):
       platform,
       source: "url_only",
       warning: "url_not_public",
+      warnings: ["url_not_public"],
     };
   }
 
@@ -39,6 +45,7 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch):
       platform,
       source: "url_only",
       warning: error instanceof Error ? error.message : "metadata_fetch_failed",
+      warnings: [error instanceof Error ? error.message : "metadata_fetch_failed"],
     };
   }
 }
@@ -180,6 +187,14 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
     metaContent(html, "property", "article:author"),
     metaContent(html, "name", "twitter:creator"),
   );
+  const siteName = cleanText(
+    firstPresent(
+      metaContent(html, "property", "og:site_name"),
+      metaContent(html, "name", "application-name"),
+      metaContent(html, "name", "twitter:site"),
+    ),
+  );
+  const publisherName = siteName ?? publisherNameFromUrl(url);
   const publishedAt = isoDate(
     firstPresent(
       metaContent(html, "property", "article:published_time"),
@@ -204,7 +219,9 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   return {
     title: title ?? "مادة مرصودة من رابط",
     text: description ?? title ?? url,
-    authorName,
+    authorName: authorName ?? publisherName,
+    publisherName,
+    siteName,
     publishedAt,
     canonicalUrl,
     imageUrl,
@@ -331,6 +348,43 @@ function englishMonthNumber(value: string) {
 
 function cleanText(value: string | null | undefined) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function publisherNameFromUrl(value: string) {
+  try {
+    const hostname = new URL(value).hostname.replace(/^www\./u, "").toLowerCase();
+    const ignoredLabels = new Set([
+      "com",
+      "net",
+      "org",
+      "gov",
+      "edu",
+      "co",
+      "news",
+      "sa",
+      "ae",
+      "qa",
+      "kw",
+      "bh",
+      "om",
+    ]);
+    const label = hostname
+      .split(".")
+      .filter((part) => part && !ignoredLabels.has(part))
+      .at(-1);
+
+    return label ? titleCaseDomainLabel(label) : hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+function titleCaseDomainLabel(value: string) {
+  return value
+    .split(/[-_]/u)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function clipped(value: string, maxLength: number) {
