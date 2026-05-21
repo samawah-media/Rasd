@@ -7,7 +7,7 @@ This checklist is the short production smoke test for RASD. Use it after each pr
 Current next check:
 
 ```text
-A10. Production Smoke Test after the 2026-05-21 client-report redesign deploy
+A10. Owner-authenticated Production Smoke Test
 ```
 
 ## Production Persistence
@@ -59,6 +59,17 @@ Live Supabase schema/RLS verification:
 - The live Priority A SQL returned 0 public tables with RLS disabled.
 
 ## Manual Owner Smoke Test
+
+Partial run on 2026-05-21:
+
+- GitHub `main` was synced with production code at commit `87575f5`.
+- Vercel deployment `https://rasd-6jev465st-samawahs-projects.vercel.app` reached `Ready`.
+- Production alias `https://rasd-gamma.vercel.app` points at that deployment.
+- Signed-out API checks passed:
+  - `/api/admin/persistence` returns `401 auth_required`.
+  - `/api/client-report/hidayathon` returns `401 auth_required`.
+  - `/client-report` redirects to `/login?next=%2Fclient-report`.
+- Browser reached Google sign-in. The remaining checks below require completing owner login as `samawah.pod@gmail.com`.
 
 Run these in production while logged in as `samawah.pod@gmail.com`:
 

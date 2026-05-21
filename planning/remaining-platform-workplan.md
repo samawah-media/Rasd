@@ -13,10 +13,10 @@ A10. Production Smoke Test
 Immediate prerequisite:
 
 ```text
-Sync deployed local changes to GitHub
+Completed: sync deployed local changes to GitHub
 ```
 
-The 2026-05-21 production deploy was made directly from the local working tree. Commit and push the deployed changes before relying on Git-triggered deployments again, otherwise a future GitHub deployment could overwrite the live client-report work.
+The 2026-05-21 production deploy was originally made directly from the local working tree. Commit `87575f5` synced those deployed changes to GitHub `main`, and Vercel redeployed from GitHub to production.
 
 Why this is next:
 
@@ -337,7 +337,7 @@ Have one repeatable checklist that proves the platform can be tested seriously.
 Status:
 
 ```text
-NEXT PRIORITY
+IN PROGRESS
 ```
 
 Reason:
@@ -346,7 +346,7 @@ This is the first task that proves the deployed system is actually usable end to
 
 Tasks:
 
-- Owner login.
+- [ ] Owner login.
 - Create/import item.
 - Review item.
 - Add/fix original link.
@@ -362,6 +362,13 @@ Acceptance:
 - One Hidayathon item can travel through the full platform loop.
 - The deployed client experience is comfortable enough for real client review.
 - The smoke-test result is recorded in `planning/qa-checklist.md`.
+
+Status update - 2026-05-21:
+
+- Synced the deployed local changes to GitHub with commit `87575f5`.
+- Vercel Git deployment `rasd-6jev465st-samawahs-projects.vercel.app` is `Ready` and aliased to `https://rasd-gamma.vercel.app`.
+- Unauthenticated protection passed: `/api/admin/persistence` and `/api/client-report/hidayathon` return `401 auth_required`, and `/client-report` redirects to `/login?next=%2Fclient-report`.
+- Browser login reached Google sign-in, but owner-authenticated smoke testing needs the owner to complete Google login in the browser session before the client report and `/ops` workflow can be verified live.
 
 ## Priority B - Needed For Efficient Operations
 
