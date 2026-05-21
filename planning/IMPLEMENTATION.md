@@ -47,6 +47,7 @@ Open `http://localhost:3000`.
 - `/api/items/manual-url` manual URL intake endpoint.
 - `/api/sources/:id/poll` runs one configured RSS source and returns fetched, created, duplicate, and failed counts.
 - `/api/sources/poll-active` runs a capped batch of active RSS sources for owner/editor manual monitoring.
+- `/api/sources` creates owner/editor RSS sources and returns the existing source when the same `feed_url` is submitted again.
 - `/api/reports/hidayathon-live` returns the current live Hidayathon report id so production UI does not depend on the local `report-5` seed id.
 - `/api/items/:id/review` approve/reject review endpoint.
 - `/api/items/:id/capture-report-grade` guarded report-grade capture endpoint.

@@ -193,18 +193,20 @@ Tasks:
 - [x] Return counts: fetched, created, duplicates, failed.
 - [x] Add audit logs for polling runs.
 - [x] Add an admin UI action in `/ops` or a dedicated sources section.
+- [x] Add a minimal `/ops` form for owner/editor to create the first active RSS source without opening Supabase.
 
 Acceptance checks:
 
 - [x] Viewer cannot call polling endpoints.
 - [x] Owner/editor can poll one source and see results.
 - [x] Poll failures show clear Arabic messages.
+- [x] Adding the same RSS feed again returns the existing source instead of creating duplicate source rows.
 
 Implementation notes:
 
 - `/api/sources/:id/poll` runs one RSS source and returns created/duplicate/failed counts plus created review items.
 - `/api/sources/poll-active` runs active RSS sources with a capped batch limit.
-- `/ops` now shows active RSS sources and can trigger either one source or the active batch.
+- `/ops` now lets owner/editor add an RSS source, shows active RSS sources, and can trigger either one source or the active batch.
 - RSS-created items appear in the same review/capture/report workflow as manual URL items.
 - Cron remains intentionally unimplemented until Phase C1.3.
 

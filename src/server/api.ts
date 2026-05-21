@@ -293,12 +293,25 @@ api.post("/topics", async (c) => {
 
 api.post("/sources", async (c) => {
   const body = await readJson(c);
+  const requestedType = (body.type as SourceType | undefined) ?? "manual_url";
+  const requestedFeedUrl = optionalString(body.feed_url, body.feedUrl);
+
+  if (requestedType === "rss" && requestedFeedUrl) {
+    const duplicateSource = (await persistentStore.listSources()).find(
+      (source) => source.type === "rss" && source.feedUrl === requestedFeedUrl,
+    );
+
+    if (duplicateSource) {
+      return c.json(withRequestId(c, { source: duplicateSource, duplicate: true }));
+    }
+  }
+
   try {
     const source = await persistentStore.createSource({
       name: typeof body.name === "string" ? body.name : undefined,
-      type: body.type as SourceType | undefined,
+      type: requestedType,
       url: typeof body.url === "string" ? body.url : undefined,
-      feedUrl: optionalString(body.feed_url, body.feedUrl),
+      feedUrl: requestedFeedUrl,
       credibility: body.credibility as SourceCredibility | undefined,
       isActive: typeof body.is_active === "boolean" ? body.is_active : undefined,
       pollIntervalMinutes:

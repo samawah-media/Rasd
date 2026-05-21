@@ -157,8 +157,8 @@ describe("Hono API acceptance workflow", () => {
       body: JSON.stringify({
         name: "Official Hidayathon Feed",
         type: "rss",
-        url: "https://example.com/news",
-        feed_url: "https://example.com/rss.xml",
+        url: "https://rss-validation.example.com/news",
+        feed_url: "https://rss-validation.example.com/rss.xml",
         credibility: "official",
         poll_interval_minutes: 60,
       }),
@@ -174,11 +174,35 @@ describe("Hono API acceptance workflow", () => {
 
     assert.equal(created.response.status, 201);
     assert.equal(created.json.source.type, "rss");
-    assert.equal(created.json.source.feedUrl, "https://example.com/rss.xml");
+    assert.equal(created.json.source.feedUrl, "https://rss-validation.example.com/rss.xml");
     assert.equal(created.json.source.isActive, true);
     assert.equal(created.json.source.pollIntervalMinutes, 60);
     assert.equal(privateFeed.response.status, 400);
     assert.equal(privateFeed.json.error, "feed_url must be a public http or https URL");
+  });
+
+  it("returns the existing RSS source when the same feed is added again", async () => {
+    const payload = {
+      name: "Duplicate Feed",
+      type: "rss",
+      url: "https://duplicate.example.com/rss.xml",
+      feed_url: "https://duplicate.example.com/rss.xml",
+      credibility: "media",
+    };
+
+    const first = await requestJson("/api/sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const second = await requestJson("/api/sources", {
+      method: "POST",
+      body: JSON.stringify({ ...payload, name: "Duplicate Feed Again" }),
+    });
+
+    assert.equal(first.response.status, 201);
+    assert.equal(second.response.status, 200);
+    assert.equal(second.json.duplicate, true);
+    assert.equal(second.json.source.id, first.json.source.id);
   });
 
   it("polls one RSS source into review items and deduplicates reruns", async () => {

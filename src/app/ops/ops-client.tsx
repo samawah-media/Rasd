@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Link as LinkIcon,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
   Sparkles,
@@ -50,6 +51,11 @@ type SourcePollResponse = {
   };
 };
 
+type SourceCreateResponse = {
+  source: Source;
+  duplicate?: boolean;
+};
+
 const emptyState: ApiState = {
   items: [],
   sources: [],
@@ -70,6 +76,11 @@ const arabicApiErrors: Record<string, string> = {
   source_not_found: "المصدر غير موجود.",
   source_not_rss: "هذا المصدر ليس مصدر RSS.",
   source_poll_failed: "تعذر تشغيل المصدر.",
+  "feed_url is required for RSS sources": "أدخل رابط RSS.",
+  "feed_url must be a public http or https URL": "رابط RSS يجب أن يكون عامًا ويبدأ بـ http أو https.",
+  "poll_interval_minutes must be between 15 and 10080": "مدة الفحص غير صحيحة.",
+  "credibility must be supported": "تصنيف المصدر غير مدعوم.",
+  "type must be a supported source type": "نوع المصدر غير مدعوم.",
   rss_fetch_failed: "تعذر جلب موجز RSS.",
   rss_fetch_timeout: "انتهت مهلة جلب موجز RSS.",
   rss_parse_failed: "تعذر قراءة موجز RSS.",
@@ -233,6 +244,8 @@ export function OpsClient() {
   const [text, setText] = useState("");
   const [authorName, setAuthorName] = useState("");
   const [publishedAt, setPublishedAt] = useState("");
+  const [rssName, setRssName] = useState("");
+  const [rssFeedUrl, setRssFeedUrl] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -399,6 +412,49 @@ export function OpsClient() {
       setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تنفيذ العملية.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function submitRssSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const feedUrl = rssFeedUrl.trim();
+    const existingSource = state.sources.find((source) => source.type === "rss" && source.feedUrl === feedUrl);
+
+    if (existingSource) {
+      setMessage(`المصدر موجود بالفعل: ${existingSource.name}.`);
+      setMessageType("info");
+      setRssName("");
+      setRssFeedUrl("");
+      return;
+    }
+
+    setPending("rss-source");
+    setMessage("جاري حفظ مصدر RSS...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourceCreateResponse>("/api/sources", {
+        method: "POST",
+        body: JSON.stringify({
+          name: rssName || "مصدر أخبار",
+          type: "rss",
+          url: feedUrl,
+          feed_url: feedUrl,
+          credibility: "media",
+          poll_interval_minutes: 1440,
+        }),
+      });
+
+      await refreshSilently();
+      setRssName("");
+      setRssFeedUrl("");
+      setMessage(result.duplicate ? `المصدر موجود بالفعل: ${result.source.name}.` : `تم حفظ المصدر: ${result.source.name}.`);
+      setMessageType(result.duplicate ? "info" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حفظ مصدر RSS.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -646,20 +702,48 @@ export function OpsClient() {
             <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-semibold ${messageClass(messageType)}`}>{message}</div>
           ) : null}
         </form>
-        {activeRssSources.length ? (
-          <div className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
+        <div className="mt-3 rounded-lg border border-[#dfe3d9] bg-white p-4 shadow-sm shadow-black/[0.03]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-sm font-bold">مصادر الأخبار</h2>
+              <p className="mt-1 text-xs font-semibold text-[#66736d]">
+                أضف موجز RSS حقيقي، ثم شغله يدويًا. المواد الجديدة تظهر في قائمة المراجعة.
+              </p>
+            </div>
+            <form onSubmit={submitRssSource} className="grid w-full gap-2 md:max-w-2xl md:grid-cols-[160px_minmax(0,1fr)_auto]">
+              <input
+                value={rssName}
+                onChange={(event) => setRssName(event.target.value)}
+                placeholder="اسم المصدر"
+                className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
+              />
+              <input
+                value={rssFeedUrl}
+                onChange={(event) => setRssFeedUrl(event.target.value)}
+                placeholder="https://example.com/rss.xml"
+                className="h-10 rounded-lg border border-[#dfe3d9] bg-[#fbfbf8] px-3 text-left text-sm outline-none transition focus:border-[#116a5c] focus:bg-white"
+                dir="ltr"
+                required
+              />
+              <button
+                type="submit"
+                disabled={pending !== null}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#17201d] px-3 text-sm font-semibold text-white transition hover:bg-[#26302c] disabled:opacity-50"
+              >
+                {pending === "rss-source" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                حفظ
+              </button>
+            </form>
+          </div>
+
+          {activeRssSources.length ? (
+            <>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-sm font-bold">مصادر الأخبار</h2>
-                <p className="mt-1 text-xs font-semibold text-[#66736d]">
-                  تشغيل يدوي آمن. المواد الجديدة تظهر في قائمة المراجعة.
-                </p>
-              </div>
               <button
                 type="button"
                 onClick={pollActiveSources}
                 disabled={pending !== null}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#116a5c]/25 bg-[#e8f5ef] px-3 text-sm font-semibold text-[#116a5c] transition hover:border-[#116a5c]/60 disabled:opacity-50"
+                className="mt-4 inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#116a5c]/25 bg-[#e8f5ef] px-3 text-sm font-semibold text-[#116a5c] transition hover:border-[#116a5c]/60 disabled:opacity-50"
               >
                 {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 تشغيل المصادر النشطة
@@ -689,8 +773,13 @@ export function OpsClient() {
                 </div>
               ))}
             </div>
-          </div>
-        ) : null}
+            </>
+          ) : (
+            <div className="mt-4 rounded-lg border border-dashed border-[#cfd6cb] bg-[#fbfbf8] px-3 py-4 text-sm font-semibold text-[#66736d]">
+              لا توجد مصادر RSS نشطة حتى الآن. أضف أول مصدر من النموذج بالأعلى.
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-5 px-5 pb-8 lg:grid-cols-[minmax(0,1fr)_420px]">
