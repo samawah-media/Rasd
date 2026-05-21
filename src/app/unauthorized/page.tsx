@@ -1,12 +1,17 @@
 import { LogOut, ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { defaultPathForRole } from "@/lib/auth-config";
+import { defaultPathForRole, isAdminRole } from "@/lib/auth-config";
 import { getCurrentAuthContext } from "@/server/auth";
 
 export default async function UnauthorizedPage() {
   const context = await getCurrentAuthContext();
   const homeHref = context ? defaultPathForRole(context.membership.role) : "/login";
+
+  if (context && !isAdminRole(context.membership.role)) {
+    redirect(homeHref);
+  }
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f5f6f4] px-4 py-10 text-[#171819]">
