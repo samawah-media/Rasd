@@ -181,7 +181,7 @@ Status update - 2026-05-21:
 - The page now focuses on four top metrics, a clickable day heatmap, compact filters, a visual content list, and a detail panel/bottom sheet.
 - Client-facing UI no longer exposes confidence, raw extraction text, extraction warnings, report page numbers, backfill links, or admin tools.
 - Viewer can export the currently filtered view through a printable PDF-style HTML export, capped at 50 visible items.
-- A public `/share/[token]` read-only route was added for token-based report viewing.
+- Product decision on 2026-05-21: the primary client experience is authenticated Viewer access to `/client-report`; public `/share/[token]` remains a tested backend capability but is not part of the daily workflow.
 - Production deployment completed and aliased to `https://rasd-gamma.vercel.app`.
 
 Tasks:
@@ -356,7 +356,7 @@ Tasks:
 - [x] Confirm unauthenticated users cannot access admin/client API routes.
 - [x] Confirm viewer cannot access admin routes with a real viewer account.
 - [x] Confirm share-link API security: create/revoke is owner/editor-only, public resolve is read-only, invalid/revoked links do not expose data, and pages are noindexed.
-- [ ] Add a visible admin UI for generating/revoking share links; API/security path is already validated.
+- [x] Defer visible share-link UI; the product now uses Viewer login to `/client-report` as the primary client access path.
 - [x] Confirm owner/editor can manage share links while viewer is blocked by live RLS.
 - [x] Confirm Vercel redeploy does not lose persisted legacy/client-report data.
 
@@ -474,19 +474,16 @@ Status: deferred until `/ops` is stable, because `/ops` is the actual daily work
 - Support approve/reject/report-ready flow.
 - Add source/date/platform filters.
 
-### B6. Reports And Share Links
+### B6. Reports And Client Access
 
-Status: first pass implemented locally on 2026-05-21; pending production review with the owner account.
+Status: simplified on 2026-05-21. The team decided not to expose share-link management in `/ops`; client access should stay practical and clean through Viewer login to `/client-report`.
 
 - [ ] Generate report versions from approved items.
-- [x] Add visible admin UI in `/ops` for current Hidayathon report share links.
-- [x] Create share links only for owner/editor through protected API routes.
-- [x] Show existing share links without exposing usable tokens.
-- [x] Copy the newly generated share URL as a one-time visible secret.
-- [x] Revoke share links by id without needing the original token.
-- [x] Enforce expiry, revoke, and view limit in the share-link resolver.
-- [x] Record views in audit log.
-- [ ] Validate create/copy/revoke on production with owner login.
+- [x] Keep the primary client route as `/client-report` behind authenticated Viewer access.
+- [x] Remove visible share-link management from `/ops` to reduce operational clutter.
+- [x] Keep share-link backend/security tests as a dormant fallback, not a primary product path.
+- [ ] Add a clean Viewer/user access management screen later, outside the content review flow.
+- [ ] Validate Viewer access to `/client-report` remains the primary client handoff.
 
 ## Priority C - Real Source Integrations
 

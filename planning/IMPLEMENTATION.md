@@ -37,7 +37,7 @@ Open `http://localhost:3000`.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.
 - `/api/imports/legacy/supabase-plan` returns the deterministic Supabase upsert plan for the approved legacy archive without writing rows.
 - `/api/imports/legacy/upsert-supabase` writes the legacy archive to Supabase only when server credentials are configured, `RASD_ADMIN_IMPORT_TOKEN` matches the `x-rasd-admin-token` request header, and the request body includes `{"dry_run": false}`; otherwise it returns a safe dry-run plan.
-- `/ops` interactive workflow console for manual intake, editorial review, report-grade capture, live-report insertion, and share-link testing.
+- `/ops` interactive workflow console for manual intake, editorial review, report-grade capture, live-report insertion, and safe archiving. It intentionally does not expose share-link management.
 - `/reports/report-5` HTML report page.
 - `/api/admin/health` connector and system health.
 - `/api/admin/persistence` runtime storage mode and Supabase schema reachability.
@@ -49,7 +49,7 @@ Open `http://localhost:3000`.
 - `/api/reports/:id/share-link` creates a private share link for owner/editor management, noindexed/watermarked by default, with optional expiry and optional view limit.
 - `/api/share-links/:token` validates expiry/revocation/view limits and records a view.
 - `/api/share-links/:token/revoke` revokes an existing share link.
-- `/share/[token]` is the public read-only report view for token links; it is noindexed and does not expose admin tools.
+- `/share/[token]` is a dormant public read-only fallback for token links; the primary client handoff is authenticated Viewer access to `/client-report`.
 - `/api/reports/report-5/export-pdf` queues a PDF export job placeholder.
 
 ## Legacy Report Import
@@ -117,7 +117,7 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 
 Never expose `SUPABASE_SERVICE_ROLE_KEY` in the browser.
 
-The server initializes Supabase lazily through `src/server/supabase-admin.ts`, so `next build` does not require database credentials. The share-link service uses the in-memory store locally, and switches to the `share_links` table when server Supabase credentials are available. Current product policy allows owner/editor share-link management and blocks viewer management.
+The server initializes Supabase lazily through `src/server/supabase-admin.ts`, so `next build` does not require database credentials. The share-link service uses the in-memory store locally, and switches to the `share_links` table when server Supabase credentials are available. Share-link management remains owner/editor-only at the API/RLS level, but it is intentionally not exposed in the primary UI while Viewer login to `/client-report` is the client handoff.
 
 Legacy persistence is mapped in `src/server/legacy-supabase-import.ts`. It creates deterministic UUIDs for the legacy organization, topic, template, report versions, monitoring items, captures, and report-item links, then upserts by `id` so re-running the import does not duplicate data. Original URLs now come from interactive PDF link annotations when present, with printed text URLs retained in `extracted_urls` for review context. Real writes are additionally protected by `RASD_ADMIN_IMPORT_TOKEN` because the prototype API is not yet behind full Supabase Auth.
 
