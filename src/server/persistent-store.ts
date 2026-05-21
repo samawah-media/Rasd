@@ -723,7 +723,12 @@ export const persistentStore = {
       .maybeSingle();
     if (duplicateError) throw duplicateError;
 
+    let duplicateType: "url" | "content" | null = null;
     let duplicateRow = duplicate as DbItemRow | null;
+    if (duplicateRow) {
+      duplicateType = "url";
+    }
+
     const statusId = xStatusIdFromUrl(canonicalUrl);
     if (!duplicateRow && statusId) {
       const { data: statusMatches, error: statusMatchError } = await supabase
@@ -735,12 +740,30 @@ export const persistentStore = {
         .limit(1);
       if (statusMatchError) throw statusMatchError;
       duplicateRow = ((statusMatches ?? []) as DbItemRow[])[0] ?? null;
+      if (duplicateRow) {
+        duplicateType = "url";
+      }
+    }
+
+    if (!duplicateRow && input.text && input.text.trim().length > 30) {
+      const textHash = await sha256(input.text);
+      const { data: textMatches, error: textMatchError } = await supabase
+        .from("monitoring_items")
+        .select("*, sources(name)")
+        .eq("organization_id", DEFAULT_ORGANIZATION_ID)
+        .eq("normalized_text_hash", textHash)
+        .limit(1);
+      if (textMatchError) throw textMatchError;
+      duplicateRow = ((textMatches ?? []) as DbItemRow[])[0] ?? null;
+      if (duplicateRow) {
+        duplicateType = "content";
+      }
     }
 
     if (duplicateRow) {
       const item = await refreshSupabaseManualDuplicate(supabase, duplicateRow, input, canonicalUrl, canonicalHash, platform);
-      await audit(supabase, "item.duplicate_detected", "monitoring_item", item.id, { dedupeKey });
-      return { item, duplicate: true };
+      await audit(supabase, "item.duplicate_detected", "monitoring_item", item.id, { dedupeKey, duplicateType });
+      return { item, duplicate: true, duplicateType };
     }
 
     const rule = keywordRules[0];
@@ -817,7 +840,7 @@ export const persistentStore = {
       sourceType: "manual_url",
       evidenceId: evidence.id,
     });
-    return { item, duplicate: false, evidence };
+    return { item, duplicate: false, duplicateType: null, evidence };
   },
 
   async reviewItem(id: string, action: ReviewAction, reviewNotes?: string) {

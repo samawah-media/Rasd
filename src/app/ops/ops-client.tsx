@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
 
-type MessageType = "success" | "error" | "info";
+type MessageType = "success" | "error" | "info" | "warning";
 
 type ApiState = {
   items: MonitoringItem[];
@@ -25,6 +25,7 @@ type ApiState = {
 type IntakeResponse = {
   item: MonitoringItem;
   duplicate?: boolean;
+  duplicateType?: "url" | "content" | null;
   metadata?: {
     source: "x_oembed" | "html_metadata" | "url_only";
     warning?: string;
@@ -149,6 +150,7 @@ function captureAsset(captures: Capture[] | undefined) {
 function messageClass(type: MessageType) {
   if (type === "error") return "rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900";
   if (type === "info") return "rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900";
+  if (type === "warning") return "rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 font-semibold";
   return "rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900";
 }
 
@@ -257,8 +259,25 @@ export function OpsClient() {
       setAuthorName("");
       setPublishedAt("");
       await refreshSilently();
-      setMessage(result.duplicate ? "هذا الرابط موجود بالفعل وتم تحديث بياناته." : sourceLabel(result.metadata));
-      setMessageType("success");
+
+      let msg = "";
+      let msgType: MessageType = "success";
+
+      if (result.duplicate) {
+        if (result.duplicateType === "content") {
+          msg = "تنبيه: تم رصد محتوى مكرر منشور برابط آخر! قمنا بدمج البيانات وتحديثها لك هنا.";
+          msgType = "warning";
+        } else {
+          msg = "هذا الرابط موجود بالفعل وتم تحديث بياناته.";
+          msgType = "success";
+        }
+      } else {
+        msg = sourceLabel(result.metadata);
+        msgType = "success";
+      }
+
+      setMessage(msg);
+      setMessageType(msgType);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر حفظ الرابط.");
       setMessageType("error");

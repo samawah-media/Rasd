@@ -498,6 +498,32 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("deduplicates identical content submitted via different URLs through the API", async () => {
+    const first = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://x.com/FirstReporter/status/888888",
+        title: "تقرير أول",
+        text: "هذا نص مكرر طويل جدا يتجاوز الثلاثين حرفا ليتم رصده كمحتوى مكرر عبر الـ API.",
+      }),
+    });
+
+    const second = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://x.com/SecondReporter/status/999999",
+        title: "تقرير ثانٍ",
+        text: "هذا نص مكرر طويل جدا يتجاوز الثلاثين حرفا ليتم رصده كمحتوى مكرر عبر الـ API.",
+      }),
+    });
+
+    assert.equal(first.response.status, 201);
+    assert.equal(second.response.status, 200);
+    assert.equal(second.json.duplicate, true);
+    assert.equal(second.json.duplicateType, "content");
+    assert.equal(second.json.item.id, first.json.item.id);
+  });
+
   it("returns valid JSON error responses and never causes Unexpected end of JSON input", async () => {
     const endpoints = [
       { path: "/api/items/manual-url", method: "POST", body: "{}" },

@@ -32,11 +32,11 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   <rect x="54" y="46" width="792" height="628" rx="22" fill="#ffffff" filter="url(#softShadow)"/>
   <rect x="54" y="46" width="792" height="88" rx="22" fill="url(#header)"/>
   <rect x="54" y="100" width="792" height="34" fill="#0f8f5f"/>
-  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">صورة دليل محتوى</text>
-  <text x="806" y="174" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#166534" font-size="24" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
+  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">صورة دليل محتوى</text>
+  <text x="806" y="174" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#166534" font-size="24" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
     source,
   )}</text>
-  <text x="806" y="210" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#78716c" font-size="18" font-family="Arial, Tahoma, sans-serif">${escapeXml(
+  <text x="806" y="210" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#78716c" font-size="18" font-family="Arial, Tahoma, sans-serif">${escapeXml(
     date,
   )}</text>
   <circle cx="108" cy="178" r="38" fill="#ecfdf5" stroke="#34d399" stroke-width="3"/>
@@ -45,7 +45,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   ${titleLines
     .map(
       (line, index) =>
-        `<text x="806" y="${286 + index * 38}" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#1c1917" font-size="30" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
+        `<text x="806" y="${286 + index * 38}" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#1c1917" font-size="30" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
           line,
         )}</text>`,
     )
@@ -53,7 +53,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   ${summaryLines
     .map(
       (line, index) =>
-        `<text x="806" y="${380 + index * 31}" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#44403c" font-size="23" font-family="Arial, Tahoma, sans-serif">${escapeXml(
+        `<text x="806" y="${380 + index * 31}" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#44403c" font-size="23" font-family="Arial, Tahoma, sans-serif">${escapeXml(
           line,
         )}</text>`,
     )

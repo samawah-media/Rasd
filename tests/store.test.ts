@@ -138,4 +138,23 @@ describe("monitoring workflow store", () => {
     assert.equal(refreshed.item.authorHandle, "@TestUser");
     assert.equal(refreshed.item.originalUrl, "https://x.com/TestUser/status/999888777");
   });
+
+  it("detects duplicate content when different URLs are submitted with same text (> 30 chars)", () => {
+    const first = store.ingestManualUrl({
+      url: "https://x.com/FirstUser/status/111111",
+      title: "First Title",
+      text: "هذا نص مكرر طويل جدا يتجاوز الثلاثين حرفا ليتم رصده كمحتوى مكرر.",
+    });
+
+    const second = store.ingestManualUrl({
+      url: "https://x.com/SecondUser/status/222222",
+      title: "Second Title",
+      text: "هذا نص مكرر طويل جدا يتجاوز الثلاثين حرفا ليتم رصده كمحتوى مكرر.",
+    });
+
+    assert.equal(first.duplicate, false);
+    assert.equal(second.duplicate, true);
+    assert.equal(second.duplicateType, "content");
+    assert.equal(second.item.id, first.item.id);
+  });
 });

@@ -531,12 +531,29 @@ export const store = {
       },
       "manual_url",
     );
-    const duplicate = items.find((entry) => entry.sourceType === "manual_url" && isSameManualUrl(entry, dedupeKey, canonicalUrl));
+    let duplicateType: "url" | "content" | null = null;
+    let duplicate = items.find((entry) => entry.sourceType === "manual_url" && isSameManualUrl(entry, dedupeKey, canonicalUrl));
+    if (duplicate) {
+      duplicateType = "url";
+    }
+
+    if (!duplicate && input.text && input.text.trim().length > 30) {
+      const inputTrimmed = input.text.trim();
+      duplicate = items.find((entry) => {
+        if (entry.sourceType !== "manual_url") return false;
+        const entryText = (entry.summary || entry.summarySourceText || "").trim();
+        return entryText === inputTrimmed;
+      });
+      if (duplicate) {
+        duplicateType = "content";
+      }
+    }
+
     if (duplicate) {
       const refreshed = refreshManualDuplicate(duplicate, input, canonicalUrl);
-      audit("item.duplicate_detected", duplicate.id, { dedupeKey });
+      audit("item.duplicate_detected", duplicate.id, { dedupeKey, duplicateType });
       if (refreshed) audit("item.metadata_refreshed", duplicate.id, { dedupeKey });
-      return { item: duplicate, duplicate: true };
+      return { item: duplicate, duplicate: true, duplicateType };
     }
 
     const rule = keywordRules[0];
@@ -566,7 +583,7 @@ export const store = {
     items.unshift(item);
     const evidence = createEvidenceLiteCapture(item.id);
     audit("item.ingested", item.id, { sourceType: "manual_url", evidenceId: evidence.id });
-    return { item, duplicate: false, evidence };
+    return { item, duplicate: false, duplicateType: null, evidence };
   },
 
   reviewItem(id: string, action: ReviewAction, reviewNotes?: string) {
