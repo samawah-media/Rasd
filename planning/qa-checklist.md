@@ -41,6 +41,7 @@ Live DB sanity target:
 - 4 legacy reports.
 - 3 legacy link overrides.
 - 2 default manual items.
+- Any manually approved live-report items should be linked through the default Hidayathon live report, not by hard-coded `report-5`.
 - 0 public tables with RLS disabled.
 
 ## Manual Owner Smoke Test
@@ -57,7 +58,11 @@ Run these in production while logged in as `samawah.pod@gmail.com`:
 8. Open `https://rasd-gamma.vercel.app/imports/backfill`.
 9. Confirm the backfill page no longer shows bulk missing legacy links for the current archive; it should remain available for future corrections.
 10. Open `https://rasd-gamma.vercel.app/ops`.
-11. Confirm admin tools are visible only while logged in as owner/editor.
+11. Submit one fresh X or news URL with title, short text, publisher name, and publish date.
+12. Confirm the same URL submitted again is detected as a duplicate after canonicalization.
+13. Approve the item, run report-grade capture, and add it to the live Hidayathon report.
+14. Open `https://rasd-gamma.vercel.app/client-report` and confirm the new item appears with original link, publisher, summary, platform, date, and report status.
+15. Confirm admin tools are visible only while logged in as owner/editor.
 
 ## Content Screenshot Pipeline Smoke Test
 

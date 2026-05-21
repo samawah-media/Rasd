@@ -48,6 +48,29 @@ async function readJson(c: { req: { json(): Promise<unknown> } }): Promise<JsonB
   return body && typeof body === "object" ? (body as JsonBody) : {};
 }
 
+function optionalString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function optionalIsoDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return { ok: true as const, value: undefined };
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return { ok: false as const };
+  return { ok: true as const, value: new Date(timestamp).toISOString() };
+}
+
 function isAuthorizedAdminImport(c: { req: { header(name: string): string | undefined } }, body: JsonBody) {
   const expectedToken = process.env.RASD_ADMIN_IMPORT_TOKEN;
   void body;
@@ -227,11 +250,22 @@ api.post("/items/manual-url", async (c) => {
     return c.json(withRequestId(c, { error: "url is required" }), 400);
   }
 
+  if (!isHttpUrl(url)) {
+    return c.json(withRequestId(c, { error: "url must be a valid http or https URL" }), 400);
+  }
+
+  const publishedAt = optionalIsoDate(body.publishedAt ?? body.published_at);
+  if (!publishedAt.ok) {
+    return c.json(withRequestId(c, { error: "published_at must be a valid date" }), 400);
+  }
+
   const result = await persistentStore.ingestManualUrl({
     url,
-    title: typeof body.title === "string" ? body.title : undefined,
-    text: typeof body.text === "string" ? body.text : undefined,
-    authorName: typeof body.authorName === "string" ? body.authorName : undefined,
+    title: optionalString(body.title),
+    text: optionalString(body.text),
+    authorName: optionalString(body.authorName, body.author_name),
+    authorHandle: optionalString(body.authorHandle, body.author_handle),
+    publishedAt: publishedAt.value,
   });
 
   return c.json(
@@ -308,6 +342,10 @@ api.post("/reports", async (c) => {
   const body = await readJson(c);
   return c.json(withRequestId(c, await persistentStore.createReport({ title: body.title })), 201);
 });
+
+api.get("/reports/hidayathon-live", async (c) =>
+  c.json(withRequestId(c, { report: await persistentStore.getHidayathonLiveReport() })),
+);
 
 api.post("/reports/:id/items", async (c) => {
   const body = await readJson(c);

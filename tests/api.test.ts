@@ -105,29 +105,51 @@ describe("Hono API acceptance workflow", () => {
       method: "POST",
       body: JSON.stringify({ title: "Missing URL" }),
     });
+    const invalidUrl = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({ url: "not-a-url" }),
+    });
+    const invalidDate = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({ url: "https://example.com/story", published_at: "not-a-date" }),
+    });
 
     assert.equal(response.status, 400);
     assert.equal(json.error, "url is required");
+    assert.equal(invalidUrl.response.status, 400);
+    assert.equal(invalidUrl.json.error, "url must be a valid http or https URL");
+    assert.equal(invalidDate.response.status, 400);
+    assert.equal(invalidDate.json.error, "published_at must be a valid date");
   });
 
   it("runs the manual intake to report insertion lifecycle", async () => {
+    const liveReport = await requestJson("/api/reports/hidayathon-live");
+    assert.equal(liveReport.response.status, 200);
+    assert.equal(liveReport.json.report.id, "report-5");
+
     const manual = await requestJson("/api/items/manual-url", {
       method: "POST",
       body: JSON.stringify({
-        url: "https://example.com/deep/api-lifecycle?utm_campaign=test#frag",
+        url: "https://x.com/Hidayathon/status/123456789?utm_campaign=test#frag",
         title: "متابعة هاكاثون هداية عبر اختبار API",
         text: "مادة عن هداية وهاكاثون هداية لاختبار دورة الرصد.",
+        author_name: "فريق اختبار رصد",
+        author_handle: "@rasd_test",
+        published_at: "2026-05-20T10:30:00.000Z",
       }),
     });
 
     assert.equal(manual.response.status, 201);
     assert.equal(manual.json.item.state, "needs_review");
     assert.equal(manual.json.evidence.kind, "evidence_lite");
+    assert.equal(manual.json.item.authorName, "فريق اختبار رصد");
+    assert.equal(manual.json.item.authorHandle, "@rasd_test");
+    assert.equal(manual.json.item.publishedAt, "2026-05-20T10:30:00.000Z");
 
     const duplicate = await requestJson("/api/items/manual-url", {
       method: "POST",
       body: JSON.stringify({
-        url: "https://example.com/deep/api-lifecycle",
+        url: "https://x.com/Hidayathon/status/123456789",
         title: "متابعة هاكاثون هداية عبر اختبار API",
         text: "مادة عن هداية وهاكاثون هداية لاختبار دورة الرصد.",
       }),
@@ -145,7 +167,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(approved.response.status, 200);
     assert.equal(approved.json.item.state, "approved_pending_capture");
 
-    const blockedInsert = await requestJson("/api/reports/report-5/items", {
+    const blockedInsert = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
       method: "POST",
       body: JSON.stringify({ item_id: manual.json.item.id }),
     });
@@ -163,7 +185,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(captured.json.capture.status, "success");
     assert.equal(captured.json.fallback, "external_playwright_worker");
 
-    const inserted = await requestJson("/api/reports/report-5/items", {
+    const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
       method: "POST",
       body: JSON.stringify({ item_id: manual.json.item.id }),
     });
@@ -171,6 +193,17 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(inserted.response.status, 200);
     assert.equal(inserted.json.ok, true);
     assert.equal(inserted.json.reportItem.itemId, manual.json.item.id);
+
+    const clientReport = await requestJson("/api/client-report/hidayathon");
+    const manualReportItem = clientReport.json.report.items.find((item: { id: string }) => item.id === manual.json.item.id);
+
+    assert.equal(clientReport.response.status, 200);
+    assert.equal(clientReport.json.report.summary.items, 125);
+    assert.equal(manualReportItem.title, "متابعة هاكاثون هداية عبر اختبار API");
+    assert.equal(manualReportItem.authorName, "فريق اختبار رصد");
+    assert.equal(manualReportItem.platform, "X");
+    assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456789");
+    assert.equal(manualReportItem.linkStatus, "openable");
   });
 
   it("preserves warning gates for failed captures", async () => {

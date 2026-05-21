@@ -231,18 +231,27 @@ Goal:
 
 Start testing current monitoring, even before full automation.
 
+Status update - 2026-05-21:
+
+- Manual URL intake now accepts validated `http/https` URLs only and supports title, summary text, publisher name, publisher handle, and source publish date.
+- Manual intake stores the canonical URL, dedupe hash, source metadata, derived platform (`X` or `Website`), review state, evidence-lite capture, and audit event in the active persistence mode.
+- `/api/reports/hidayathon-live` exposes the current live Hidayathon report id so `/ops` no longer relies on the local-only `report-5` id in production.
+- `/ops` now adds reviewed/captured items to the resolved live Hidayathon report and creates share links against that report.
+- `/client-report` can include manual items after they are reviewed, report-grade captured, and added to the live report, while keeping unlinked default/manual test rows out of the client dataset.
+- Automated API coverage now proves a real X URL can flow through intake -> duplicate detection -> review -> capture -> report insertion -> client report.
+
 Tasks:
 
-- Support manual URL intake for X/news URLs in production.
-- Store source, platform, URL, title/text, author, published date, captured date, and review status.
-- Dedupe by canonical URL and organization.
-- Allow owner/editor to approve/reject items.
-- Allow approved items to appear in the client report.
+- [x] Support manual URL intake for X/news URLs in production.
+- [x] Store source, platform, URL, title/text, author, published date, captured date, and review status.
+- [x] Dedupe by canonical URL and organization.
+- [x] Allow owner/editor to approve/reject items.
+- [x] Allow approved items to appear in the client report.
 
 Acceptance:
 
-- We can add a real URL today and see it flow into review/report.
-- Dedupe prevents repeated test submissions.
+- [x] We can add a real URL today and see it flow into review/report.
+- [x] Dedupe prevents repeated test submissions.
 
 ### A9. Review Workflow Persistence
 

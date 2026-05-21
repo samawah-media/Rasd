@@ -30,17 +30,18 @@ Open `http://localhost:3000`.
 - `/client-report` client-facing interactive Hidayathon report with date calendar/range filters, report/platform/sentiment/confidence filters, source cards, and raw-text detail reveal.
 - `/imports` local review/import UI for `data/imports/hidayathon_reports.json`, with filters for report, platform, confidence, page, and text search.
 - `/imports/backfill` local source-link backfill UI for legacy items whose PDFs do not include an openable original URL; includes X/Web search links and an override JSON template per item.
-- `/api/client-report/hidayathon` serves the enriched client report dataset derived from the approved legacy JSON.
+- `/api/client-report/hidayathon` serves the enriched client report dataset from Supabase when configured, combining approved legacy data with manual items that have been added to the live Hidayathon report.
 - `/api/imports/legacy/status` returns legacy import counts.
 - `/api/imports/legacy/backfill` returns link-backfill counts, status, search URLs, and override templates for legacy items.
 - `/api/imports/legacy` imports approved legacy data into the in-memory workflow store idempotently.
 - `/api/imports/legacy/supabase-plan` returns the deterministic Supabase upsert plan for the approved legacy archive without writing rows.
 - `/api/imports/legacy/upsert-supabase` writes the legacy archive to Supabase only when server credentials are configured, `RASD_ADMIN_IMPORT_TOKEN` matches the `x-rasd-admin-token` request header, and the request body includes `{"dry_run": false}`; otherwise it returns a safe dry-run plan.
-- `/ops` interactive workflow console for manual intake, editorial review, report-grade capture, and report insertion.
+- `/ops` interactive workflow console for manual intake, editorial review, report-grade capture, live-report insertion, and share-link testing.
 - `/reports/report-5` HTML report page.
 - `/api/admin/health` connector and system health.
 - `/api/admin/persistence` runtime storage mode and Supabase schema reachability.
 - `/api/items/manual-url` manual URL intake endpoint.
+- `/api/reports/hidayathon-live` returns the current live Hidayathon report id so production UI does not depend on the local `report-5` seed id.
 - `/api/items/:id/review` approve/reject review endpoint.
 - `/api/items/:id/capture-report-grade` guarded report-grade capture endpoint.
 - `/api/reports/:id/items` report insertion endpoint with readiness checks.
@@ -76,8 +77,8 @@ Current extraction notes:
 
 The prototype now includes Node test coverage for the most important workflow rules:
 
-- Hono API request/response acceptance for manual intake, review, capture, report insertion, share links, and X not-configured isolation.
-- manual URL dedupe by canonical URL.
+- Hono API request/response acceptance for manual intake, review, capture, report insertion, client-report visibility, share links, and X not-configured isolation.
+- manual URL dedupe by canonical URL, including a real `x.com/.../status/...` intake shape.
 - approved items stay `approved_pending_capture` until report-grade capture succeeds.
 - non-ready items cannot be inserted into a report.
 - capture-failed items require explicit warning acceptance.

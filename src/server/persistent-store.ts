@@ -14,9 +14,14 @@ import type {
   SourceType,
 } from "@/lib/types";
 import {
+  DEFAULT_MANUAL_SOURCE_ID,
   DEFAULT_ORGANIZATION_ID,
   DEFAULT_ORGANIZATION_NAME,
   DEFAULT_ORGANIZATION_SLUG,
+  DEFAULT_REPORT_ID,
+  DEFAULT_TEMPLATE_ID,
+  DEFAULT_TOPIC_ID,
+  DEFAULT_USAGE_LIMIT_ID,
 } from "@/lib/auth-config";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
@@ -88,11 +93,14 @@ type DbReportItemRow = {
   created_at: string;
 };
 
-const DEFAULT_TOPIC_ID = stableUuid("rasd:default:topic");
-const DEFAULT_MANUAL_SOURCE_ID = stableUuid("rasd:default:source:manual");
-const DEFAULT_REPORT_ID = stableUuid("rasd:default:report:hidayathon");
-const DEFAULT_TEMPLATE_ID = stableUuid("rasd:default:template:hidayathon");
-const DEFAULT_USAGE_LIMIT_ID = stableUuid("rasd:default:usage-limit");
+type ManualUrlInput = {
+  url: string;
+  title?: string;
+  text?: string;
+  authorName?: string;
+  authorHandle?: string;
+  publishedAt?: string;
+};
 
 function shouldUseSupabase() {
   return isSupabaseAdminConfigured() && process.env.NODE_ENV !== "test";
@@ -123,26 +131,6 @@ async function sha256(value: string) {
     .join("");
 }
 
-function stableUuid(value: string) {
-  const hex = stableFingerprint(value);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-}
-
-function stableFingerprint(value: string) {
-  return `${stableHash(`${value}:0`)}${stableHash(`${value}:1`)}${stableHash(`${value}:2`)}${stableHash(
-    `${value}:3`,
-  )}`.slice(0, 32);
-}
-
-function stableHash(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(16).padStart(8, "0");
-}
-
 function toSource(row: DbSourceRow): Source {
   return {
     id: row.id,
@@ -155,6 +143,18 @@ function toSource(row: DbSourceRow): Source {
     isVerifiedSource: row.is_verified_source,
     logoUrl: row.logo_url ?? undefined,
   };
+}
+
+function platformFromUrl(value: string) {
+  try {
+    const host = new URL(value).hostname.replace(/^www\./, "");
+    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
+      return "X";
+    }
+    return "Website";
+  } catch {
+    return "Unknown";
+  }
 }
 
 function toReport(row: DbReportRow): ReportVersion {
@@ -471,6 +471,15 @@ export const persistentStore = {
     return ((data ?? []) as DbReportRow[]).map(toReport);
   },
 
+  async getHidayathonLiveReport() {
+    if (!shouldUseSupabase()) return store.getHidayathonLiveReport();
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const { data, error } = await supabase.from("reports").select("*").eq("id", DEFAULT_REPORT_ID).single();
+    if (error) throw error;
+    return toReport(data as DbReportRow);
+  },
+
   async listAuditLogs() {
     if (!shouldUseSupabase()) return store.listAuditLogs();
     const supabase = getSupabaseAdmin();
@@ -534,19 +543,22 @@ export const persistentStore = {
     return toSource(data as DbSourceRow);
   },
 
-  async ingestManualUrl(input: { url: string; title?: string; text?: string; authorName?: string }) {
+  async ingestManualUrl(input: ManualUrlInput) {
     if (!shouldUseSupabase()) return store.ingestManualUrl(input);
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
 
     const canonicalUrl = canonicalizeUrl(input.url);
+    const publishedAt = input.publishedAt ?? now();
+    const platform = platformFromUrl(canonicalUrl);
     const dedupeKey = makeDedupeKey(
       {
         url: canonicalUrl,
         title: input.title ?? canonicalUrl,
         text: input.text ?? input.title ?? canonicalUrl,
         authorName: input.authorName,
-        publishedAt: now(),
+        authorHandle: input.authorHandle,
+        publishedAt,
         raw: input,
       },
       "manual_url",
@@ -581,7 +593,8 @@ export const persistentStore = {
         source_item_id: canonicalHash,
         normalized_text_hash: await sha256(input.text ?? canonicalUrl),
         author_name: input.authorName ?? "غير محدد",
-        published_at: now(),
+        author_handle: input.authorHandle ?? null,
+        published_at: publishedAt,
         summary: input.text ?? "تم حفظ الرابط كدليل خفيف بانتظار مراجعة المحرر.",
         summary_source_text: input.text ?? canonicalUrl,
         sentiment: estimateSentiment(match.score),
@@ -589,7 +602,14 @@ export const persistentStore = {
         relevance_score: match.score,
         relevance_reason: match.reason,
         matched_terms: match.matchedTerms,
-        raw_response: { manual: true, input },
+        raw_response: {
+          manual: true,
+          platform,
+          sourcePdf: "live-hidayathon",
+          publishedDateText: publishedAt,
+          extractedUrls: [canonicalUrl],
+          input,
+        },
       })
       .select("*, sources(name)")
       .single();

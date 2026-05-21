@@ -5,6 +5,11 @@ export const RASD_OWNER_EMAIL = (process.env.RASD_OWNER_EMAIL ?? "samawah.pod@gm
 export const DEFAULT_ORGANIZATION_ID = stableUuid("rasd:default:organization");
 export const DEFAULT_ORGANIZATION_NAME = "رصد هداية هاكثون";
 export const DEFAULT_ORGANIZATION_SLUG = "rasd-hidayathon";
+export const DEFAULT_TOPIC_ID = stableUuid("rasd:default:topic");
+export const DEFAULT_MANUAL_SOURCE_ID = stableUuid("rasd:default:source:manual");
+export const DEFAULT_REPORT_ID = stableUuid("rasd:default:report:hidayathon");
+export const DEFAULT_TEMPLATE_ID = stableUuid("rasd:default:template:hidayathon");
+export const DEFAULT_USAGE_LIMIT_ID = stableUuid("rasd:default:usage-limit");
 
 export const LEGACY_ORGANIZATION_ID = stableUuid("legacy:hidayathon:organization");
 export const LEGACY_ORGANIZATION_NAME = "رصد هداية هاكثون - الأرشيف القديم";

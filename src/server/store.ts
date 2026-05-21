@@ -62,6 +62,15 @@ type ConnectorRun = {
   finishedAt?: string;
 };
 
+type ManualUrlInput = {
+  url: string;
+  title?: string;
+  text?: string;
+  authorName?: string;
+  authorHandle?: string;
+  publishedAt?: string;
+};
+
 const items = seedItems.map((item) => ({ ...item }));
 const captures = seedCaptures.map((capture) => ({ ...capture }));
 const sources = seedSources.map((source) => ({ ...source }));
@@ -121,6 +130,18 @@ function estimateSentiment(score: number) {
   if (score >= 80) return "positive";
   if (score <= 30) return "negative";
   return "neutral";
+}
+
+function platformFromUrl(value: string) {
+  try {
+    const host = new URL(value).hostname.replace(/^www\./, "");
+    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
+      return "X";
+    }
+    return "Website";
+  } catch {
+    return "Unknown";
+  }
 }
 
 function mapLegacyPlatformToSourceType(platform: string): SourceType {
@@ -252,6 +273,10 @@ export const store = {
 
   listReports() {
     return reports;
+  },
+
+  getHidayathonLiveReport() {
+    return reports.find((report) => report.id === "report-5") ?? reports[0]!;
   },
 
   listAuditLogs() {
@@ -415,16 +440,19 @@ export const store = {
     return source;
   },
 
-  ingestManualUrl(input: { url: string; title?: string; text?: string; authorName?: string }) {
+  ingestManualUrl(input: ManualUrlInput) {
     const canonicalUrl = canonicalizeUrl(input.url);
+    const publishedAt = input.publishedAt ?? now();
+    const platform = platformFromUrl(canonicalUrl);
     const dedupeKey = makeDedupeKey(
       {
         url: canonicalUrl,
         title: input.title ?? canonicalUrl,
         text: input.text ?? input.title ?? canonicalUrl,
         authorName: input.authorName,
-        publishedAt: now(),
-        raw: input,
+        authorHandle: input.authorHandle,
+        publishedAt,
+        raw: { ...input, platform },
       },
       "manual_url",
     );
@@ -445,7 +473,8 @@ export const store = {
       title: input.title ?? "مادة مرصودة من رابط يدوي",
       originalUrl: canonicalUrl,
       authorName: input.authorName ?? "غير محدد",
-      publishedAt: now(),
+      authorHandle: input.authorHandle,
+      publishedAt,
       summary: input.text ?? "تم حفظ الرابط كدليل خفيف بانتظار مراجعة المحرر.",
       summarySourceText: input.text ?? canonicalUrl,
       sentiment: estimateSentiment(match.score),

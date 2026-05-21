@@ -1,7 +1,9 @@
 import { formatGregorian, formatHijri } from "@/lib/dates";
-import { LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
+import { DEFAULT_ORGANIZATION_ID, LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
 import { getImportedReportsDataset, type ImportConfidence, type ImportedReportItem } from "@/lib/imported-reports";
+import type { Capture, MonitoringItem, ReportVersion } from "@/lib/types";
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
+import { store } from "@/server/store";
 
 export type ClientReportItem = ImportedReportItem & {
   reportLabel: string;
@@ -134,11 +136,11 @@ const confidenceLabels: Record<string, string> = {
 };
 
 const confidenceLevels: ImportConfidence[] = ["high", "medium", "low"];
-const hidayathonReportOrganizationIds = [LEGACY_ORGANIZATION_ID];
+const hidayathonReportOrganizationIds = [LEGACY_ORGANIZATION_ID, DEFAULT_ORGANIZATION_ID];
 
 export function getHidayathonClientReportData(): ClientReportData {
   const dataset = getImportedReportsDataset();
-  const items = dataset.items.map(enrichClientReportItem);
+  const items = [...dataset.items.map(enrichClientReportItem), ...getLocalLiveClientReportItems()];
   const reportSummaries = dataset.reports
     .filter((report) => !report.duplicateOf && report.extractedItemCount > 0)
     .map((report) => ({
@@ -148,7 +150,7 @@ export function getHidayathonClientReportData(): ClientReportData {
       count: report.extractedItemCount,
     }));
 
-  return buildClientReportData(items, reportSummaries);
+  return buildClientReportData(items, [...reportSummaries, ...getLocalLiveReportSummaries()]);
 }
 
 export async function getPreferredHidayathonClientReportData(): Promise<ClientReportData> {
@@ -247,6 +249,83 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
     }));
 
   return buildClientReportData(clientItems, reportSummaries);
+}
+
+function getLocalLiveClientReportItems() {
+  const reportsById = new Map(store.listReports().map((report) => [report.id, report]));
+  const itemsById = new Map(store.listItems().map((item) => [item.id, item]));
+  const liveItems: ClientReportItem[] = [];
+
+  for (const report of reportsById.values()) {
+    const links = store.listReportItems(report.id);
+    links.forEach((link, index) => {
+      if (link.itemId.startsWith("legacy-item-")) return;
+      const item = itemsById.get(link.itemId);
+      if (!item) return;
+      const capture = store
+        .listCaptures(item.id)
+        .find((entry) => entry.kind === "report_grade" && entry.status === "success");
+      liveItems.push(toClientReportItemFromWorkflow(item, report, capture, link.addedAt, index + 1));
+    });
+  }
+
+  return liveItems;
+}
+
+function getLocalLiveReportSummaries() {
+  return store
+    .listReports()
+    .map((report) => {
+      const count = store
+        .listReportItems(report.id)
+        .filter((link) => !link.itemId.startsWith("legacy-item-")).length;
+      return {
+        issue: report.version,
+        label: `الإصدار ${report.version}`,
+        sourcePdf: "live-hidayathon",
+        count,
+      };
+    })
+    .filter((report) => report.count > 0);
+}
+
+function toClientReportItemFromWorkflow(
+  item: MonitoringItem,
+  report: ReportVersion,
+  capture: Capture | undefined,
+  addedAt: string,
+  order: number,
+) {
+  const evidenceImagePath = openableAssetUrl(capture?.assetUrl);
+
+  return enrichClientReportItem({
+    id: item.id,
+    sourcePdf: "live-hidayathon",
+    reportIssue: report.version,
+    page: order,
+    platform: platformFromOriginalUrl(item.originalUrl),
+    sourceName: item.sourceName,
+    authorName: item.authorName ?? item.sourceName,
+    title: item.title,
+    summary: item.summary,
+    sentiment: item.sentiment,
+    publishedDateText: item.publishedAt,
+    capturedAtText: capture?.capturedAt ?? addedAt,
+    originalUrl: item.originalUrl,
+    extractedOriginalUrl: item.originalUrl,
+    originalUrlSource: null,
+    originalUrlOverride: null,
+    extractedUrls: [item.originalUrl],
+    evidenceImagePath,
+    contentImagePath: evidenceImagePath,
+    publisherProfileImagePath: null,
+    sourceEvidenceImagePath: null,
+    rawText: item.summarySourceText,
+    imageCount: evidenceImagePath ? 1 : 0,
+    confidence: confidenceFromScore(item.sentimentConfidence, null),
+    warnings: item.warning ? [item.warning] : [],
+    initialState: "approved",
+  });
 }
 
 function buildClientReportData(

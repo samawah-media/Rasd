@@ -13,13 +13,14 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Capture, HealthMetric, MonitoringItem } from "@/lib/types";
+import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
 
 type ApiState = {
   items: MonitoringItem[];
   metrics: HealthMetric[];
   auditCount: number;
   capturesByItem: Record<string, Capture[]>;
+  liveReport: ReportVersion | null;
 };
 
 const emptyState: ApiState = {
@@ -27,6 +28,7 @@ const emptyState: ApiState = {
   metrics: [],
   auditCount: 0,
   capturesByItem: {},
+  liveReport: null,
 };
 
 const statCards: Array<[string, keyof ReturnType<typeof getStats>, LucideIcon]> = [
@@ -93,12 +95,14 @@ export function OpsClient() {
   const [shareStatus, setShareStatus] = useState<string>("لم يتم إنشاء رابط مشاركة بعد.");
 
   const stats = useMemo(() => getStats(state.items), [state.items]);
+  const liveReportId = state.liveReport?.id ?? "report-5";
 
   async function fetchSnapshot(): Promise<ApiState> {
-    const [itemsData, healthData, auditData] = await Promise.all([
+    const [itemsData, healthData, auditData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ metrics: HealthMetric[] }>("/api/admin/health"),
       apiJson<{ audit_logs: unknown[] }>("/api/audit-logs"),
+      apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
 
     const capturePairs = await Promise.all(
@@ -113,6 +117,7 @@ export function OpsClient() {
       metrics: healthData.metrics,
       auditCount: auditData.audit_logs.length,
       capturesByItem: Object.fromEntries(capturePairs),
+      liveReport: liveReportData.report,
     };
   }
 
@@ -154,7 +159,7 @@ export function OpsClient() {
     setShareStatus("جاري إنشاء رابط آمن...");
     try {
       const result = await apiJson<{ token: string; link: { expiresAt: string; maxViews?: number } }>(
-        "/api/reports/report-5/share-link",
+        `/api/reports/${liveReportId}/share-link`,
         {
           method: "POST",
           body: JSON.stringify({ max_views: 3, expires_in_days: 7 }),
@@ -303,6 +308,7 @@ export function OpsClient() {
               <ShieldCheck className="h-5 w-5 text-emerald-700" />
               <h2 className="text-lg font-bold">رابط مشاركة آمن</h2>
             </div>
+            {state.liveReport ? <p className="mt-2 text-xs text-stone-500">{state.liveReport.title}</p> : null}
             <p className="mt-3 rounded-md bg-stone-100 p-3 text-sm leading-6 text-stone-700">{shareStatus}</p>
             {shareToken ? (
               <p className="mt-3 break-all rounded-md border border-stone-200 bg-white p-3 text-left text-xs text-stone-500" dir="ltr">
@@ -414,7 +420,7 @@ export function OpsClient() {
                       type="button"
                       onClick={() =>
                         runAction(`report-${item.id}`, () =>
-                          apiJson("/api/reports/report-5/items", {
+                          apiJson(`/api/reports/${liveReportId}/items`, {
                             method: "POST",
                             body: JSON.stringify({ item_id: item.id, warning_accepted: true }),
                           }),
