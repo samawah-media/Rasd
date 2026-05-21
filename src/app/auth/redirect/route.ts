@@ -15,7 +15,11 @@ export async function GET(request: Request) {
   const context = await getCurrentAuthContext();
 
   if (!context) {
-    return NextResponse.redirect(new URL("/unauthorized", requestUrl.origin));
+    if (isClientPath(next) || isAdminPath(next)) {
+      return NextResponse.redirect(new URL(next, requestUrl.origin));
+    }
+
+    return NextResponse.redirect(new URL("/login", requestUrl.origin));
   }
 
   if (isAuthPath(next)) {
