@@ -71,7 +71,7 @@ Local checks passed:
 
 Production checks passed:
 
-- Vercel deployment `rasd-cne1lh12g-samawahs-projects.vercel.app` is Ready and aliased to `rasd-gamma.vercel.app`.
+- Latest Vercel production deployment is Ready and aliased to `rasd-gamma.vercel.app`.
 - Signed-out request to `/api/captures/not-real/asset` returns `401 auth_required`.
 
 ## Post-A10 Local Quality Gate
