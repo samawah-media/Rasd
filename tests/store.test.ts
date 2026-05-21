@@ -113,4 +113,29 @@ describe("monitoring workflow store", () => {
     );
     assert.ok(legacyItems.some((item) => item.originalUrl.startsWith("https://")));
   });
+
+  it("refreshes duplicate items with better metadata when re-submitted", () => {
+    const stale = store.ingestManualUrl({
+      url: "https://x.com/TestUser/status/999888777",
+    });
+    assert.equal(stale.duplicate, false);
+    assert.equal(stale.item.title, "مادة مرصودة من رابط يدوي");
+    assert.equal(stale.item.summary, "تم حفظ الرابط كدليل خفيف بانتظار مراجعة المحرر.");
+    assert.equal(stale.item.authorName, "غير محدد");
+
+    const refreshed = store.ingestManualUrl({
+      url: "https://x.com/TestUser/status/999888777?lang=en",
+      title: "عنوان أفضل عن هاكاثون هداية",
+      text: "نص محدث عن هاكاثون هداية ومشاركة الفريق.",
+      authorName: "مستخدم اختبار",
+      authorHandle: "@TestUser",
+    });
+    assert.equal(refreshed.duplicate, true);
+    assert.equal(refreshed.item.id, stale.item.id);
+    assert.equal(refreshed.item.title, "عنوان أفضل عن هاكاثون هداية");
+    assert.equal(refreshed.item.summary, "نص محدث عن هاكاثون هداية ومشاركة الفريق.");
+    assert.equal(refreshed.item.authorName, "مستخدم اختبار");
+    assert.equal(refreshed.item.authorHandle, "@TestUser");
+    assert.equal(refreshed.item.originalUrl, "https://x.com/TestUser/status/999888777");
+  });
 });

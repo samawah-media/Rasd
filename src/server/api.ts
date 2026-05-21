@@ -293,15 +293,19 @@ api.post("/items/manual-url", async (c) => {
 });
 
 api.get("/items/:id/evidence-card.svg", async (c) => {
-  const item = (await persistentStore.listItems()).find((entry) => entry.id === c.req.param("id"));
-  if (!item) return c.text("not_found", 404);
+  try {
+    const item = (await persistentStore.listItems()).find((entry) => entry.id === c.req.param("id"));
+    if (!item) return c.text("not_found", 404);
 
-  return new Response(renderEvidenceCardSvg(item), {
-    headers: {
-      "content-type": "image/svg+xml; charset=utf-8",
-      "cache-control": "private, max-age=60",
-    },
-  });
+    return new Response(renderEvidenceCardSvg(item), {
+      headers: {
+        "content-type": "image/svg+xml; charset=utf-8",
+        "cache-control": "private, max-age=60",
+      },
+    });
+  } catch {
+    return c.json(withRequestId(c, { error: "evidence_card_render_failed" }), 500);
+  }
 });
 
 api.post("/connectors/:type/run", async (c) => {

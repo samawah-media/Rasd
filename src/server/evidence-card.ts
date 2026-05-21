@@ -12,6 +12,8 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   const summaryLines = wrapArabic(item.summary || item.summarySourceText || item.originalUrl, 48, 9);
   const titleLines = wrapArabic(title, 42, 2);
   const urlLines = wrapLatin(item.originalUrl, 76, 2);
+  const isX = item.originalUrl.includes("x.com/") || item.originalUrl.includes("twitter.com/");
+  const platformIcon = isX ? "X" : "🌐";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="720" viewBox="0 0 900 720" role="img" aria-label="${escapeXml(
@@ -30,7 +32,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   <rect x="54" y="46" width="792" height="628" rx="22" fill="#ffffff" filter="url(#softShadow)"/>
   <rect x="54" y="46" width="792" height="88" rx="22" fill="url(#header)"/>
   <rect x="54" y="100" width="792" height="34" fill="#0f8f5f"/>
-  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">لقطة محتوى مرصود</text>
+  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">صورة دليل محتوى</text>
   <text x="806" y="174" direction="rtl" unicode-bidi="plaintext" text-anchor="end" fill="#166534" font-size="24" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
     source,
   )}</text>
@@ -38,7 +40,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
     date,
   )}</text>
   <circle cx="108" cy="178" r="38" fill="#ecfdf5" stroke="#34d399" stroke-width="3"/>
-  <text x="108" y="190" text-anchor="middle" fill="#047857" font-size="30" font-weight="700" font-family="Arial, Tahoma, sans-serif">X</text>
+  <text x="108" y="190" text-anchor="middle" fill="#047857" font-size="30" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(platformIcon)}</text>
   <line x1="94" x2="806" y1="238" y2="238" stroke="#e7e5e4" stroke-width="2"/>
   ${titleLines
     .map(
@@ -65,6 +67,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
         )}</text>`,
     )
     .join("\n  ")}
+  <text x="450" y="694" text-anchor="middle" fill="#a8a29e" font-size="13" font-family="Arial, Tahoma, sans-serif">صورة دليل — ليست لقطة شاشة حقيقية</text>
 </svg>`;
 }
 

@@ -10,8 +10,9 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import Image from "next/image";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion } from "@/lib/types";
+
+type MessageType = "success" | "error" | "info";
 
 type ApiState = {
   items: MonitoringItem[];
@@ -38,17 +39,61 @@ const emptyState: ApiState = {
   liveReport: null,
 };
 
+const arabicApiErrors: Record<string, string> = {
+  auth_required: "انتهت الجلسة. سجّل دخولك مجددًا ثم حاول مرة أخرى.",
+  insufficient_role: "ليس لديك صلاحية لهذا الإجراء.",
+  api_route_not_found_or_not_authorized: "المسار غير موجود أو غير مصرح.",
+  url_is_required: "يرجى لصق رابط صحيح.",
+  item_not_found: "المادة غير موجودة.",
+  item_not_report_ready: "المادة ليست جاهزة للتقرير بعد.",
+  report_not_found: "التقرير غير موجود.",
+  budget_exceeded: "تم تجاوز حد الاستخدام المسموح.",
+  request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
+};
+
+function arabicError(key: string): string {
+  return arabicApiErrors[key] ?? key;
+}
+
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error ?? "request_failed");
-  return data;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error("تعذر الاتصال بالسيرفر. تحقق من اتصال الإنترنت وحاول مرة أخرى.");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("application/json")) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("انتهت الجلسة. سجّل دخولك مجددًا ثم حاول مرة أخرى.");
+    }
+    if (contentType.includes("text/html")) {
+      throw new Error("انتهت الجلسة أو حدث خطأ في السيرفر. أعد تحميل الصفحة وسجّل دخولك.");
+    }
+    throw new Error("رد غير متوقع من السيرفر. حاول مرة أخرى.");
+  }
+
+  let data: Record<string, unknown>;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("لم يرد محتوى صالح من السيرفر. حاول مرة أخرى.");
+  }
+
+  if (!response.ok) {
+    const errorKey = typeof data.error === "string" ? data.error : "request_failed";
+    throw new Error(arabicError(errorKey));
+  }
+
+  return data as T;
 }
 
 function stateLabel(state: MonitoringItem["state"]) {
@@ -96,8 +141,15 @@ function nextStepLabel(item: MonitoringItem) {
 }
 
 function captureAsset(captures: Capture[] | undefined) {
-  return captures?.find((capture) => capture.kind === "report_grade" && capture.status === "success" && capture.assetUrl)
-    ?.assetUrl;
+  return captures?.find(
+    (capture) => (capture.kind === "report_grade" || capture.kind === "evidence_lite") && capture.status === "success" && capture.assetUrl,
+  )?.assetUrl;
+}
+
+function messageClass(type: MessageType) {
+  if (type === "error") return "rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900";
+  if (type === "info") return "rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900";
+  return "rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900";
 }
 
 export function OpsClient() {
@@ -110,6 +162,7 @@ export function OpsClient() {
   const [lastItemId, setLastItemId] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<MessageType>("info");
 
   const liveReportId = state.liveReport?.id ?? "report-5";
   const lastItem = useMemo(
@@ -172,6 +225,7 @@ export function OpsClient() {
       .catch((error) => {
         if (!active) return;
         setMessage(error instanceof Error ? error.message : "تعذر تحميل بيانات التشغيل.");
+        setMessageType("error");
       });
     return () => {
       active = false;
@@ -182,6 +236,7 @@ export function OpsClient() {
     event.preventDefault();
     setPending("manual");
     setMessage("جاري حفظ الرابط وإحضار بياناته...");
+    setMessageType("info");
 
     try {
       const result = await apiJson<IntakeResponse>("/api/items/manual-url", {
@@ -202,9 +257,11 @@ export function OpsClient() {
       setAuthorName("");
       setPublishedAt("");
       await refreshSilently();
-      setMessage(result.duplicate ? "هذا الرابط موجود بالفعل، وعرضناه لك هنا." : sourceLabel(result.metadata));
+      setMessage(result.duplicate ? "هذا الرابط موجود بالفعل وتم تحديث بياناته." : sourceLabel(result.metadata));
+      setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر حفظ الرابط.");
+      setMessageType("error");
     } finally {
       setPending(null);
     }
@@ -217,8 +274,10 @@ export function OpsClient() {
       await action();
       await refreshSilently();
       setMessage(successMessage);
+      setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تنفيذ العملية.");
+      setMessageType("error");
     } finally {
       setPending(null);
     }
@@ -377,7 +436,14 @@ export function OpsClient() {
               </div>
             </details>
 
-            {message ? <p className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-900">{message}</p> : null}
+            {pending === "manual" ? (
+              <p className={messageClass("info")}>
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-sky-400 border-t-transparent align-middle" />{" "}
+                جاري حفظ الرابط وإحضار بياناته...
+              </p>
+            ) : message ? (
+              <p className={messageClass(messageType)}>{message}</p>
+            ) : null}
           </form>
 
           {lastItem ? (
@@ -392,14 +458,14 @@ export function OpsClient() {
               <p className="mt-2 text-sm leading-7 text-stone-600">{lastItem.summary}</p>
               {captureAsset(state.capturesByItem[lastItem.id]) ? (
                 <div className="mt-4 overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
-                  <Image
-                    alt="صورة المحتوى"
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt="صورة دليل المحتوى"
                     className="h-auto w-full"
-                    height={720}
                     src={captureAsset(state.capturesByItem[lastItem.id]) ?? ""}
-                    unoptimized
-                    width={900}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
+                  <p className="px-3 py-2 text-center text-xs text-stone-400">صورة دليل محتوى — ليست لقطة شاشة حقيقية</p>
                 </div>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-500">
@@ -431,13 +497,12 @@ export function OpsClient() {
                         <h3 className="mt-3 font-bold leading-7">{item.title}</h3>
                         <p className="mt-1 line-clamp-2 text-sm leading-6 text-stone-600">{item.summary}</p>
                         {captureAsset(state.capturesByItem[item.id]) ? (
-                          <Image
-                            alt="صورة المحتوى"
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            alt="صورة دليل المحتوى"
                             className="mt-3 h-24 w-40 rounded-md border border-stone-200 object-cover object-top"
-                            height={144}
                             src={captureAsset(state.capturesByItem[item.id]) ?? ""}
-                            unoptimized
-                            width={240}
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         ) : null}
                       </div>

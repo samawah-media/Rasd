@@ -464,4 +464,87 @@ describe("Hono API acceptance workflow", () => {
       else process.env.RASD_ADMIN_IMPORT_TOKEN = previousAdminToken;
     }
   });
+
+  it("handles the UOfjeddah URL with ?lang=en by canonicalizing and fetching oEmbed", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      assert.ok(!url.includes("lang=en"), "oEmbed URL should not contain lang=en query param");
+      return new Response(
+        JSON.stringify({
+          author_name: "جامعة جدة",
+          author_url: "https://twitter.com/UOfjeddah",
+          html:
+            '<blockquote><p lang="ar" dir="rtl">هاكثون هداية | من مكة تنطلق الفكرة وبالعلم يتحقق الأثر.</p>&mdash; جامعة جدة (@UOfjeddah) <a href="https://twitter.com/UOfjeddah/status/2013613302509699235">January 20, 2026</a></blockquote>',
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      const result = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://x.com/UOfjeddah/status/2013613302509699235?lang=en" }),
+      });
+
+      assert.equal(result.response.status, 201);
+      assert.equal(result.json.metadata.source, "x_oembed");
+      assert.equal(result.json.item.authorName, "جامعة جدة");
+      assert.equal(result.json.item.authorHandle, "@UOfjeddah");
+      assert.equal(result.json.item.originalUrl, "https://x.com/UOfjeddah/status/2013613302509699235");
+      assert.ok(result.json.item.title.includes("هاكثون هداية"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("returns valid JSON error responses and never causes Unexpected end of JSON input", async () => {
+    const endpoints = [
+      { path: "/api/items/manual-url", method: "POST", body: "{}" },
+      { path: "/api/items/manual-url", method: "POST", body: "" },
+      { path: "/api/items/nonexistent/review", method: "POST", body: JSON.stringify({ action: "approve" }) },
+      { path: "/api/items/nonexistent/captures", method: "GET", body: undefined },
+    ];
+
+    for (const endpoint of endpoints) {
+      const response = await api.fetch(
+        new Request(`http://rasd.test${endpoint.path}`, {
+          method: endpoint.method,
+          headers: { "content-type": "application/json" },
+          body: endpoint.method === "POST" ? (endpoint.body || "{}") : undefined,
+        }),
+      );
+
+      const contentType = response.headers.get("content-type") ?? "";
+      assert.ok(contentType.includes("application/json") || contentType.includes("text/plain"),
+        `${endpoint.path} should return JSON or text, got: ${contentType}`);
+
+      if (contentType.includes("application/json")) {
+        const json = await response.json();
+        assert.equal(typeof json, "object", `${endpoint.path} should return a JSON object`);
+      }
+    }
+  });
+
+  it("returns a valid evidence card SVG with image/svg+xml content type", async () => {
+    const manual = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://example.com/evidence-test-page",
+        title: "اختبار صورة دليل المحتوى",
+        text: "محتوى اختباري لصورة الدليل.",
+        author_name: "مختبر",
+      }),
+    });
+
+    assert.equal(manual.response.status, 201);
+    const evidenceUrl = `/api/items/${manual.json.item.id}/evidence-card.svg`;
+    const svg = await requestText(evidenceUrl);
+
+    assert.equal(svg.response.status, 200);
+    assert.match(svg.response.headers.get("content-type") ?? "", /image\/svg\+xml/);
+    assert.match(svg.text, /<svg/);
+    assert.match(svg.text, /صورة دليل محتوى/);
+    assert.match(svg.text, /اختبار/);
+  });
 });

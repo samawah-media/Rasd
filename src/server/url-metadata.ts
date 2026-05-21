@@ -107,8 +107,23 @@ function isXPostUrl(value: string) {
   }
 }
 
+function canonicalizeXUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    parsed.protocol = "https:";
+    parsed.hostname = "x.com";
+    parsed.search = "";
+    parsed.hash = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+
 async function fetchXMetadata(url: string, fetcher: FetchLike): Promise<UrlMetadata> {
-  const endpoint = `https://publish.twitter.com/oembed?omit_script=true&dnt=true&url=${encodeURIComponent(url)}`;
+  const canonicalUrl = canonicalizeXUrl(url);
+  const endpoint = `https://publish.twitter.com/oembed?omit_script=true&dnt=true&url=${encodeURIComponent(canonicalUrl)}`;
   const response = await fetchWithTimeout(endpoint, fetcher, {
     headers: { accept: "application/json" },
   });
