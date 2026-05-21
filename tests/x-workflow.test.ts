@@ -7,6 +7,8 @@ import { XProviderManager } from "../src/lib/x/manager";
 import { OfficialXProvider, ApifyXProvider, AgentXProvider } from "../src/lib/x/providers";
 import { store } from "../src/server/store";
 import { GET, POST } from "../src/app/api/items/x-refresh/route";
+import { XSearchManager } from "../src/lib/x/search-manager";
+import { MockSearchProvider, GrokXSearchProvider, buildSearchQuery } from "../src/lib/x/search-providers";
 
 describe("X/Twitter URL parser and normalizer", () => {
   it("validates standard and alternate X/Twitter post URLs", () => {
@@ -186,3 +188,106 @@ describe("X Stats Refresh API endpoint", () => {
   });
 });
 
+describe("X Search Provider and Manager", () => {
+  it("buildSearchQuery constructs a query from keyword rules", () => {
+    const query = buildSearchQuery(
+      ["هداية", "هاكثون هداية", "Hidayathon"],
+      ["جامعة جدة", "رئاسة الشؤون الدينية"],
+      ["ar", "en"],
+    );
+    assert.ok(query.includes("هداية"));
+    assert.ok(query.includes("Hidayathon"));
+    assert.ok(query.includes("جامعة جدة"));
+    assert.ok(query.includes("العربية والإنجليزية"));
+  });
+
+  it("MockSearchProvider returns deterministic results and healthy status", async () => {
+    const provider = new MockSearchProvider();
+    const health = await provider.healthCheck();
+    assert.equal(health.status, "healthy");
+
+    const results = await provider.search("test query");
+    assert.ok(results.length >= 2);
+    assert.ok(results[0].tweetUrl.startsWith("https://x.com/"));
+    assert.ok(results[0].tweetId.length > 0);
+    assert.ok(results[0].authorHandle.startsWith("@"));
+  });
+
+  it("GrokXSearchProvider reports error when key is missing", async () => {
+    const provider = new GrokXSearchProvider();
+    const health = await provider.healthCheck();
+    assert.equal(health.status, "error");
+    assert.ok(health.message?.includes("xai_api_key_missing"));
+
+    await assert.rejects(async () => {
+      await provider.search("test");
+    }, /xai_api_key_missing/);
+  });
+
+  it("XSearchManager uses mock_search provider and deduplicates", async () => {
+    const manager = new XSearchManager({
+      X_SEARCH_PROVIDER_TYPE: "mock_search",
+    });
+
+    assert.equal(manager.getActiveProviderName(), "mock_search");
+
+    const existingUrls = new Set(["https://x.com/Hidayathon/status/100001"]); // Already exists
+
+    const { results, runResult } = await manager.executeSearch({
+      requiredTerms: ["هداية"],
+      optionalTerms: ["جامعة جدة"],
+      existingUrls,
+    });
+
+    // First result should be skipped (duplicate)
+    assert.equal(runResult.duplicateSkipped, 1);
+    // Should have at least 1 new result
+    assert.ok(results.length >= 1);
+    assert.ok(runResult.newItems >= 1);
+    assert.ok(runResult.searchedAt);
+    assert.ok(runResult.durationMs >= 0);
+  });
+
+  it("XSearchManager falls back to mock when provider type is unknown", () => {
+    const manager = new XSearchManager({
+      X_SEARCH_PROVIDER_TYPE: "nonexistent_provider",
+    });
+    assert.equal(manager.getActiveProviderName(), "mock_search");
+  });
+
+  it("XSearchManager skips invalid URLs from search results", async () => {
+    const manager = new XSearchManager({
+      X_SEARCH_PROVIDER_TYPE: "mock_search",
+    });
+
+    const { results, runResult } = await manager.executeSearch({
+      requiredTerms: ["هداية"],
+      optionalTerms: [],
+      existingUrls: new Set(),
+    });
+
+    // All mock results have valid x.com URLs — should all pass
+    assert.equal(runResult.irrelevantSkipped, 0);
+    assert.equal(results.length, runResult.newItems);
+  });
+
+  it("XSearchManager tracks last run result", async () => {
+    const manager = new XSearchManager({
+      X_SEARCH_PROVIDER_TYPE: "mock_search",
+    });
+
+    assert.equal(manager.getLastRunResult(), null);
+
+    await manager.executeSearch({
+      requiredTerms: ["Hidayathon"],
+      optionalTerms: [],
+      existingUrls: new Set(),
+    });
+
+    const lastRun = manager.getLastRunResult();
+    assert.ok(lastRun);
+    assert.equal(lastRun.provider, "mock_search");
+    assert.ok(lastRun.query.includes("Hidayathon"));
+    assert.ok(lastRun.discoveredUrls.length > 0);
+  });
+});
