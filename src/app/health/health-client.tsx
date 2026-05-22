@@ -19,6 +19,10 @@ import {
   Flame,
   Globe,
   Sliders,
+  ShieldCheck,
+  CheckCircle2,
+  Camera,
+  Link2,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 
@@ -77,11 +81,11 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
       else if (log.action.includes("duplicate") || log.action.includes("warn")) level = "warning";
 
       let readableMsg = `حدث تشغيلي: ${log.action}`;
-      if (log.action === "item.ingested") readableMsg = `📥 تم سحب وتلقيم مادة جديدة بنجاح (المعرف: ${log.entityId.slice(0, 8)})`;
-      else if (log.action === "item.duplicate_detected") readableMsg = `🔗 تم الكشف عن رابط مكرر ومستبعده تفادياً للزحمة.`;
-      else if (log.action === "source.rss_polled") readableMsg = `📡 تم فحص مصادر الأخبار وتحديث التغذية الفورية للعميل.`;
-      else if (log.action === "source.rss_poll_failed") readableMsg = `🚨 فشل فحص مصدر RSS (المعرف: ${log.entityId.slice(0, 8)}) - جاري المحاولة.`;
-      else if (log.action === "keyword_rule.updated") readableMsg = `⚙️ تحديث خوارزمية الفلترة الذكية وتعديل الكلمات الدالة.`;
+      if (log.action === "item.ingested") readableMsg = `تم سحب وتلقيم مادة جديدة بنجاح (المعرف: ${log.entityId.slice(0, 8)})`;
+      else if (log.action === "item.duplicate_detected") readableMsg = `تم الكشف عن رابط مكرر ومستبعده تفادياً للزحمة.`;
+      else if (log.action === "source.rss_polled") readableMsg = `تم فحص مصادر الأخبار وتحديث التغذية الفورية للعميل.`;
+      else if (log.action === "source.rss_poll_failed") readableMsg = `فشل فحص مصدر RSS (المعرف: ${log.entityId.slice(0, 8)}) - جاري المحاولة.`;
+      else if (log.action === "keyword_rule.updated") readableMsg = `تحديث خوارزمية الفلترة الذكية وتعديل الكلمات الدالة.`;
       
       return {
         id: log.id || `init-${idx}`,
@@ -97,13 +101,13 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
         id: "w1",
         time: new Date().toLocaleTimeString("ar-SA", { hour12: false }),
         level: "success",
-        message: "🟢 متصل بقاعدة بيانات رصد الإعلامي بنجاح.",
+        message: "متصل بقاعدة بيانات رصد الإعلامي بنجاح.",
       },
       {
         id: "w2",
         time: new Date().toLocaleTimeString("ar-SA", { hour12: false }),
         level: "info",
-        message: "⚡ نظام كشف الثغرات وحواجز الأمان نشط بالكامل.",
+        message: "نظام كشف الثغرات وحواجز الأمان نشط بالكامل.",
       },
     ];
 
@@ -115,16 +119,16 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
     if (!liveActive) return;
 
     const saudiLogs = [
-      { level: "info", message: "🔍 جاري فحص مصادر RSS النشطة..." },
-      { level: "success", message: "📻 تم جلب وتغذية بث الأخبار من سبق وعاجل بنجاح." },
-      { level: "success", message: "🧠 تم معالجة المشاعر بالتصنيف التلقائي للهاكثون: إيجابي بنسبة 91%." },
-      { level: "info", message: "🚀 تم التقاط لقطة الشاشة المرجعية للتقرير التلقائي." },
-      { level: "warning", message: "⚠️ تنبيه: استهلاك X OEmbed يقترب من حد الاستخدام المجاني." },
-      { level: "success", message: "🟢 خادم Supabase السحابي مستقر وزمن الاستجابة 42 ملي ثانية." },
-      { level: "info", message: "⚡ تم الكشف التلقائي عن مشاركات جديدة بهاكثون هداية في تويتر." },
-      { level: "success", message: "✨ تمت أرشفة المواد القديمة تلقائياً لضمان سلاسة التصفح." },
-      { level: "success", message: "🔒 تدقيق أمني: جميع شهادات الاتصال وجلسات المديرين مشفرة ومؤمنة." },
-      { level: "error", message: "🚨 فشل مؤقت في جلب بيانات Microlink لقطة شاشة - جاري إعادة المحاولة تلقائياً." }
+      { level: "info", message: "جاري فحص مصادر RSS النشطة..." },
+      { level: "success", message: "تم جلب وتغذية بث الأخبار من سبق وعاجل بنجاح." },
+      { level: "success", message: "تم معالجة المشاعر بالتصنيف التلقائي للهاكثون: إيجابي بنسبة 91%." },
+      { level: "info", message: "تم التقاط لقطة الشاشة المرجعية للتقرير التلقائي." },
+      { level: "warning", message: "تنبيه: استهلاك X OEmbed يقترب من حد الاستخدام المجاني." },
+      { level: "success", message: "خادم Supabase السحابي مستقر وزمن الاستجابة 42 ملي ثانية." },
+      { level: "info", message: "تم الكشف التلقائي عن مشاركات جديدة بهاكثون هداية في تويتر." },
+      { level: "success", message: "تمت أرشفة المواد القديمة تلقائياً لضمان سلاسة التصفح." },
+      { level: "success", message: "تدقيق أمني: جميع شهادات الاتصال وجلسات المديرين مشفرة ومؤمنة." },
+      { level: "error", message: "فشل مؤقت في جلب بيانات Microlink لقطة شاشة - جاري إعادة المحاولة تلقائياً." }
     ] as const;
 
     const interval = setInterval(() => {
@@ -162,7 +166,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
           id: crypto.randomUUID(),
           time: new Date().toLocaleTimeString("ar-SA", { hour12: false }),
           level: "success",
-          message: "🔄 تم تحديث مؤشرات نبض السيرفر والصحة الفورية بنجاح ولله الحمد.",
+          message: "تم تحديث مؤشرات نبض السيرفر والصحة الفورية بنجاح ولله الحمد.",
         };
         setLogs((prev) => [successLog, ...prev]);
       }
@@ -171,7 +175,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
         id: crypto.randomUUID(),
         time: new Date().toLocaleTimeString("ar-SA", { hour12: false }),
         level: "error",
-        message: "❌ فشل الاتصال بنقطة فحص السيرفر. تأكد من سلامة الاتصال.",
+        message: "فشل الاتصال بنقطة فحص السيرفر. تأكد من سلامة الاتصال.",
       };
       setLogs((prev) => [errorLog, ...prev]);
     } finally {
@@ -186,9 +190,9 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
   };
 
   const getStatusBadge = (status: string) => {
-    if (status === "good" || status === "healthy") return "سليم ومتصل 🟢";
-    if (status === "warning" || status === "degraded") return "يبي له تدقيق ⚠️";
-    return "فيه عطل 🚨";
+    if (status === "good" || status === "healthy") return "سليم ومتصل";
+    if (status === "warning" || status === "degraded") return "يبي له تدقيق";
+    return "فيه عطل";
   };
 
   const getLogColor = (level: LogEntry["level"]) => {
@@ -229,16 +233,16 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
               <Cpu className="h-3.5 w-3.5 text-[#2383E2]" />
               <span>نبض الخوادم والسلامة الفنية</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-border)]" />
-              <span className="text-[#00C853]">نشط الحين 🟢</span>
+              <span className="text-[#00C853]">نشط الحين</span>
             </div>
-            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">صحة خوادمنا ونبضها ⚡</h1>
+            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">صحة خوادمنا ونبضها</h1>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/ops"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition hover:text-[#2383E2] active:scale-[0.97] transition-transform"
             >
-              افتح غرفة العمليات 📊
+              افتح غرفة العمليات
             </Link>
             <button
               type="button"
@@ -247,7 +251,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
               className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#111111] hover:bg-[#2383E2] px-3 text-xs font-bold text-white transition disabled:opacity-50 active:scale-[0.97] transition-transform cursor-pointer"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-              أعد فحص الأنظمة 🔄
+              أعد فحص الأنظمة
             </button>
           </div>
         </header>
@@ -294,7 +298,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                     </div>
                   </div>
                   <span className="inline-flex rounded-lg bg-[#e8f5ef] text-[#00C853] px-2.5 py-1 text-[10px] font-extrabold">
-                    نشط ومنتظم 🟢
+                    نشط ومنتظم
                   </span>
                 </div>
               </div>
@@ -378,11 +382,11 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                     onChange={(e) => setLogFilter(e.target.value as any)}
                     className="bg-stone-800 border border-stone-700 text-stone-300 text-[9px] font-bold rounded-lg px-2 py-1 outline-none cursor-pointer hover:bg-stone-750 transition"
                   >
-                    <option value="all">كل السجلات 📋</option>
-                    <option value="info">معلومات تشغيلية ℹ️</option>
-                    <option value="success">عمليات ناجحة 🟢</option>
-                    <option value="warning">تنبيهات تحذيرية ⚠️</option>
-                    <option value="error">أعطال وأخطاء 🚨</option>
+                    <option value="all">كل السجلات</option>
+                    <option value="info">معلومات تشغيلية</option>
+                    <option value="success">عمليات ناجحة</option>
+                    <option value="warning">تنبيهات تحذيرية</option>
+                    <option value="error">أعطال وأخطاء</option>
                   </select>
 
                   {/* Pause / Play Trigger */}
@@ -506,7 +510,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
             <div className="bg-white rounded-3xl border border-[var(--color-border)] p-5 shadow-sm space-y-4">
               <div className="flex items-center gap-2 text-xs font-extrabold text-[#2383E2]">
                 <Lock size={15} />
-                <span>حاجز السلامة ومراقبة التكلفة 🛡️</span>
+                <span>حاجز السلامة ومراقبة التكلفة</span>
               </div>
               <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)] font-semibold">
                 جميع إجراءات الرصد وتلقيم البيانات تتم عبر قنوات اتصال مؤمنة بمفاتيح تشفير محلية مشفرة بالكامل. في حال زيادة الاستهلاك عن الحد الأقصى سيقوم النظام بإغلاق السحب تلقائياً لحمايتك.
@@ -516,6 +520,27 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                 <span className="text-[#00C853] bg-[#00C853]/10 px-2 py-0.5 rounded">مفعلة ونشطة</span>
               </div>
             </div>
+
+            {/* Card: Safety Barriers */}
+            <section className="bg-white rounded-3xl border border-[var(--color-border)] p-5 shadow-sm space-y-4">
+              <div className="flex items-center gap-2 text-xs font-extrabold text-[#2383E2] border-b border-stone-100 pb-3">
+                <ShieldCheck size={16} />
+                <span>حواجز الأمان والسلامة</span>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { icon: <CheckCircle2 size={13} />, text: "لازم تراجع المادة وتعتمدها قبل ما تدخل في التقرير الرسمي." },
+                  { icon: <Camera size={13} />, text: "عملية تصوير الشاشات (Capture) تشتغل آلياً وخلف الكواليس." },
+                  { icon: <AlertTriangle size={13} />, text: "إذا بتعتمد بدون لقطة شاشة، السيستم راح يعطيك تنبيه تحذيري." },
+                  { icon: <Link2 size={13} />, text: "روابط المشاركة والتصدير آمنة وتنتهي صلاحيتها تلقائياً لحماية سرية البيانات." },
+                ].map((barrier, idx) => (
+                  <div className="flex items-start gap-2.5 text-stone-600 leading-relaxed" key={idx}>
+                    <span className="mt-0.5 text-[#2383E2] shrink-0">{barrier.icon}</span>
+                    <span className="text-[10px] font-semibold">{barrier.text}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
 
             {/* System Performance stats */}
             <div className="bg-gradient-to-tr from-[#2383E2]/15 to-white rounded-3xl border border-[#2383E2]/25 p-5 shadow-sm space-y-3">

@@ -59,43 +59,37 @@ export default function RichRightSidebar() {
 
   const menuItems = [
     {
-      title: "غرفة العمليات ⚡",
+      title: "لوحة التشغيل",
       subtitle: "إضافة وتصفية ومراجعة المحتوى",
       path: "/ops",
       icon: Cpu,
     },
     {
-      title: "البث المباشر الفوري 📻",
+      title: "البث المباشر",
       subtitle: "متابعة المواد لحظة بلحظة",
       path: "/feed",
       icon: Activity,
     },
     {
-      title: "تقرير العميل الفخم 📊",
+      title: "التقارير",
       subtitle: "الواجهة النهائية للأنيق للعميل",
       path: "/client-report",
       icon: FileText,
     },
     {
-      title: "صحة خوادمنا ونبضها 🟢",
+      title: "صحة الخوادم",
       subtitle: "مؤشرات حية لكفاءة المنصة",
       path: "/health",
       icon: Activity,
     },
     {
-      title: "مصادر الرصد والجدولة ⚙️",
+      title: "المصادر",
       subtitle: "إدارة الـ RSS والكلمات الدالة",
       path: "/sources",
       icon: Database,
     },
     {
-      title: "إدارة المشرفين 👥",
-      subtitle: "تحديد الأدوار والوصول الآمن",
-      path: "/access",
-      icon: UserRound,
-    },
-    {
-      title: "إعدادات المنصة 🔧",
+      title: "الإعدادات",
       subtitle: "تخصيص الهوية والربط التقني",
       path: "/settings",
       icon: Settings,
@@ -197,7 +191,7 @@ export default function RichRightSidebar() {
           <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-title)]">
               <LockKeyhole size={14} className="text-[#2383E2]" />
-              <span>المنصة تحت الحماية والرقابة 🔐</span>
+              <span>المنصة تحت الحماية والرقابة</span>
             </div>
             <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
               تطمن، حماية استهلاك السيرفر والتكاليف شغالين بأعلى كفاءة لضمان سرعة الرصد.

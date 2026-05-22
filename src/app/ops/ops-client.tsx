@@ -129,11 +129,11 @@ const arabicApiErrors: Record<string, string> = {
 };
 
 const tabLabels: Record<WorkTab, string> = {
-  active: "كل المواد 📋",
-  review: "يبي لها مراجعة 🔍",
-  capture: "بانتظار لقطة الشاشة 📸",
-  report: "جاهزة للتقرير الفخم ✨",
-  done: "مضافة بالتقرير 🥳",
+  active: "كل المواد",
+  review: "يبي لها مراجعة",
+  capture: "بانتظار لقطة الشاشة",
+  report: "جاهزة للتقرير الفخم",
+  done: "مضافة بالتقرير",
 };
 
 function arabicError(key: string): string {
@@ -667,7 +667,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => approveItem(item)} className="ops-primary" disabled={pending !== null}>
           <Check className="h-4 w-4" />
-          اعتماد الحين ✅
+          اعتماد الحين
         </button>
       );
     }
@@ -675,7 +675,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => captureItem(item)} className="ops-primary" disabled={pending !== null}>
           <Camera className="h-4 w-4" />
-          تصوير الشاشة 📸
+          تصوير الشاشة
         </button>
       );
     }
@@ -683,7 +683,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => addToReport(item)} className="ops-primary" disabled={pending !== null}>
           <Archive className="h-4 w-4" />
-          أضف للتقرير الفخم 📥
+          أضف للتقرير الفخم
         </button>
       );
     }
@@ -730,14 +730,14 @@ export function OpsClient() {
                 {systemText(state.metrics)}
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى 📊</h1>
+            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى</h1>
           </div>
           <div className="flex items-center gap-2">
             <a
               href="/client-report"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition hover:text-[#2383E2] active:scale-[0.97] transition-transform"
             >
-              عرض تقرير العميل 📊
+              عرض تقرير العميل
               <ChevronLeft className="h-3.5 w-3.5" />
             </a>
             <button
@@ -747,7 +747,7 @@ export function OpsClient() {
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition disabled:opacity-50 active:scale-[0.97] transition-transform"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${pending === "refresh" ? "animate-spin" : ""}`} />
-              تحديث الحالة 🔄
+              تحديث الحالة
             </button>
           </div>
         </header>
@@ -765,68 +765,10 @@ export function OpsClient() {
           </div>
         )}
 
-        {/* Pipeline Ingestion Flow (Daydream Animated Ingestion Visualizer) */}
-        <div className="bg-white rounded-3xl border border-[var(--color-border)] p-6 shadow-sm mb-6 select-none relative overflow-hidden group hover:border-[#2383E2]/35 transition-all duration-300">
-          <div className="absolute inset-0 bg-gradient-to-tr from-[#2383E2]/[0.01] to-[#00C853]/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-            <div>
-              <h2 className="text-sm font-black text-[var(--color-text-title)] flex items-center gap-2">
-                <Activity className="h-4 w-4 text-[#2383E2]" />
-                مسار معالجة البيانات الفوري ⚡
-              </h2>
-              <p className="text-[11px] text-[var(--color-text-muted)] mt-1 font-semibold">
-                متابعة حية وشلون تمشي بياناتك من السحب الين التقرير الفخم.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#00C853] animate-pulse" />
-              <span className="text-[10px] font-extrabold text-[#00C853]">شغالين ومتصلين بالبث المباشر 🟢</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 relative">
-            {/* Node 1: Ingestion */}
-            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
-              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
-                <Database className="h-4.5 w-4.5" />
-              </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">سحب وتلقيم</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{activeRssSources.length} مصادر نشطة الحين</span>
-            </div>
-
-            {/* Node 2: Filter */}
-            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
-              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
-                <Search className="h-4.5 w-4.5" />
-              </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">تصفية ذكية</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.active} مواد قيد الرصد</span>
-            </div>
-
-            {/* Node 3: Validation */}
-            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
-              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
-                <CheckSquare className="h-4.5 w-4.5" />
-              </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">مراجعة واعتماد</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.review} يبي لها موافقة</span>
-            </div>
-
-            {/* Node 4: Ready */}
-            <div className="flex flex-col items-center p-4 bg-[var(--color-bg-main)] rounded-2xl border border-[var(--color-border)] text-center relative group/node hover:border-[#2383E2]/30 transition-all">
-              <div className="w-9 h-9 rounded-xl bg-[#00C853]/10 flex items-center justify-center text-[#00C853] mb-3 group-hover/node:scale-110 transition-transform">
-                <Sparkles className="h-4.5 w-4.5" />
-              </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">جاهز للتقرير الفخم</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.report} جاهزة لتقرير العميل</span>
-            </div>
-          </div>
-        </div>
-
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12" title="رصد مادة فردية 📝" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
+          <BentoCard colSpan="col-span-12" title="رصد مادة فردية" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
               <div className="relative">
                 <input
@@ -851,7 +793,7 @@ export function OpsClient() {
 
               <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
                 <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-muted)] hover:text-[#2383E2] select-none">
-                  تبي تعدل التفاصيل يدوي؟ اضغط هنا ⚙️
+                  تبي تعدل التفاصيل يدوي؟ اضغط هنا
                 </summary>
                 <div className="mt-2.5 space-y-2">
                   <input
@@ -889,7 +831,7 @@ export function OpsClient() {
                 className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-[#2383E2] transition active:scale-[0.97] transition-transform disabled:opacity-50 cursor-pointer"
               >
                 {pending === "manual" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                اضغط هنا ونسحبها لك فوراً 🚀
+                اضغط هنا ونسحبها لك فوراً
               </button>
             </form>
           </BentoCard>
@@ -899,101 +841,7 @@ export function OpsClient() {
         <div className="grid grid-cols-12 gap-5">
           {/* Left pane: Health Widgets & Selected Item details (col-span-12 lg:col-span-4) */}
           <div className="col-span-12 lg:col-span-4 space-y-5">
-            {/* Connected X Engine & Auto-Discovery Bento Card */}
-            <BentoCard colSpan="col-span-12" title="محرك البحث التلقائي في X" icon={Cpu}>
-              <div className="space-y-3 mt-1">
-                {/* Provider Status Row */}
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: "Grok بحث", key: "grok_search", color: "#1DA1F2" },
-                    { label: "OEmbed مجاني", key: "oembed", color: "#00C853" },
-                  ].map((eng) => {
-                    const isActive = state.xSearchLastRun?.provider === eng.key ||
-                      (eng.key === "oembed" && state.connectors?.x_oembed === "healthy");
-                    return (
-                      <div key={eng.key}
-                        className={`flex items-center gap-2 p-2 rounded-xl border text-[10px] font-bold transition-all ${
-                          isActive
-                            ? `border-[${eng.color}]/30 bg-[${eng.color}]/5 text-[${eng.color}]`
-                            : "border-[var(--color-border)] bg-[var(--color-bg-main)] text-[var(--color-text-muted)]"
-                        }`}>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${isActive ? "animate-pulse" : "opacity-40"}`}
-                          style={{ backgroundColor: isActive ? eng.color : "#999" }} />
-                        {eng.label}
-                        <span className="mr-auto text-[8px] font-extrabold opacity-60">
-                          {isActive ? "نشط" : "جاهز"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
 
-                {/* Last Search Run Info */}
-                {state.xSearchLastRun && (
-                  <div className="bg-[var(--color-bg-main)] p-2.5 rounded-xl border border-[var(--color-border)] text-[10px] space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[var(--color-text-muted)]">آخر بحث تلقائي</span>
-                      <span className="font-extrabold text-[var(--color-text-title)]">
-                        {new Date(state.xSearchLastRun.searchedAt).toLocaleString("ar-SA", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" })}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[var(--color-text-muted)]">تغريدات مكتشفة</span>
-                      <span className="font-extrabold text-[#00C853]">{state.xSearchLastRun.newItems} جديدة</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[var(--color-text-muted)]">مكررات تم تخطيها</span>
-                      <span className="font-extrabold text-stone-400">{state.xSearchLastRun.duplicateSkipped}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Circular Progress Ring for X Query consumption */}
-                {(() => {
-                  const consumption = state.usage?.xReadsThisMonth ?? 900;
-                  const limit = 6000;
-                  const pct = Math.min(100, Math.max(0, (consumption / limit) * 100));
-                  const radius = 24;
-                  const circumference = 2 * Math.PI * radius;
-                  const strokeDashoffset = circumference - (pct / 100) * circumference;
-
-                  return (
-                    <div className="flex items-center gap-3 bg-[var(--color-bg-main)] p-3 rounded-2xl border border-[var(--color-border)] select-none">
-                      <div className="relative flex items-center justify-center shrink-0 w-12 h-12">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="24" cy="24" r={radius} className="text-stone-100" strokeWidth="4.5" stroke="currentColor" fill="transparent" />
-                          <circle cx="24" cy="24" r={radius} className="text-[#1DA1F2] transition-all duration-1000 ease-out" strokeWidth="4.5" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" stroke="currentColor" fill="transparent" />
-                        </svg>
-                        <span className="absolute text-[9px] font-black text-[var(--color-text-title)]">{Math.round(pct)}%</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[9px] font-bold text-[var(--color-text-muted)] block">الاستهلاك الشهري لقراءات X</span>
-                        <span className="text-xs font-black text-[var(--color-text-title)] mt-0.5 block">{consumption.toLocaleString()} / {limit.toLocaleString()} طلب</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Manual Search Trigger Button */}
-                <button
-                  id="trigger-x-search"
-                  onClick={triggerXSearch}
-                  disabled={searchRunning}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-extrabold text-xs text-white transition-all duration-300"
-                  style={{
-                    background: searchRunning
-                      ? "linear-gradient(135deg, #666, #888)"
-                      : "linear-gradient(135deg, #1DA1F2, #0D8BD9)",
-                    boxShadow: searchRunning ? "none" : "0 4px 20px rgba(29,161,242,0.3)",
-                  }}>
-                  {searchRunning ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" /> جاري البحث...</>
-                  ) : (
-                    <><Search className="h-4 w-4" /> ابحث الآن في X عن الهاكثون</>
-                  )}
-                </button>
-              </div>
-            </BentoCard>
 
             {/* Selected Item Details Sticky Widget */}
             {selectedItem ? (
@@ -1050,7 +898,7 @@ export function OpsClient() {
                       className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-2.5 text-xs font-bold text-[#9a341f] hover:border-[#d7745f] transition disabled:opacity-50 active:scale-[0.97] transition-transform"
                     >
                       <Archive className="h-3.5 w-3.5" />
-                      أرشفة المادة 📦
+                      أرشفة المادة
                     </button>
                     {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
                       <button
@@ -1060,7 +908,7 @@ export function OpsClient() {
                         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] px-2.5 text-xs font-bold hover:border-[#2383E2]/40 transition disabled:opacity-50 active:scale-[0.97] transition-transform"
                       >
                         <Check className="h-3.5 w-3.5" />
-                        اعتماد الحين ✅
+                        اعتماد الحين
                       </button>
                     ) : null}
                   </div>
@@ -1136,7 +984,7 @@ export function OpsClient() {
                         className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#111111] hover:bg-[#2383E2] text-[11px] font-bold text-white transition active:scale-[0.97] transition-transform cursor-pointer"
                       >
                         {pending === `edit-${selectedItem.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                        حفظ التعديلات 💾
+                        حفظ التعديلات
                       </button>
                     </form>
                   </details>
@@ -1188,7 +1036,7 @@ export function OpsClient() {
                     className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50 active:scale-[0.97] transition-transform cursor-pointer"
                   >
                     {pending === "archive-visible" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    أرشفة كل المعروضين 📦
+                    أرشفة كل المعروضين
                   </button>
                   <div className="relative">
                     <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
@@ -1272,7 +1120,7 @@ export function OpsClient() {
               ) : (
                 <div className="p-12 text-center select-none flex flex-col items-center">
                   <CircleCheck className="h-8 w-8 text-[#00C853] animate-pulse" />
-                  <h2 className="mt-3 text-xs font-extrabold text-[var(--color-text-title)]">يا سلام! ما فيه شيء يبي له مراجعة الحين 🎉</h2>
+                  <h2 className="mt-3 text-xs font-extrabold text-[var(--color-text-title)]">يا سلام! ما فيه شيء يبي له مراجعة الحين</h2>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-1">كل شيء تمام ومصفى على أكمل وجه.</p>
                 </div>
               )}

@@ -208,13 +208,13 @@ export default async function OverviewPage() {
           <div>
             <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] font-bold">
               <span>مشروع</span>
-              <span className="font-extrabold text-[var(--color-text-title)]">هاكاثون هداية 🕌</span>
+              <span className="font-extrabold text-[var(--color-text-title)]">هاكاثون هداية</span>
               <span className="rounded-md bg-[#2383E2]/10 px-2 py-0.5 text-[10px] text-[#2383E2] font-black">
                 لوحة تحكم المشرفين
               </span>
             </div>
             <h1 className="mt-1.5 text-2xl font-black tracking-tight text-[var(--color-text-title)] md:text-3xl">
-              غرفة المتابعة والتشغيل الفوري ⚡
+              غرفة المتابعة والعمليات الفوري
             </h1>
           </div>
 
@@ -222,14 +222,14 @@ export default async function OverviewPage() {
             <IconButton label="بحث">
               <Search size={18} />
             </IconButton>
-            <FilterButton icon={<CalendarDays size={16} />} label="تحليلات حية 📊" />
+            <FilterButton icon={<CalendarDays size={16} />} label="تحليلات حية" />
             <FilterButton icon={<Layers3 size={16} />} label={`مستودع البيانات: ${dbModeText}`} />
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2383E2] hover:bg-[#1b6ec4] px-4 text-sm font-bold text-white transition shadow-sm active:scale-[0.97] transition-transform"
               href="/ops"
             >
               <Activity size={17} />
-              افتح لوحة العمليات الحين 🚀
+              افتح لوحة العمليات الحين
             </Link>
           </div>
         </div>
@@ -265,7 +265,7 @@ export default async function OverviewPage() {
           {/* Volume & Funnel Grid */}
           <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             {/* Volume chart */}
-            <Panel title="منحنى نشاط الرصد والحركة 📈" icon={<LineChart size={18} />}>
+            <Panel title="منحنى نشاط الرصد والحركة" icon={<LineChart size={18} />}>
               <LineViz points={displayVolumePoints} />
               <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                 <MetricPill
@@ -287,7 +287,7 @@ export default async function OverviewPage() {
             </Panel>
 
             {/* Workflow Funnel */}
-            <Panel title="مسار ومراحل الرصد (قمع العمليات) 🌪️" icon={<Layers3 size={18} />}>
+            <Panel title="مسار ومراحل الرصد (قمع العمليات)" icon={<Layers3 size={18} />}>
               <div className="flex flex-col gap-3 py-1">
                 {funnelSteps.map((step) => (
                   <div className="relative" key={step.label}>
@@ -318,7 +318,7 @@ export default async function OverviewPage() {
           {/* Platform Share & Sentiment Analysis Grid */}
           <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
             {/* Platform share */}
-            <Panel title="توزيع المواد حسب المنصات 📊" icon={<BarChart3 size={18} />}>
+            <Panel title="توزيع المواد حسب المنصات" icon={<BarChart3 size={18} />}>
               <div className="space-y-4 py-2">
                 {platformShare.map((item) => (
                   <ShareRow item={item} key={item.label} />
@@ -327,7 +327,7 @@ export default async function OverviewPage() {
             </Panel>
 
             {/* Sentiment donut chart */}
-            <Panel title="تحليل الذكاء الاصطناعي للمشاعر 🧠" icon={<Sparkles size={18} />}>
+            <Panel title="تحليل الذكاء الاصطناعي للمشاعر" icon={<Sparkles size={18} />}>
               <div className="flex flex-wrap items-center justify-center gap-6 py-2 sm:flex-nowrap">
                 <Donut
                   negativePct={negativePct}
@@ -351,7 +351,7 @@ export default async function OverviewPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
               <div className="flex items-center gap-2">
                 <Inbox size={18} className="text-[#2383E2]" />
-                <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">البث المباشر للمواد المرصودة 📡</h2>
+                <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">البث المباشر للمواد المرصودة</h2>
               </div>
               <div className="flex items-center gap-2">
                 <FilterButton icon={<Filter size={14} />} label="الأحدث" />
@@ -372,7 +372,7 @@ export default async function OverviewPage() {
           <section className="rounded-2xl border border-[#2383E2]/35 bg-gradient-to-tr from-[#2383E2]/[0.02] to-white p-5 shadow-sm space-y-4">
             <div className="flex items-center gap-2 text-[#2383E2]">
               <Activity size={18} className="animate-pulse" />
-              <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">صحة وسلامة الأنظمة 🟢</h2>
+              <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">صحة وسلامة الأنظمة</h2>
             </div>
             <p className="text-xs leading-relaxed text-[var(--color-text-muted)] font-semibold">
               نقلنا كل تفاصيل نبض الخوادم، الاتصالات مع السيرفرات الخارجية وسجلات النظام لصفحة فخمة ومستقلة عشان ما تزحم عليك لوحة البيانات.
@@ -391,7 +391,7 @@ export default async function OverviewPage() {
               href="/health"
               className="w-full flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#2383E2] hover:bg-[#1b6ec4] text-xs font-bold text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] transition-transform cursor-pointer"
             >
-              <span>افتح صحة النظام من هنا 🚀</span>
+              <span>افتح صحة النظام من هنا</span>
             </Link>
           </section>
 

@@ -106,7 +106,7 @@ export default async function Home() {
               </div>
 
               <h2 className="text-xl md:text-2xl font-black text-[#204733] mb-3 flex items-center gap-1.5">
-                هاكاثون هداية 🕌
+                هاكاثون هداية
               </h2>
               <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
                 تقارير وإحصائيات فورية وتغطيات معتمدة للشؤون الدينية بالحرمين الشريفين. اضغط تحت وادخل تقرير العميل الفخم.
@@ -152,7 +152,7 @@ export default async function Home() {
               </div>
 
               <h2 className="text-xl md:text-2xl font-black text-[var(--color-text-title)] mb-3 flex items-center gap-1.5">
-                غرفة الرصد والعمليات (سماوة) ⚡
+                غرفة الرصد والعمليات (سماوة)
               </h2>
               <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
                 من هنا تتحكم بكل شيء وتتابع سير العمل وتلقيم الروابط والتدقيق البشري وإقرار التغطيات وصحة الخوادم.

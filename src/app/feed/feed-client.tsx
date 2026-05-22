@@ -188,8 +188,8 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         );
         setActionSuccessMessage(
           action === "approve"
-            ? "تم اعتماد المادة بنجاح! ونقلها لمرحلة الالتقاط 🚀"
-            : "تم استبعاد المادة ورفضها بنجاح 🔒"
+            ? "تم اعتماد المادة بنجاح! ونقلها لمرحلة الالتقاط"
+            : "تم استبعاد المادة ورفضها بنجاح"
         );
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
@@ -224,7 +224,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               : item
           )
         );
-        setActionSuccessMessage("تم التقاط لقطة شاشة رسمية بجودة التقرير! 📸");
+        setActionSuccessMessage("تم التقاط لقطة شاشة رسمية بجودة التقرير!");
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
         console.error("Failed to capture");
@@ -251,7 +251,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         setItems((prev) =>
           prev.map((item) => (item.id === id ? { ...item, state: data.item.state } : item))
         );
-        setActionSuccessMessage("تمت أرشفة المادة وحفظها في الأرشيف الآمن 📦");
+        setActionSuccessMessage("تمت أرشفة المادة وحفظها في الأرشيف الآمن");
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
         console.error("Failed to archive");
@@ -266,19 +266,19 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   // Map state to Saudi Arabic badge styling
   const getStateBadge = (state: ItemState) => {
     const configs: Record<ItemState, { bg: string; text: string; label: string }> = {
-      ingested: { bg: "bg-[#eef2f6]", text: "text-[#475569]", label: "مستوردة حديثاً 📥" },
-      normalized: { bg: "bg-[#f1f5f9]", text: "text-[#334155]", label: "محللة 🧠" },
-      deduped: { bg: "bg-[#e2e8f0]", text: "text-[#64748b]", label: "مكررة ومدمجة 👥" },
-      candidate: { bg: "bg-[#fef3c7]", text: "text-[#d97706]", label: "مرشحة للرصد ✨" },
-      needs_review: { bg: "bg-[#fffbeb] text-[#b45309]", text: "text-[#b45309]", label: "تنتظر المراجعة ⏳" },
-      rejected: { bg: "bg-[#fee2e2]", text: "text-[#dc2626]", label: "مستبعدة ❌" },
-      approved_pending_capture: { bg: "bg-[#ecfdf5]", text: "text-[#059669]", label: "معتمدة (جاري الالتقاط) ⚙️" },
-      capture_pending: { bg: "bg-[#eff6ff]", text: "text-[#2563eb]", label: "في قائمة الالتقاط ⏳" },
-      capture_failed: { bg: "bg-[#fef2f2]", text: "text-[#b91c1c]", label: "فشل الالتقاط ⚠️" },
-      report_ready: { bg: "bg-[#f0fdf4]", text: "text-[#16a34a]", label: "جاهزة للتقرير ✅" },
-      added_to_report: { bg: "bg-[#e0e7ff]", text: "text-[#4f46e5]", label: "أضيفت للتقرير 📑" },
-      published: { bg: "bg-[#f5f3ff]", text: "text-[#7c3aed]", label: "منشورة بالتقرير 🚀" },
-      archived: { bg: "bg-[#f8fafc]", text: "text-[#64748b]", label: "مؤرشفة 📦" },
+      ingested: { bg: "bg-[#eef2f6]", text: "text-[#475569]", label: "مستوردة حديثاً" },
+      normalized: { bg: "bg-[#f1f5f9]", text: "text-[#334155]", label: "محللة" },
+      deduped: { bg: "bg-[#e2e8f0]", text: "text-[#64748b]", label: "مكررة ومدمجة" },
+      candidate: { bg: "bg-[#fef3c7]", text: "text-[#d97706]", label: "مرشحة للرصد" },
+      needs_review: { bg: "bg-[#fffbeb] text-[#b45309]", text: "text-[#b45309]", label: "تنتظر المراجعة" },
+      rejected: { bg: "bg-[#fee2e2]", text: "text-[#dc2626]", label: "مستبعدة" },
+      approved_pending_capture: { bg: "bg-[#ecfdf5]", text: "text-[#059669]", label: "معتمدة (جاري الالتقاط)" },
+      capture_pending: { bg: "bg-[#eff6ff]", text: "text-[#2563eb]", label: "في قائمة الالتقاط" },
+      capture_failed: { bg: "bg-[#fef2f2]", text: "text-[#b91c1c]", label: "فشل الالتقاط" },
+      report_ready: { bg: "bg-[#f0fdf4]", text: "text-[#16a34a]", label: "جاهزة للتقرير" },
+      added_to_report: { bg: "bg-[#e0e7ff]", text: "text-[#4f46e5]", label: "أضيفت للتقرير" },
+      published: { bg: "bg-[#f5f3ff]", text: "text-[#7c3aed]", label: "منشورة بالتقرير" },
+      archived: { bg: "bg-[#f8fafc]", text: "text-[#64748b]", label: "مؤرشفة" },
     };
 
     const config = configs[state] || { bg: "bg-[#f1f5f9]", text: "text-[#334155]", label: state };
@@ -292,14 +292,13 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   // Format Sentiment Saudi Style
   const getSentimentBadge = (sentiment: Sentiment) => {
     const config = {
-      positive: { bg: "bg-[#d1fae5] text-[#065f46]", emoji: "😍", label: "إيجابي" },
-      neutral: { bg: "bg-[#f3f4f6] text-[#374151]", emoji: "😐", label: "محايد" },
-      negative: { bg: "bg-[#fee2e2] text-[#991b1b]", emoji: "😡", label: "سلبي" },
-    }[sentiment] || { bg: "bg-[#f3f4f6] text-[#374151]", emoji: "😐", label: sentiment };
+      positive: { bg: "bg-[#d1fae5] text-[#065f46]", label: "إيجابي" },
+      neutral: { bg: "bg-[#f3f4f6] text-[#374151]", label: "محايد" },
+      negative: { bg: "bg-[#fee2e2] text-[#991b1b]", label: "سلبي" },
+    }[sentiment] || { bg: "bg-[#f3f4f6] text-[#374151]", label: sentiment };
 
     return (
       <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${config.bg}`}>
-        <span>{config.emoji}</span>
         <span>{config.label}</span>
       </span>
     );
@@ -324,7 +323,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               </span>
             </div>
             <h1 className="mt-1 text-2xl font-bold md:text-3xl text-slate-800 tracking-tight">
-              بث الرصد الحي والمراجعة الفورية 📡
+              البث المباشر
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -333,14 +332,14 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dfe3de] bg-white px-4 text-sm font-semibold text-[#333837] hover:bg-slate-50 transition-colors active:scale-[0.97] transition-transform duration-100"
             >
               <SlidersHorizontal size={15} />
-              رست الفلاتر 🔄
+              رست الفلاتر
             </button>
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#18201e] hover:bg-[#273431] px-5 text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-[0.97] transition-transform duration-100"
               href="/ops"
             >
               <FilePlus2 size={17} />
-              إدخال رابط عاجل 🔗
+              إدخال رابط عاجل
             </Link>
           </div>
         </div>
@@ -355,7 +354,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
           <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <Search className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">وش تدور عليه؟ 🔍</h2>
+              <h2 className="font-bold text-slate-800">وش تدور عليه؟</h2>
             </div>
             <div>
               <label className="text-xs font-semibold text-[#69716d]" htmlFor="feed-search">
@@ -412,13 +411,13 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
             <div className="mt-6 border-t border-slate-100 pt-4">
               <div className="flex items-center gap-1 mb-3 text-sm font-bold text-slate-700">
                 <Sparkles size={14} className="text-[#1f675d]" />
-                <span>تصفية المشاعر 🧠</span>
+                <span>تصفية المشاعر</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 {[
-                  { key: "positive", label: "إيجابي 😍" },
-                  { key: "neutral", label: "محايد 😐" },
-                  { key: "negative", label: "سلبي 😡" },
+                  { key: "positive", label: "إيجابي" },
+                  { key: "neutral", label: "محايد" },
+                  { key: "negative", label: "سلبي" },
                 ].map((s) => {
                   const isSelected = selectedSentiments.includes(s.key as Sentiment);
                   return (
@@ -449,9 +448,9 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
               >
-                <option value="newest">الأحدث أولاً 📅</option>
-                <option value="relevance">الأكثر صلة 🔥</option>
-                <option value="reach">الثقة بالمشاعر 📈</option>
+                <option value="newest">الأحدث أولاً</option>
+                <option value="relevance">الأكثر صلة</option>
+                <option value="reach">الثقة بالمشاعر</option>
               </select>
             </div>
           </section>
@@ -460,7 +459,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
           <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <BarChart3 className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">موجز الرصد اليوم 📊</h2>
+              <h2 className="font-bold text-slate-800">موجز الرصد اليوم</h2>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-[#f7f8f6] p-3 text-center">
@@ -468,15 +467,15 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 <div className="mt-1 text-2xl font-bold text-slate-800">{stats.todayCount}</div>
               </div>
               <div className="rounded-xl bg-[#fffbeb] p-3 text-center border border-amber-100">
-                <div className="text-[10px] md:text-xs text-amber-800">تحتاج مراجعة ⏳</div>
+                <div className="text-[10px] md:text-xs text-amber-800">تحتاج مراجعة</div>
                 <div className="mt-1 text-2xl font-bold text-amber-700">{stats.needsReview}</div>
               </div>
               <div className="rounded-xl bg-[#f0fdf4] p-3 text-center border border-emerald-100">
-                <div className="text-[10px] md:text-xs text-emerald-800">المعتمدة 💖</div>
+                <div className="text-[10px] md:text-xs text-emerald-800">المعتمدة</div>
                 <div className="mt-1 text-2xl font-bold text-emerald-700">{stats.approved}</div>
               </div>
               <div className="rounded-xl bg-[#fef2f2] p-3 text-center border border-rose-100">
-                <div className="text-[10px] md:text-xs text-rose-800">مشاكل التقاط 📸</div>
+                <div className="text-[10px] md:text-xs text-rose-800">مشاكل التقاط</div>
                 <div className="mt-1 text-2xl font-bold text-rose-700">{stats.failedCapture}</div>
               </div>
             </div>
@@ -505,7 +504,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               <div className="size-16 rounded-full bg-[#f5f6f4] flex items-center justify-center text-slate-400 mb-4 animate-bounce">
                 <Inbox size={28} />
               </div>
-              <h3 className="text-lg font-bold text-slate-700">ما لقينا شي يطابق بحثك! 🔍</h3>
+              <h3 className="text-lg font-bold text-slate-700">ما لقينا شي يطابق بحثك!</h3>
               <p className="text-sm text-[#69716d] max-w-sm mt-2 leading-relaxed">
                 يا هلا! ما فيه أي مواد رصد تطابق الفلاتر النشطة حالياً. وش رايك تجرب تعدل فلاتر البحث أو تضيف رابط يدوي؟
               </p>
@@ -582,7 +581,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                         {item.hasReportGradeCapture && (
                           <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 border border-indigo-100">
                             <Camera size={10} />
-                            لقطة جاهزة 📸
+                            لقطة جاهزة
                           </span>
                         )}
                       </div>
@@ -610,7 +609,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 <div>
                   <div className="flex items-center gap-1.5 text-xs font-bold text-[#69716d]">
                     <Eye size={14} className="text-[#1f675d]" />
-                    كونسول التحكم والمراجعة 🛠️
+                    كونسول التحكم والمراجعة
                   </div>
                   <h2 className="mt-2 text-base font-bold leading-snug text-slate-800 line-clamp-3">
                     {selectedItem.title}
@@ -648,7 +647,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                   <div className="bg-[#f7f8f6] rounded-xl px-3 py-2">
                     <span className="block text-[10px] text-[#69716d]">نوع الدليل الحالي</span>
                     <strong className="block mt-0.5 text-slate-800">
-                      {selectedItem.hasReportGradeCapture ? "تقرير رسمي 📸" : "مسودة خفيفة 📝"}
+                      {selectedItem.hasReportGradeCapture ? "تقرير رسمي" : "مسودة خفيفة"}
                     </strong>
                   </div>
                 </div>
@@ -681,7 +680,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1f675d] hover:underline"
                   >
                     <Link2 size={13} />
-                    فتح رابط المادة الأصلي في نافذة جديدة 🌐
+                    فتح رابط المادة الأصلي في نافذة جديدة
                   </a>
                 </div>
               )}
@@ -701,7 +700,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     ) : (
                       <CheckCircle2 size={14} />
                     )}
-                    اعتماد الحين ✅
+                    اعتماد الحين
                   </button>
 
                   <button
@@ -714,7 +713,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     ) : (
                       <XCircle size={14} />
                     )}
-                    استبعاد المادة ❌
+                    استبعاد المادة
                   </button>
 
                   <button
@@ -727,7 +726,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     ) : (
                       <Camera size={14} />
                     )}
-                    التقاط فوري 📸
+                    التقاط فوري
                   </button>
 
                   <button
@@ -740,7 +739,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     ) : (
                       <Archive size={14} />
                     )}
-                    أرشفة المادة 📦
+                    أرشفة المادة
                   </button>
                 </div>
               </div>
@@ -752,32 +751,11 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
             </div>
           )}
 
-          {/* Card: Safety Barriers */}
-          <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
-              <ShieldCheck className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">حواجز الأمان والسلامة 🛡️</h2>
-            </div>
-            <div className="space-y-3 text-xs md:text-sm">
-              {[
-                { icon: <CheckCircle2 size={14} />, text: "لازم تراجع المادة وتعتمدها قبل ما تدخل في التقرير الرسمي." },
-                { icon: <Camera size={14} />, text: "عملية تصوير الشاشات (Capture) تشتغل آلياً وخلف الكواليس." },
-                { icon: <AlertTriangle size={14} />, text: "إذا بتعتمد بدون لقطة شاشة، السيستم راح يعطيك تنبيه تحذيري." },
-                { icon: <Link2 size={14} />, text: "روابط المشاركة والتصدير آمنة وتنتهي صلاحيتها تلقائياً لحماية سرية البيانات." },
-              ].map((barrier, idx) => (
-                <div className="flex items-start gap-2 text-slate-600 leading-relaxed" key={idx}>
-                  <span className="mt-1 text-[#1f675d] shrink-0">{barrier.icon}</span>
-                  <span className="text-xs">{barrier.text}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
           {/* Card: System Timeline */}
           <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <Clock3 className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">آخر الحركات بالنظام 🕒</h2>
+              <h2 className="font-bold text-slate-800">آخر الحركات بالنظام</h2>
             </div>
             <div className="space-y-3 text-xs text-slate-600">
               {[
