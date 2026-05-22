@@ -435,9 +435,34 @@ export const store = {
         web_page: "degraded",
         x_oembed: "not_configured",
         x_recent_search: xSearchLastRun ? "healthy" : "ready",
+        tiktok_research: process.env.TIKTOK_RESEARCH_ENABLED === "true" || process.env.TIKTOK_CLIENT_KEY ? "healthy" : "not_configured",
+        instagram_public_profile: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true" ? "degraded" : "not_configured",
       },
       usage,
       xSearchLastRun,
+      automation: {
+        schemaReady: true,
+        cronSecretConfigured: Boolean(process.env.CRON_SECRET),
+        connectorCronPath: "/api/cron/run-connectors",
+        connectorCronScheduleUtc: "15 5 * * *",
+        mocksEnabled: process.env.NODE_ENV !== "production" && (process.env.RASD_CONNECTOR_MOCKS === "true" || process.env.CONNECTOR_MOCK_MODE === "true"),
+        sourceRulesCount: sourceRulesState.length,
+        activeSourceRulesCount: sourceRulesState.filter((rule) => rule.active).length,
+        queuedJobsCount: jobsState.filter((job) => job.status === "queued" || job.status === "running").length,
+        failedJobsCount: jobsState.filter((job) => job.status === "failed" || job.status === "dead_letter").length,
+        latestRun: schedulerConnectorRunsState[0] ?? null,
+        latestFailedJob: jobsState.find((job) => job.status === "failed" || job.status === "dead_letter") ?? null,
+        tiktok: {
+          enabled: process.env.TIKTOK_RESEARCH_ENABLED === "true",
+          credentialsConfigured: Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET),
+          activeRulesCount: sourceRulesState.filter((rule) => rule.active && rule.type === "tiktok_research").length,
+        },
+        instagram: {
+          enabled: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true",
+          extractorConfigured: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true",
+          activeRulesCount: sourceRulesState.filter((rule) => rule.active && rule.type === "instagram_public_profile").length,
+        },
+      },
     };
   },
 
@@ -466,6 +491,7 @@ export const store = {
       url: input.url ?? null,
       cursor: input.cursor ?? null,
       active: input.active ?? true,
+      pollIntervalMinutes: input.pollIntervalMinutes ?? 1440,
       createdAt: existingIndex >= 0 ? sourceRulesState[existingIndex].createdAt : now(),
       keywordRule: input.keywordRule,
     };
@@ -1306,7 +1332,7 @@ export const store = {
     }
     const dueRules: SourceRule[] = [];
     for (const rule of rules) {
-      let pollIntervalMinutes = 60;
+      let pollIntervalMinutes = rule.pollIntervalMinutes ?? 1440;
       if (rule.sourceId) {
         const src = sources.find((s) => s.id === rule.sourceId);
         if (src && src.pollIntervalMinutes) {

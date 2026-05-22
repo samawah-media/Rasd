@@ -58,6 +58,14 @@ type SourceRulesResponse = {
   connector_runs: ConnectorRun[];
 };
 
+type RunDueResponse = {
+  ok: boolean;
+  dueRulesCount: number;
+  enqueuedCount: number;
+  executedCount: number;
+  failedCount: number;
+};
+
 const emptyState: SourcesState = {
   sources: [],
   keywordRules: [],
@@ -87,6 +95,8 @@ const arabicApiErrors: Record<string, string> = {
   instagram_profile_url_invalid: "رابط Instagram يجب أن يكون رابط حساب عام.",
   source_rule_url_not_public: "الرابط يجب أن يكون عامًا ويبدأ بـ http أو https.",
   source_rule_not_found: "قاعدة الرصد غير موجودة.",
+  source_rules_schema_not_ready: "قاعدة البيانات تحتاج تطبيق آخر migration الخاص بقواعد TikTok/Instagram.",
+  source_rule_request_failed: "تعذر حفظ قاعدة الرصد. راجع صفحة صحة الخوادم أو سجلات Vercel.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
 };
 
@@ -94,6 +104,14 @@ const sourceScheduleOptions = [
   { label: "كل 3 أيام", value: 4320 },
   { label: "كل يومين", value: 2880 },
   { label: "يوميًا", value: 1440 },
+  { label: "أسبوعيًا", value: 10080 },
+] as const;
+
+const watchlistScheduleOptions = [
+  { label: "كل ساعة", value: 60 },
+  { label: "كل 6 ساعات", value: 360 },
+  { label: "يوميًا", value: 1440 },
+  { label: "كل يومين", value: 2880 },
   { label: "أسبوعيًا", value: 10080 },
 ] as const;
 
@@ -118,10 +136,11 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "");
     if (response.status === 401 || response.status === 403) {
       throw new Error("انتهت الجلسة. سجّل دخولك مجددًا.");
     }
-    throw new Error("رد غير متوقع من السيرفر.");
+    throw new Error(`رد غير متوقع من السيرفر (${response.status}). ${text.slice(0, 120)}`);
   }
 
   let data: Record<string, unknown>;
@@ -133,7 +152,8 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const errorKey = typeof data.error === "string" ? data.error : "request_failed";
-    throw new Error(arabicError(errorKey));
+    const detail = typeof data.detail === "string" ? ` ${data.detail}` : "";
+    throw new Error(`${arabicError(errorKey)}${detail}`);
   }
 
   return data as T;
@@ -147,7 +167,11 @@ function messageClass(type: MessageType) {
 }
 
 function scheduleLabel(minutes: number) {
-  return sourceScheduleOptions.find((option) => option.value === minutes)?.label ?? `كل ${minutes.toLocaleString("ar-SA")} دقيقة`;
+  return (
+    watchlistScheduleOptions.find((option) => option.value === minutes)?.label ??
+    sourceScheduleOptions.find((option) => option.value === minutes)?.label ??
+    `كل ${minutes.toLocaleString("ar-SA")} دقيقة`
+  );
 }
 
 function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
@@ -196,6 +220,7 @@ export function SourcesClient() {
   const [watchlistType, setWatchlistType] = useState<WatchlistType>("tiktok_research");
   const [watchlistQuery, setWatchlistQuery] = useState("");
   const [watchlistUrl, setWatchlistUrl] = useState("");
+  const [watchlistIntervalMinutes, setWatchlistIntervalMinutes] = useState(1440);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
@@ -422,6 +447,7 @@ export function SourcesClient() {
           type: watchlistType,
           query: watchlistQuery,
           url: watchlistUrl,
+          poll_interval_minutes: watchlistIntervalMinutes,
         }),
       });
       await refreshSilently();
@@ -452,6 +478,50 @@ export function SourcesClient() {
       setMessageType("success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تحديث قاعدة الرصد.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function updateWatchlistSchedule(rule: SourceRule, pollIntervalMinutes: number) {
+    setPending(`watchlist-schedule-${rule.id}`);
+    setMessage("جاري تحديث جدولة قاعدة الرصد...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourceRuleResponse>(`/api/source-rules/${rule.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ poll_interval_minutes: pollIntervalMinutes }),
+      });
+      await refreshSilently();
+      setMessage(`${sourceRulePlatform(result.source_rule)}: الجدولة ${scheduleLabel(result.source_rule.pollIntervalMinutes)}.`);
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تحديث جدولة قاعدة الرصد.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function runDueWatchlists() {
+    setPending("watchlist-run-due");
+    setMessage("جاري تشغيل قواعد TikTok/Instagram المستحقة...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<RunDueResponse>("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await refreshSilently();
+      setMessage(
+        `تم فحص ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة مستحقة، وتشغيل ${result.executedCount.toLocaleString("ar-SA")} job${result.failedCount ? `، وفشل ${result.failedCount.toLocaleString("ar-SA")}` : ""}.`,
+      );
+      setMessageType(result.failedCount ? "warning" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تشغيل قواعد الرصد الآن.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -654,6 +724,17 @@ export function SourcesClient() {
                   dir="ltr"
                   required={watchlistType === "instagram_public_profile"}
                 />
+                <select
+                  value={watchlistIntervalMinutes}
+                  onChange={(event) => setWatchlistIntervalMinutes(Number(event.target.value))}
+                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold outline-none transition focus:border-[#2383E2] focus:bg-white"
+                >
+                  {watchlistScheduleOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="submit"
                   disabled={pending !== null}
@@ -663,6 +744,16 @@ export function SourcesClient() {
                   إضافة قاعدة رصد
                 </button>
               </form>
+
+              <button
+                type="button"
+                onClick={runDueWatchlists}
+                disabled={pending !== null || state.sourceRules.length === 0}
+                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
+              >
+                {pending === "watchlist-run-due" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                تشغيل القواعد المستحقة الآن
+              </button>
 
               {state.sourceRules.length ? (
                 <div className="space-y-2">
@@ -683,6 +774,21 @@ export function SourcesClient() {
                               {sourceRuleTarget(rule)}
                             </p>
                             <p className="mt-2 text-[10px] font-bold text-[var(--color-text-muted)]">{connectorRunLabel(latestRun)}</p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-[var(--color-text-muted)]">الجدولة</span>
+                              <select
+                                value={rule.pollIntervalMinutes}
+                                onChange={(event) => updateWatchlistSchedule(rule, Number(event.target.value))}
+                                disabled={pending !== null}
+                                className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold text-[var(--color-text-title)] outline-none transition focus:border-[#2383E2] disabled:opacity-50"
+                              >
+                                {watchlistScheduleOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                           <div className="flex shrink-0 items-center gap-2">
                             <button

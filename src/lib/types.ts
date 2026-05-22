@@ -165,6 +165,7 @@ export type SourceRule = {
   url: string | null;
   cursor: Record<string, unknown> | null;
   active: boolean;
+  pollIntervalMinutes: number;
   createdAt: string;
   keywordRule?: KeywordRule;
 };
