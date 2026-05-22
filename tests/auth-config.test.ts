@@ -50,6 +50,7 @@ describe("auth and role routing rules", () => {
   it("protects RSS polling APIs from viewer accounts", () => {
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/source-1/poll"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/poll-active"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/x-search"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("GET", "/api/captures/capture-1/asset"), memberRoles);
     assert.equal(getApiRouteRolesForTest("GET", "/api/cron/poll-sources"), "public");
     assert.equal(isRoleAllowed("viewer", adminRoles), false);

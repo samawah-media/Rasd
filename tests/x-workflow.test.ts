@@ -7,6 +7,7 @@ import { XProviderManager } from "../src/lib/x/manager";
 import { OfficialXProvider, ApifyXProvider, AgentXProvider } from "../src/lib/x/providers";
 import { store } from "../src/server/store";
 import { GET, POST } from "../src/app/api/items/x-refresh/route";
+import { POST as POST_X_SEARCH } from "../src/app/api/x-search/route";
 import { XSearchManager } from "../src/lib/x/search-manager";
 import { MockSearchProvider, GrokXSearchProvider, buildSearchQuery } from "../src/lib/x/search-providers";
 
@@ -289,5 +290,31 @@ describe("X Search Provider and Manager", () => {
     assert.equal(lastRun.provider, "mock_search");
     assert.ok(lastRun.query.includes("Hidayathon"));
     assert.ok(lastRun.discoveredUrls.length > 0);
+  });
+
+  it("X search API stores discovered tweets as workflow items", async () => {
+    const previousProvider = process.env.X_SEARCH_PROVIDER_TYPE;
+    process.env.X_SEARCH_PROVIDER_TYPE = "mock_search";
+    store.resetForTest();
+
+    try {
+      const req = new Request("https://localhost/api/x-search", {
+        method: "POST",
+        body: JSON.stringify({
+          existingUrls: ["https://x.com/Hidayathon/status/100001"],
+        }),
+      });
+
+      const res = await POST_X_SEARCH(req);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.ok, true);
+      assert.ok(body.storage.created >= 1);
+      assert.ok(body.items.some((item: { sourceType: string; discoveryMethod?: string }) => item.sourceType === "x_recent_search" && item.discoveryMethod === "auto_search"));
+      assert.ok(store.listItems().some((item) => item.sourceType === "x_recent_search"));
+    } finally {
+      if (previousProvider) process.env.X_SEARCH_PROVIDER_TYPE = previousProvider;
+      else delete process.env.X_SEARCH_PROVIDER_TYPE;
+    }
   });
 });

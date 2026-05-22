@@ -141,6 +141,9 @@ type ManualUrlInput = {
   authorHandle?: string;
   publishedAt?: string;
   extraction?: Record<string, unknown>;
+  sourceType?: "manual_url" | "x_recent_search";
+  sourceName?: string;
+  discoveryMethod?: MonitoringItem["discoveryMethod"];
 };
 
 type ItemCorrectionInput = {
@@ -320,29 +323,43 @@ async function toItems(supabase: SupabaseClient, rows: DbItemRow[]): Promise<Mon
     }
   }
 
-  return rows.map((row) => ({
-    id: row.id,
-    sourceId: row.source_id ?? "",
-    sourceName: row.sources?.name ?? sourceLabel(row.source_type),
-    sourceType: row.source_type,
-    state: row.state,
-    title: row.title ?? row.original_url,
-    originalUrl: row.original_url,
-    authorName: row.author_name ?? undefined,
-    authorHandle: row.author_handle ?? undefined,
-    publishedAt: row.published_at ?? row.created_at,
-    summary: row.summary ?? "",
-    summarySourceText: row.summary_source_text ?? row.summary ?? row.original_url,
-    sentiment: row.sentiment ?? "neutral",
-    sentimentConfidence: row.sentiment_confidence ?? 50,
-    relevanceScore: row.relevance_score ?? 0,
-    relevanceReason: row.relevance_reason ?? "",
-    matchedTerms: row.matched_terms ?? [],
-    dedupeKey: row.canonical_url_hash ?? row.source_item_id ?? row.id,
-    hasReportGradeCapture: captureIds.has(row.id),
-    warning: row.warning ?? undefined,
-    sourceItemId: row.source_item_id ?? undefined,
-  }));
+  return rows.map((row) => {
+    const raw = rawObject(row.raw_response);
+    const rawDiscoveryMethod = raw.discoveryMethod;
+    const discoveryMethod =
+      rawDiscoveryMethod === "manual" || rawDiscoveryMethod === "rss" || rawDiscoveryMethod === "auto_search"
+        ? rawDiscoveryMethod
+        : row.source_type === "x_recent_search"
+          ? "auto_search"
+          : row.source_type === "rss"
+            ? "rss"
+            : undefined;
+
+    return {
+      id: row.id,
+      sourceId: row.source_id ?? "",
+      sourceName: row.sources?.name ?? sourceLabel(row.source_type),
+      sourceType: row.source_type,
+      state: row.state,
+      title: row.title ?? row.original_url,
+      originalUrl: row.original_url,
+      authorName: row.author_name ?? undefined,
+      authorHandle: row.author_handle ?? undefined,
+      publishedAt: row.published_at ?? row.created_at,
+      summary: row.summary ?? "",
+      summarySourceText: row.summary_source_text ?? row.summary ?? row.original_url,
+      sentiment: row.sentiment ?? "neutral",
+      sentimentConfidence: row.sentiment_confidence ?? 50,
+      relevanceScore: row.relevance_score ?? 0,
+      relevanceReason: row.relevance_reason ?? "",
+      matchedTerms: row.matched_terms ?? [],
+      dedupeKey: row.canonical_url_hash ?? row.source_item_id ?? row.id,
+      hasReportGradeCapture: captureIds.has(row.id),
+      warning: row.warning ?? undefined,
+      sourceItemId: row.source_item_id ?? undefined,
+      discoveryMethod,
+    };
+  });
 }
 
 async function ensureDefaultWorkspace(supabase: SupabaseClient) {
@@ -482,6 +499,8 @@ async function refreshSupabaseManualDuplicate(
   platform: string,
 ) {
   const patch: DbRow = {};
+  const sourceType = row.source_type;
+  const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
   let screenshotUrl = evidenceCardUrl(row.id);
   const targetUrl = canonicalUrl || row.original_url;
   if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
@@ -511,7 +530,7 @@ async function refreshSupabaseManualDuplicate(
   if (row.original_url !== canonicalUrl && existingStatusId && existingStatusId === incomingStatusId) {
     patch.original_url = canonicalUrl;
   }
-  if (row.canonical_url_hash !== canonicalHash) {
+  if (row.source_type === (input.sourceType ?? row.source_type) && row.canonical_url_hash !== canonicalHash) {
     patch.canonical_url_hash = canonicalHash;
     patch.source_item_id = canonicalHash;
   }
@@ -535,7 +554,8 @@ async function refreshSupabaseManualDuplicate(
   patch.evidence_image_path = screenshotUrl;
   patch.raw_response = {
     ...rawObject(row.raw_response),
-    manual: true,
+    manual: sourceType === "manual_url",
+    discoveryMethod,
     platform,
     sourcePdf: "live-hidayathon",
     publishedDateText: String(patch.published_at ?? row.published_at ?? now()),
@@ -590,7 +610,7 @@ async function refreshSupabaseManualDuplicate(
           title: patch.title ?? row.title,
           summary: patch.summary ?? row.summary,
           original_url: patch.original_url ?? row.original_url,
-          source_name: input.authorName ?? row.author_name ?? sourceLabel(row.source_type),
+          source_name: input.sourceName ?? input.authorName ?? row.author_name ?? sourceLabel(row.source_type),
           screenshot_url: screenshotUrl,
           content_image_url: screenshotUrl,
         },
@@ -600,7 +620,7 @@ async function refreshSupabaseManualDuplicate(
   }
 
   await audit(supabase, "item.metadata_refreshed", "monitoring_item", row.id, {
-    sourceType: "manual_url",
+    sourceType,
     metadataSource: platform,
   });
 
@@ -707,7 +727,7 @@ export const persistentStore = {
         rss: "healthy",
         web_page: "degraded",
         x_oembed: "not_configured",
-        x_recent_search: "not_configured",
+        x_recent_search: "ready",
       },
       usage,
     };
@@ -1059,6 +1079,8 @@ export const persistentStore = {
     const canonicalUrl = canonicalizeUrl(input.url);
     const publishedAt = input.publishedAt ?? now();
     const platform = platformFromUrl(canonicalUrl);
+    const sourceType = input.sourceType ?? "manual_url";
+    const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
     const dedupeKey = makeDedupeKey(
       {
         url: canonicalUrl,
@@ -1069,9 +1091,9 @@ export const persistentStore = {
         publishedAt,
         raw: input,
       },
-      "manual_url",
+      sourceType,
     );
-    const canonicalHash = `manual:${await sha256(dedupeKey)}`;
+    const canonicalHash = `${sourceType}:${await sha256(dedupeKey)}`;
     const { data: duplicate, error: duplicateError } = await supabase
       .from("monitoring_items")
       .select("*, sources(name)")
@@ -1092,7 +1114,7 @@ export const persistentStore = {
         .from("monitoring_items")
         .select("*, sources(name)")
         .eq("organization_id", DEFAULT_ORGANIZATION_ID)
-        .eq("source_type", "manual_url")
+        .in("source_type", ["manual_url", "x_recent_search"])
         .like("original_url", `%/status/${statusId}%`)
         .limit(1);
       if (statusMatchError) throw statusMatchError;
@@ -1130,8 +1152,8 @@ export const persistentStore = {
       .insert({
         organization_id: DEFAULT_ORGANIZATION_ID,
         topic_id: DEFAULT_TOPIC_ID,
-        source_id: DEFAULT_MANUAL_SOURCE_ID,
-        source_type: "manual_url",
+        source_id: sourceType === "manual_url" ? DEFAULT_MANUAL_SOURCE_ID : null,
+        source_type: sourceType,
         state: match.score > 0 ? "needs_review" : "candidate",
         title: input.title ?? "مادة مرصودة من رابط يدوي",
         original_url: canonicalUrl,
@@ -1149,7 +1171,8 @@ export const persistentStore = {
         relevance_reason: match.reason,
         matched_terms: match.matchedTerms,
         raw_response: {
-          manual: true,
+          manual: sourceType === "manual_url",
+          discoveryMethod,
           platform,
           sourcePdf: "live-hidayathon",
           publishedDateText: publishedAt,
@@ -1218,8 +1241,8 @@ export const persistentStore = {
       .single();
     if (captureError) throw captureError;
     const evidence = toCapture(captureRow as DbCaptureRow);
-    await audit(supabase, "item.ingested", "monitoring_item", item.id, {
-      sourceType: "manual_url",
+    await audit(supabase, sourceType === "x_recent_search" ? "item.auto_discovered" : "item.ingested", "monitoring_item", item.id, {
+      sourceType,
       evidenceId: evidence.id,
     });
     return { item, duplicate: false, duplicateType: null, evidence };
@@ -1453,7 +1476,7 @@ export const persistentStore = {
       .from("monitoring_items")
       .select("id")
       .eq("organization_id", DEFAULT_ORGANIZATION_ID)
-      .in("source_type", ["manual_url", "rss"])
+      .in("source_type", ["manual_url", "rss", "x_recent_search"])
       .neq("state", "archived")
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(limit);
@@ -1464,7 +1487,7 @@ export const persistentStore = {
         .select("id")
         .eq("organization_id", DEFAULT_ORGANIZATION_ID)
         .in("id", explicitIds)
-        .in("source_type", ["manual_url", "rss"])
+        .in("source_type", ["manual_url", "rss", "x_recent_search"])
         .neq("state", "archived")
         .limit(48);
     }

@@ -88,6 +88,9 @@ type ManualUrlInput = {
   authorHandle?: string;
   publishedAt?: string;
   extraction?: Record<string, unknown>;
+  sourceType?: "manual_url" | "x_recent_search";
+  sourceName?: string;
+  discoveryMethod?: MonitoringItem["discoveryMethod"];
 };
 
 type ItemCorrectionInput = {
@@ -270,6 +273,10 @@ function isSameManualUrl(item: MonitoringItem, dedupeKey: string, canonicalUrl: 
   return Boolean(incomingStatusId && incomingStatusId === xStatusIdFromUrl(item.originalUrl));
 }
 
+function isManualOrXSearchItem(item: MonitoringItem) {
+  return item.sourceType === "manual_url" || item.sourceType === "x_recent_search";
+}
+
 function isWeakManualTitle(item: MonitoringItem) {
   return item.title === item.originalUrl || item.title.startsWith("http") || item.title.includes("رابط يدوي");
 }
@@ -364,7 +371,7 @@ function findRssDuplicate(ingested: RssIngestionItem) {
 }
 
 function isWorkflowItem(item: MonitoringItem) {
-  return (item.sourceType === "manual_url" || item.sourceType === "rss") && item.state !== "archived";
+  return (item.sourceType === "manual_url" || item.sourceType === "rss" || item.sourceType === "x_recent_search") && item.state !== "archived";
 }
 
 function latestWorkflowItemIds(limit = 48) {
@@ -732,6 +739,8 @@ export const store = {
     const canonicalUrl = canonicalizeUrl(input.url);
     const publishedAt = input.publishedAt ?? now();
     const platform = platformFromUrl(canonicalUrl);
+    const sourceType = input.sourceType ?? "manual_url";
+    const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
     const dedupeKey = makeDedupeKey(
       {
         url: canonicalUrl,
@@ -742,10 +751,10 @@ export const store = {
         publishedAt,
         raw: { ...input, platform },
       },
-      "manual_url",
+      sourceType,
     );
     let duplicateType: "url" | "content" | null = null;
-    let duplicate = items.find((entry) => entry.sourceType === "manual_url" && isSameManualUrl(entry, dedupeKey, canonicalUrl));
+    let duplicate = items.find((entry) => isManualOrXSearchItem(entry) && isSameManualUrl(entry, dedupeKey, canonicalUrl));
     if (duplicate) {
       duplicateType = "url";
     }
@@ -753,7 +762,7 @@ export const store = {
     if (!duplicate && input.text && input.text.trim().length > 30) {
       const inputTrimmed = input.text.trim();
       duplicate = items.find((entry) => {
-        if (entry.sourceType !== "manual_url") return false;
+        if (!isManualOrXSearchItem(entry)) return false;
         const entryText = (entry.summary || entry.summarySourceText || "").trim();
         return entryText === inputTrimmed;
       });
@@ -773,9 +782,9 @@ export const store = {
     const match = explainKeywordMatch(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`, rule);
     const item: MonitoringItem = {
       id: crypto.randomUUID(),
-      sourceId: "src-manual",
-      sourceName: "إدخال يدوي",
-      sourceType: "manual_url",
+      sourceId: sourceType === "manual_url" ? "src-manual" : "src-x-search",
+      sourceName: input.sourceName ?? (sourceType === "x_recent_search" ? input.authorHandle ?? sourceLabel(sourceType) : "إدخال يدوي"),
+      sourceType,
       state: match.score > 0 ? "needs_review" : "candidate",
       title: input.title ?? "مادة مرصودة من رابط يدوي",
       originalUrl: canonicalUrl,
@@ -791,11 +800,12 @@ export const store = {
       matchedTerms: match.matchedTerms,
       dedupeKey,
       hasReportGradeCapture: false,
+      discoveryMethod,
     };
 
     items.unshift(item);
     const evidence = createEvidenceLiteCapture(item.id);
-    audit("item.ingested", item.id, { sourceType: "manual_url", evidenceId: evidence.id });
+    audit(sourceType === "x_recent_search" ? "item.auto_discovered" : "item.ingested", item.id, { sourceType, evidenceId: evidence.id });
     return { item, duplicate: false, duplicateType: null, evidence };
   },
 

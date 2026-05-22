@@ -20,6 +20,7 @@ const apiRules: ApiRule[] = [
   { pattern: /^\/api\/audit-logs$/, roles: adminRoles },
   { pattern: /^\/api\/imports(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/items(?:\/|$)/, roles: adminRoles },
+  { pattern: /^\/api\/x-search$/, roles: adminRoles },
   { pattern: /^\/api\/connectors(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/sources(?:\/|$)/, roles: adminRoles },
   { pattern: /^\/api\/source-rules$/, roles: adminRoles },

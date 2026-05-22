@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -17,11 +17,7 @@ import {
   Trash2,
   Cpu,
   Database,
-  Terminal,
   Server,
-  Activity,
-  CheckSquare,
-  Activity as HeartbeatIcon,
 } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 import AppShell from "@/components/AppShell";
@@ -31,6 +27,7 @@ import TweetPreviewCard from "@/components/TweetPreviewCard";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
+type IntakeMode = "manual" | "x-search" | "sources";
 
 type ApiState = {
   items: MonitoringItem[];
@@ -80,6 +77,37 @@ type WorkflowCleanupResponse = {
   };
 };
 
+type XSearchResponse = {
+  ok: boolean;
+  results?: Array<{ tweetUrl: string }>;
+  runResult?: {
+    provider: string;
+    newItems: number;
+    duplicateSkipped: number;
+    searchedAt: string;
+    durationMs: number;
+  };
+  items?: MonitoringItem[];
+  storage?: {
+    created: number;
+    duplicates: number;
+    failed: number;
+  };
+  error?: string;
+};
+
+type SourcePollActiveResponse = {
+  poll: {
+    sources: number;
+    fetched: number;
+    created: number;
+    duplicates: number;
+    skipped: number;
+    failed: number;
+    runs: Array<Record<string, unknown>>;
+  };
+};
+
 const emptyState: ApiState = {
   items: [],
   sources: [],
@@ -126,6 +154,9 @@ const arabicApiErrors: Record<string, string> = {
   rss_feed_too_large: "موجز RSS كبير جدًا.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
   archive_failed: "تعذرت أرشفة المادة.",
+  xai_api_key_missing: "محرك بحث X الحقيقي غير مفعّل. أضف XAI_API_KEY أو استخدم mock_search للتجربة.",
+  no_keyword_rules_configured: "لا توجد قاعدة كلمات مفتاحية لتشغيل البحث.",
+  search_failed: "تعذر تشغيل بحث X.",
 };
 
 const tabLabels: Record<WorkTab, string> = {
@@ -298,47 +329,55 @@ export function OpsClient() {
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
   const [tab, setTab] = useState<WorkTab>("active");
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>("manual");
   const [query, setQuery] = useState("");
   const [searchRunning, setSearchRunning] = useState(false);
 
   const [itemWithRawResponse, setItemWithRawResponse] = useState<MonitoringItem | null>(null);
   const isXUrl = useMemo(() => isValidXUrl(url), [url]);
 
-  const triggerXSearch = useCallback(async () => {
+  async function triggerXSearch() {
     setSearchRunning(true);
+    setIntakeMode("x-search");
+    setMessage("جاري تشغيل بحث X...");
+    setMessageType("info");
     try {
       const existingXUrls = state.items
-        .filter((item) => item.originalUrl?.includes("x.com"))
+        .filter((item) => item.originalUrl?.includes("x.com") || item.originalUrl?.includes("twitter.com"))
         .map((item) => item.originalUrl)
         .filter(Boolean);
 
-      const res = await fetch("/api/x-search", {
+      const data = await apiJson<XSearchResponse>("/api/x-search", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ existingUrls: existingXUrls }),
       });
-      const data = await res.json();
 
       if (data.ok && data.runResult) {
-        setMessage(`✅ اكتشف ${data.runResult.newItems} تغريدة جديدة (تم تخطي ${data.runResult.duplicateSkipped} مكررة)`);
-        setMessageType("success");
-        // Refresh the main data
-        const refreshRes = await fetch("/api/health");
-        if (refreshRes.ok) {
-          const healthData = await refreshRes.json();
-          setState((prev) => ({ ...prev, ...healthData }));
+        const created = data.storage?.created ?? data.items?.length ?? data.runResult.newItems;
+        const duplicates = data.storage?.duplicates ?? data.runResult.duplicateSkipped;
+        const failed = data.storage?.failed ?? 0;
+        const firstItem = data.items?.[0];
+        if (firstItem) {
+          setSelectedId(firstItem.id);
+          setPinnedItemId(firstItem.id);
+          setTab("active");
         }
+        await refreshSilently();
+        setMessage(
+          `اكتشف بحث X ${data.runResult.newItems} نتيجة، وأضاف ${created} مادة جديدة، وتخطى ${duplicates} مكرر${failed ? `، وفشل حفظ ${failed}` : ""}.`,
+        );
+        setMessageType("success");
       } else {
-        setMessage(data.error || "فشل في البحث");
+        setMessage(data.error ? arabicError(data.error) : "فشل في البحث على X.");
         setMessageType("error");
       }
-    } catch {
-      setMessage("خطأ في الاتصال بمحرك البحث");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "خطأ في الاتصال بمحرك البحث.");
       setMessageType("error");
     } finally {
       setSearchRunning(false);
     }
-  }, [state.items]);
+  }
 
   function handleSyncSuccess(updatedItem: MonitoringItem) {
     setState((prev) => ({
@@ -433,7 +472,12 @@ export function OpsClient() {
     const [itemsData, sourcesData, healthData, liveReportData] = await Promise.all([
       apiJson<{ items: MonitoringItem[] }>("/api/items"),
       apiJson<{ sources: Source[] }>("/api/sources"),
-      apiJson<{ metrics: HealthMetric[]; usage?: ApiState["usage"]; connectors?: ApiState["connectors"] }>("/api/admin/health"),
+      apiJson<{
+        metrics: HealthMetric[];
+        usage?: ApiState["usage"];
+        connectors?: ApiState["connectors"];
+        xSearchLastRun?: ApiState["xSearchLastRun"];
+      }>("/api/admin/health"),
       apiJson<{ report: ReportVersion }>("/api/reports/hidayathon-live"),
     ]);
 
@@ -454,6 +498,7 @@ export function OpsClient() {
       liveReport: liveReportData.report,
       usage: healthData.usage,
       connectors: healthData.connectors,
+      xSearchLastRun: healthData.xSearchLastRun,
     };
   }
 
@@ -494,6 +539,7 @@ export function OpsClient() {
   async function submitUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending("manual");
+    setIntakeMode("manual");
     setMessage("جاري حفظ الرابط...");
     setMessageType("info");
 
@@ -532,6 +578,32 @@ export function OpsClient() {
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر حفظ الرابط.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function runSourceSearch() {
+    setPending("source-search");
+    setIntakeMode("sources");
+    setMessage("جاري تشغيل المصادر النشطة...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourcePollActiveResponse>("/api/sources/poll-active", {
+        method: "POST",
+        body: JSON.stringify({ limit: 5 }),
+      });
+
+      await refreshSilently();
+      setTab("active");
+      setMessage(
+        `فحصنا ${result.poll.sources} مصدر، وجلبنا ${result.poll.fetched} مادة. الجديد ${result.poll.created}، المكرر ${result.poll.duplicates}، المتجاوز ${result.poll.skipped}${result.poll.failed ? `، والفاشل ${result.poll.failed}` : ""}.`,
+      );
+      setMessageType(result.poll.failed ? "warning" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -768,12 +840,13 @@ export function OpsClient() {
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12" title="رصد مادة فردية" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
+          <BentoCard colSpan="col-span-12 xl:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
               <div className="relative">
                 <input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
+                  onFocus={() => setIntakeMode("manual")}
                   placeholder="حط رابط التغريدة أو الخبر هنا..."
                   className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 focus:outline focus:outline-2 focus:outline-[#2383E2]/50 ${
                     isXUrl
@@ -827,13 +900,89 @@ export function OpsClient() {
 
               <button
                 type="submit"
-                disabled={pending !== null}
+                disabled={pending !== null || searchRunning}
                 className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-[#2383E2] transition active:scale-[0.97] transition-transform disabled:opacity-50 cursor-pointer"
               >
                 {pending === "manual" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                 اضغط هنا ونسحبها لك فوراً
               </button>
             </form>
+          </BentoCard>
+
+          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="بحث X" icon={Search} subtitle="يشغل البحث بالكلمات الحالية ويحفظ النتائج كمواد">
+            <div className="mt-1 flex h-full flex-col justify-between gap-4">
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setIntakeMode("x-search")}
+                  className={`inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-[11px] font-extrabold transition ${
+                    intakeMode === "x-search"
+                      ? "border-[#1DA1F2] bg-[#edf8ff] text-[#12659d]"
+                      : "border-[var(--color-border)] bg-white text-[var(--color-text-muted)] hover:border-[#1DA1F2]/40 hover:text-[#12659d]"
+                  }`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  وضع بحث X
+                </button>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+                    <span className="block text-[10px] font-bold text-[var(--color-text-muted)]">آخر تشغيل</span>
+                    <strong className="mt-1 block text-sm text-[var(--color-text-title)]">{state.xSearchLastRun?.newItems ?? 0}</strong>
+                  </div>
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+                    <span className="block text-[10px] font-bold text-[var(--color-text-muted)]">الحالة</span>
+                    <strong className="mt-1 block text-sm text-[var(--color-text-title)]">{state.connectors?.x_recent_search ?? "ready"}</strong>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={triggerXSearch}
+                disabled={pending !== null || searchRunning}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-[#2383E2] active:scale-[0.97] disabled:opacity-50"
+              >
+                {searchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                تشغيل بحث X
+              </button>
+            </div>
+          </BentoCard>
+
+          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="بحث المصادر" icon={Database} subtitle="يفحص مصادر RSS النشطة ويضيف الأخبار المطابقة">
+            <div className="mt-1 flex h-full flex-col justify-between gap-4">
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setIntakeMode("sources")}
+                  className={`inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-[11px] font-extrabold transition ${
+                    intakeMode === "sources"
+                      ? "border-[#2f8f67] bg-[#edf8f2] text-[#176343]"
+                      : "border-[var(--color-border)] bg-white text-[var(--color-text-muted)] hover:border-[#2f8f67]/40 hover:text-[#176343]"
+                  }`}
+                >
+                  <Server className="h-3.5 w-3.5" />
+                  وضع المصادر
+                </button>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+                    <span className="block text-[10px] font-bold text-[var(--color-text-muted)]">مصادر نشطة</span>
+                    <strong className="mt-1 block text-sm text-[var(--color-text-title)]">{activeRssSources.length}</strong>
+                  </div>
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+                    <span className="block text-[10px] font-bold text-[var(--color-text-muted)]">RSS</span>
+                    <strong className="mt-1 block text-sm text-[var(--color-text-title)]">{state.connectors?.rss ?? "ready"}</strong>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={runSourceSearch}
+                disabled={pending !== null || searchRunning || activeRssSources.length === 0}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-[#2383E2] active:scale-[0.97] disabled:opacity-50"
+              >
+                {pending === "source-search" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                تشغيل المصادر
+              </button>
+            </div>
           </BentoCard>
         </BentoGrid>
 

@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { XSearchManager } from "@/lib/x/search-manager";
 import { keywordRules } from "@/lib/mock-data";
 import { canonicalizeXUrl } from "@/lib/x/parser";
+import type { MonitoringItem } from "@/lib/types";
 import type { XSearchRunResult } from "@/lib/x/types";
+import { authorizeApiRequest } from "@/server/api-auth";
+import { persistentStore } from "@/server/persistent-store";
 
 /**
  * GET /api/x-search — Check search engine health and last run status.
@@ -20,7 +23,10 @@ function getSearchManager(): XSearchManager {
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const blocked = await authorizeApiRequest(request);
+  if (blocked) return blocked;
+
   try {
     const manager = getSearchManager();
     const health = await manager.checkHealth();
@@ -38,6 +44,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const blocked = await authorizeApiRequest(request);
+  if (blocked) return blocked;
+
   try {
     const body = (await request.json().catch(() => ({}))) as {
       existingUrls?: string[];
@@ -54,9 +63,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build set of existing URLs for dedup (client can pass these, or we start fresh)
+    const storedItems = await persistentStore.listItems();
+    const storedXUrls = storedItems
+      .filter((item) => item.sourceType.startsWith("x_") || item.originalUrl.includes("x.com") || item.originalUrl.includes("twitter.com"))
+      .map((item) => item.originalUrl);
+
+    // Build set of existing URLs for dedup from both client state and persisted storage.
     const existingUrls = new Set(
-      (body.existingUrls ?? []).map((url: string) => canonicalizeXUrl(url)),
+      [...(body.existingUrls ?? []), ...storedXUrls].map((url: string) => canonicalizeXUrl(url)),
     );
 
     const { results, runResult } = await manager.executeSearch({
@@ -73,10 +87,45 @@ export async function POST(request: Request) {
     // Cache last run result for GET
     lastRunResult = runResult;
 
+    const items: MonitoringItem[] = [];
+    let storedNew = 0;
+    let storageDuplicates = 0;
+    let storageFailed = 0;
+
+    for (const result of results) {
+      try {
+        const canonicalUrl = canonicalizeXUrl(result.tweetUrl);
+        const ingest = await persistentStore.ingestManualUrl({
+          url: canonicalUrl,
+          title: result.text ? result.text.slice(0, 120) : canonicalUrl,
+          text: result.text || canonicalUrl,
+          authorName: result.authorHandle ? result.authorHandle.replace(/^@/u, "") : undefined,
+          authorHandle: result.authorHandle,
+          publishedAt: result.publishedAt,
+          sourceType: "x_recent_search",
+          sourceName: result.authorHandle,
+          discoveryMethod: "auto_search",
+        });
+
+        items.push(ingest.item);
+        if (ingest.duplicate) storageDuplicates += 1;
+        else storedNew += 1;
+      } catch (error) {
+        storageFailed += 1;
+        console.error("[x-search POST] Failed to store result:", error);
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       results,
       runResult,
+      items,
+      storage: {
+        created: storedNew,
+        duplicates: storageDuplicates,
+        failed: storageFailed,
+      },
     });
   } catch (err) {
     console.error("[x-search POST] Error:", err);
