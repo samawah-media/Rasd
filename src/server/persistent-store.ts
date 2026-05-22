@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey } from "@/lib/connectors";
+import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
 import { checkBudget, type UsageSnapshot } from "@/lib/guardrails";
 import { keywordRules, usageLimit } from "@/lib/mock-data";
 import type {
@@ -13,7 +13,12 @@ import type {
   Source,
   SourceCredibility,
   SourceType,
+  SourceRule,
+  Job,
+  ConnectorRun,
 } from "@/lib/types";
+import { TikTokResearchConnector } from "@/lib/connectors/tiktok/research";
+import { InstagramPublicProfileConnector } from "@/lib/connectors/instagram/public-profile";
 import {
   DEFAULT_MANUAL_SOURCE_ID,
   DEFAULT_ORGANIZATION_ID,
@@ -79,6 +84,45 @@ type DbKeywordRuleRow = {
   version: number | null;
 };
 
+type DbSourceRuleRow = {
+  id: string;
+  organization_id: string;
+  topic_id: string;
+  source_id: string | null;
+  type: SourceType;
+  query: string | null;
+  url: string | null;
+  cursor: Record<string, unknown> | null;
+  active: boolean;
+  created_at: string;
+};
+
+type DbJobRow = {
+  id: string;
+  organization_id: string;
+  job_type: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "dead_letter";
+  idempotency_key: string;
+  attempts: number;
+  payload: Record<string, unknown>;
+  failure_reason: string | null;
+  available_at: string;
+  created_at: string;
+};
+
+type DbConnectorRunRow = {
+  id: string;
+  organization_id: string;
+  source_rule_id: string;
+  status: string;
+  cursor_before: Record<string, unknown> | null;
+  cursor_after: Record<string, unknown> | null;
+  fetched_count: number;
+  failure_reason: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
 type DbItemRow = {
   id: string;
   source_id: string | null;
@@ -102,6 +146,8 @@ type DbItemRow = {
   warning: string | null;
   created_at: string;
   sources?: { name: string | null } | null;
+  organization_id?: string;
+  topic_id?: string;
 };
 
 type DbReportRow = {
@@ -228,6 +274,51 @@ function toKeywordRule(row: DbKeywordRuleRow): KeywordRule {
   };
 }
 
+function toSourceRule(row: DbSourceRuleRow): SourceRule {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    topicId: row.topic_id,
+    sourceId: row.source_id,
+    type: row.type,
+    query: row.query,
+    url: row.url,
+    cursor: row.cursor,
+    active: row.active ?? true,
+    createdAt: row.created_at,
+  };
+}
+
+function toJob(row: DbJobRow): Job {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    jobType: row.job_type,
+    status: row.status,
+    idempotencyKey: row.idempotency_key,
+    attempts: row.attempts,
+    payload: row.payload,
+    failureReason: row.failure_reason,
+    availableAt: row.available_at,
+    createdAt: row.created_at,
+  };
+}
+
+function toConnectorRun(row: DbConnectorRunRow): ConnectorRun {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    sourceRuleId: row.source_rule_id,
+    status: row.status,
+    cursorBefore: row.cursor_before,
+    cursorAfter: row.cursor_after,
+    fetchedCount: row.fetched_count,
+    failureReason: row.failure_reason,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+  };
+}
+
 function normalizeTerms(terms: string[] | undefined) {
   return Array.from(new Set((terms ?? []).map((term) => term.trim()).filter(Boolean)));
 }
@@ -238,9 +329,15 @@ function isUuid(value: string | undefined) {
 
 function platformFromUrl(value: string) {
   try {
-    const host = new URL(value).hostname.replace(/^www\./, "");
+    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
     if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
       return "X";
+    }
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+      return "TikTok";
+    }
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
+      return "Instagram";
     }
     return "Website";
   } catch {
@@ -358,6 +455,8 @@ async function toItems(supabase: SupabaseClient, rows: DbItemRow[]): Promise<Mon
       warning: row.warning ?? undefined,
       sourceItemId: row.source_item_id ?? undefined,
       discoveryMethod,
+      organizationId: row.organization_id,
+      topicId: row.topic_id,
     };
   });
 }
@@ -752,6 +851,57 @@ export const persistentStore = {
     const { data, error } = await supabase.from("sources").select("*").order("created_at", { ascending: false });
     if (error) throw error;
     return ((data ?? []) as DbSourceRow[]).map(toSource);
+  },
+
+  async listSourceRules(organizationId: string) {
+    if (!shouldUseSupabase()) return store.listSourceRules(organizationId);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const { data, error } = await supabase
+      .from("source_rules")
+      .select("*")
+      .eq("organization_id", organizationId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as DbSourceRuleRow[]).map(toSourceRule);
+  },
+
+  async upsertSourceRule(input: Partial<SourceRule> & { organizationId: string; topicId: string; type: SourceType }) {
+    if (!shouldUseSupabase()) return store.upsertSourceRule(input);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const id = input.id ?? crypto.randomUUID();
+    const { data, error } = await supabase
+      .from("source_rules")
+      .upsert({
+        id,
+        organization_id: input.organizationId,
+        topic_id: input.topicId,
+        source_id: input.sourceId ?? null,
+        type: input.type,
+        query: input.query ?? null,
+        url: input.url ?? null,
+        cursor: input.cursor ?? null,
+        active: input.active ?? true,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toSourceRule(data as DbSourceRuleRow);
+  },
+
+  async deleteSourceRule(id: string) {
+    if (!shouldUseSupabase()) return store.deleteSourceRule(id);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const { data, error } = await supabase
+      .from("source_rules")
+      .delete()
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
   },
 
   async listKeywordRules() {
@@ -1197,6 +1347,8 @@ export const persistentStore = {
       captureId,
       kind: "evidence_lite",
       sourceUrl: screenshotUrl,
+      organizationId: insertedRow.organization_id,
+      topicId: insertedRow.topic_id,
     });
     const { data: hydratedRow, error: hydrationError } = await supabase
       .from("monitoring_items")
@@ -1563,12 +1715,14 @@ export const persistentStore = {
           captureId,
           kind,
           sourceUrl: screenshotUrl,
+          organizationId: item.organizationId,
+          topicId: item.topicId,
         });
 
     const captureInput: DbRow = shouldFail
       ? {
           id: captureId,
-          organization_id: DEFAULT_ORGANIZATION_ID,
+          organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
           kind,
           status: "failed",
@@ -1578,7 +1732,7 @@ export const persistentStore = {
         }
       : {
           id: captureId,
-          organization_id: DEFAULT_ORGANIZATION_ID,
+          organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
           kind,
           status: "success",
@@ -1610,15 +1764,15 @@ export const persistentStore = {
 
     await supabase.from("usage_events").insert([
       {
-        organization_id: DEFAULT_ORGANIZATION_ID,
-        topic_id: DEFAULT_TOPIC_ID,
+        organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
+        topic_id: item.topicId ?? DEFAULT_TOPIC_ID,
         event_type: "screenshot",
         units: 1,
         metadata: { itemId: id, captureId: capture.id, kind },
       },
       {
-        organization_id: DEFAULT_ORGANIZATION_ID,
-        topic_id: DEFAULT_TOPIC_ID,
+        organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
+        topic_id: item.topicId ?? DEFAULT_TOPIC_ID,
         event_type: "storage_mb",
         units: storedEvidence?.sizeBytes ? Math.max(1, Math.ceil(storedEvidence.sizeBytes / (1024 * 1024))) : 2,
         metadata: {
@@ -1812,5 +1966,449 @@ export const persistentStore = {
       },
       budget,
     };
+  },
+
+  async listJobs(organizationId?: string) {
+    if (!shouldUseSupabase()) return store.listJobs(organizationId);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    let query = supabase.from("jobs").select("*").order("created_at", { ascending: false });
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbJobRow[]).map(toJob);
+  },
+
+  async listConnectorRuns(organizationId?: string) {
+    if (!shouldUseSupabase()) return store.listConnectorRuns(organizationId);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    let query = supabase.from("connector_runs").select("*").order("started_at", { ascending: false });
+    if (organizationId) {
+      query = query.eq("organization_id", organizationId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return ((data ?? []) as DbConnectorRunRow[]).map(toConnectorRun);
+  },
+
+  async findDueSourceRules(organizationId?: string, nowStr?: string) {
+    if (!shouldUseSupabase()) return store.findDueSourceRules(organizationId, nowStr);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+    const referenceTime = nowStr ? new Date(nowStr) : new Date();
+
+    let queryRules = supabase.from("source_rules").select("*, sources(*)").eq("active", true);
+    if (organizationId) {
+      queryRules = queryRules.eq("organization_id", organizationId);
+    }
+    const { data: dbRules, error: rulesError } = await queryRules;
+    if (rulesError) throw rulesError;
+
+    const dueRules: SourceRule[] = [];
+    for (const row of (dbRules ?? [])) {
+      const { data: runs, error: runsError } = await supabase
+        .from("connector_runs")
+        .select("*")
+        .eq("source_rule_id", row.id)
+        .not("finished_at", "is", null)
+        .order("finished_at", { ascending: false })
+        .limit(1);
+      if (runsError) throw runsError;
+
+      const latestRun = runs?.[0];
+      const pollIntervalMinutes = row.sources?.poll_interval_minutes ?? 60;
+
+      if (!latestRun) {
+        dueRules.push(toSourceRule(row as DbSourceRuleRow));
+      } else {
+        const elapsedMs = referenceTime.getTime() - new Date(latestRun.finished_at).getTime();
+        if (elapsedMs >= pollIntervalMinutes * 60 * 1000) {
+          dueRules.push(toSourceRule(row as DbSourceRuleRow));
+        }
+      }
+    }
+    return dueRules;
+  },
+
+  async enqueueConnectorJob(rule: SourceRule, nowStr?: string) {
+    if (!shouldUseSupabase()) return store.enqueueConnectorJob(rule, nowStr);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const time = nowStr ? new Date(nowStr) : new Date();
+    const year = time.getUTCFullYear();
+    const month = String(time.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(time.getUTCDate()).padStart(2, "0");
+    const hour = String(time.getUTCHours()).padStart(2, "0");
+    const idempotencyKey = `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
+
+    const { data: existingJob, error: checkError } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("organization_id", rule.organizationId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (checkError) throw checkError;
+    if (existingJob) {
+      return toJob(existingJob as DbJobRow);
+    }
+
+    const jobId = crypto.randomUUID();
+    const availableAt = nowStr || now();
+    const createdAt = nowStr || now();
+
+    try {
+      const { data: jobData, error: jobInsertError } = await supabase
+        .from("jobs")
+        .insert({
+          id: jobId,
+          organization_id: rule.organizationId,
+          job_type: "connector_poll",
+          status: "queued",
+          idempotency_key: idempotencyKey,
+          attempts: 0,
+          payload: { ruleId: rule.id },
+          failure_reason: null,
+          available_at: availableAt,
+          created_at: createdAt,
+        })
+        .select("*")
+        .single();
+
+      if (jobInsertError) {
+        if (jobInsertError.code === "23505") {
+          const { data: retryJob, error: retryCheckError } = await supabase
+            .from("jobs")
+            .select("*")
+            .eq("organization_id", rule.organizationId)
+            .eq("idempotency_key", idempotencyKey)
+            .single();
+          if (retryCheckError) throw retryCheckError;
+          return toJob(retryJob as DbJobRow);
+        }
+        throw jobInsertError;
+      }
+
+      const runId = crypto.randomUUID();
+      const { error: runInsertError } = await supabase
+        .from("connector_runs")
+        .insert({
+          id: runId,
+          organization_id: rule.organizationId,
+          source_rule_id: rule.id,
+          status: "queued",
+          cursor_before: rule.cursor,
+          cursor_after: null,
+          fetched_count: 0,
+          failure_reason: null,
+          started_at: nowStr || now(),
+          finished_at: null,
+        });
+      if (runInsertError) throw runInsertError;
+
+      return toJob(jobData as DbJobRow);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "23505") {
+        const { data: retryJob, error: retryCheckError } = await supabase
+          .from("jobs")
+          .select("*")
+          .eq("organization_id", rule.organizationId)
+          .eq("idempotency_key", idempotencyKey)
+          .single();
+        if (retryCheckError) throw retryCheckError;
+        return toJob(retryJob as DbJobRow);
+      }
+      throw err;
+    }
+  },
+
+  async runConnectorJob(jobId: string, nowStr?: string) {
+    if (!shouldUseSupabase()) return store.runConnectorJob(jobId, nowStr);
+    const supabase = getSupabaseAdmin();
+    await ensureDefaultWorkspace(supabase);
+
+    const { data: job, error: jobGetError } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (jobGetError) throw jobGetError;
+    if (!job) throw new Error("job_not_found");
+    if (job.status !== "queued" && job.status !== "failed") {
+      return toJob(job as DbJobRow);
+    }
+
+    const { data: claimedJobs, error: claimError } = await supabase
+      .from("jobs")
+      .update({
+        status: "running",
+        attempts: job.attempts + 1,
+      })
+      .eq("id", jobId)
+      .eq("status", job.status)
+      .select("*");
+    if (claimError) throw claimError;
+    if (!claimedJobs || claimedJobs.length === 0) {
+      return toJob(job as DbJobRow);
+    }
+    const claimedJobRow = claimedJobs[0] as DbJobRow;
+
+    const ruleId = claimedJobRow.payload.ruleId as string;
+    const { data: dbRule, error: ruleError } = await supabase
+      .from("source_rules")
+      .select("*")
+      .eq("id", ruleId)
+      .maybeSingle();
+    if (ruleError) throw ruleError;
+    if (!dbRule) {
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          failure_reason: "source_rule_not_found",
+        })
+        .eq("id", jobId);
+      return { ...toJob(claimedJobRow), status: "failed" as const, failureReason: "source_rule_not_found" };
+    }
+    const rule = toSourceRule(dbRule as DbSourceRuleRow);
+
+    const { data: runs, error: runsError } = await supabase
+      .from("connector_runs")
+      .select("*")
+      .eq("source_rule_id", ruleId)
+      .eq("status", "queued")
+      .limit(1);
+    if (runsError) throw runsError;
+
+    let runRow = runs?.[0] as DbConnectorRunRow | undefined;
+    if (!runRow) {
+      const runId = crypto.randomUUID();
+      const { data: newRun, error: newRunError } = await supabase
+        .from("connector_runs")
+        .insert({
+          id: runId,
+          organization_id: rule.organizationId,
+          source_rule_id: ruleId,
+          status: "running",
+          cursor_before: rule.cursor,
+          cursor_after: null,
+          fetched_count: 0,
+          failure_reason: null,
+          started_at: nowStr || now(),
+          finished_at: null,
+        })
+        .select("*")
+        .single();
+      if (newRunError) throw newRunError;
+      runRow = newRun as DbConnectorRunRow;
+    } else {
+      const { data: updatedRun, error: updateRunError } = await supabase
+        .from("connector_runs")
+        .update({
+          status: "running",
+          started_at: nowStr || now(),
+        })
+        .eq("id", runRow.id)
+        .select("*")
+        .single();
+      if (updateRunError) throw updateRunError;
+      runRow = updatedRun as DbConnectorRunRow;
+    }
+
+    try {
+      let fetched: IngestedItem[] = [];
+      if (rule.type === "tiktok_research") {
+        const connector = new TikTokResearchConnector();
+        fetched = await connector.fetch(rule, rule.cursor);
+      } else if (rule.type === "instagram_public_profile") {
+        const connector = new InstagramPublicProfileConnector();
+        fetched = await connector.fetch(rule, rule.cursor);
+      } else {
+        throw new Error(`unsupported_connector_type:${rule.type}`);
+      }
+
+      const activeRules = await this.listKeywordRules();
+      const activeRule = activeRules[0] || keywordRules[0];
+
+      let insertedCount = 0;
+
+      for (const rawItem of fetched) {
+        const relevance = explainKeywordMatch(`${rawItem.title} ${rawItem.text} ${rawItem.url}`, activeRule);
+        if (relevance.score < 35) {
+          continue;
+        }
+
+        const dedupeKey = makeDedupeKey(rawItem, rule.type);
+        const canonicalHash = `${rule.type}:${await sha256(dedupeKey)}`;
+
+        const { data: duplicateItem, error: duplicateCheckError } = await supabase
+          .from("monitoring_items")
+          .select("id")
+          .eq("organization_id", rule.organizationId)
+          .or(`canonical_url_hash.eq.${canonicalHash},original_url.eq.${rawItem.url}`)
+          .limit(1)
+          .maybeSingle();
+
+        if (duplicateCheckError) throw duplicateCheckError;
+        if (duplicateItem) {
+          continue;
+        }
+
+        const newItemId = crypto.randomUUID();
+        const { data: insertedItemData, error: insertItemError } = await supabase
+          .from("monitoring_items")
+          .insert({
+            id: newItemId,
+            organization_id: rule.organizationId,
+            topic_id: rule.topicId,
+            source_id: rule.sourceId || null,
+            source_type: rule.type,
+            state: "needs_review",
+            title: rawItem.title,
+            original_url: rawItem.url,
+            canonical_url_hash: canonicalHash,
+            source_item_id: rawItem.sourceItemId || canonicalHash,
+            normalized_text_hash: await sha256(rawItem.text || rawItem.url),
+            author_name: rawItem.authorName ?? "غير محدد",
+            author_handle: rawItem.authorHandle ?? null,
+            published_at: rawItem.publishedAt,
+            summary: rawItem.text,
+            summary_source_text: rawItem.text,
+            sentiment: estimateSentiment(relevance.score),
+            sentiment_confidence: Math.max(50, Math.min(95, relevance.score)),
+            relevance_score: relevance.score,
+            relevance_reason: relevance.reason,
+            matched_terms: relevance.matchedTerms,
+            raw_response: rawItem.raw ?? {},
+            warning: null,
+            discovery_method: "auto_search",
+          })
+          .select("*, sources(name)")
+          .single();
+
+        if (insertItemError) {
+          if (insertItemError.code === "23505") continue;
+          throw insertItemError;
+        }
+
+        const initialItem = (await toItems(supabase, [insertedItemData as DbItemRow]))[0];
+        const captureId = crypto.randomUUID();
+        let screenshotUrl = evidenceCardUrl(newItemId);
+        if (rawItem.url && isSafePublicHttpUrl(rawItem.url)) {
+          screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(rawItem.url)}&screenshot=true&embed=screenshot.url`;
+        }
+
+        const storedEvidence = await persistEvidenceAsset({
+          supabase,
+          item: initialItem,
+          captureId,
+          kind: "evidence_lite",
+          sourceUrl: screenshotUrl,
+          organizationId: rule.organizationId,
+          topicId: rule.topicId,
+        });
+
+        await supabase
+          .from("monitoring_items")
+          .update({
+            evidence_image_path: storedEvidence.assetUrl,
+            raw_response: {
+              ...(rawItem.raw ?? {}),
+              contentImagePath: storedEvidence.assetUrl,
+              sourceEvidenceImagePath: storedEvidence.assetUrl,
+              evidenceStorage: {
+                persisted: storedEvidence.persisted,
+                bucket: storedEvidence.bucket,
+                path: storedEvidence.storagePath,
+                contentType: storedEvidence.contentType,
+                sizeBytes: storedEvidence.sizeBytes,
+                failureReason: storedEvidence.failureReason,
+              },
+            },
+          })
+          .eq("id", newItemId);
+
+        await supabase
+          .from("captures")
+          .insert({
+            id: captureId,
+            organization_id: rule.organizationId,
+            monitoring_item_id: newItemId,
+            kind: "evidence_lite",
+            status: "success",
+            captured_at: now(),
+            asset_url: storedEvidence.assetUrl,
+            html_archive_url:
+              storedEvidence.persisted && storedEvidence.bucket && storedEvidence.storagePath
+                ? evidenceStorageReference(storedEvidence.bucket, storedEvidence.storagePath)
+                : null,
+          });
+
+        insertedCount += 1;
+        await audit(supabase, "item.ingested", "monitoring_item", newItemId, {
+          sourceType: rule.type,
+          sourceId: rule.sourceId,
+          canonicalUrl: rawItem.url,
+        });
+      }
+
+      let nextCursor = rule.cursor;
+      if (fetched.length > 0) {
+        const sorted = [...fetched].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        const latest = sorted[0];
+        if (rule.type === "tiktok_research") {
+          nextCursor = { search_id: latest.sourceItemId };
+        } else if (rule.type === "instagram_public_profile") {
+          nextCursor = { lastPublishedAt: latest.publishedAt };
+        }
+      }
+
+      const { error: ruleUpdateError } = await supabase
+        .from("source_rules")
+        .update({ cursor: nextCursor })
+        .eq("id", rule.id);
+      if (ruleUpdateError) throw ruleUpdateError;
+
+      const { error: jobUpdateError } = await supabase
+        .from("jobs")
+        .update({ status: "succeeded" })
+        .eq("id", jobId);
+      if (jobUpdateError) throw jobUpdateError;
+
+      const { error: runUpdateError } = await supabase
+        .from("connector_runs")
+        .update({
+          status: "success",
+          cursor_after: nextCursor,
+          fetched_count: insertedCount,
+          finished_at: nowStr || now(),
+        })
+        .eq("id", runRow.id);
+      if (runUpdateError) throw runUpdateError;
+      return { ...toJob(claimedJobRow), status: "succeeded" as const, failureReason: null };
+
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          failure_reason: errorMsg,
+        })
+        .eq("id", jobId);
+
+      await supabase
+        .from("connector_runs")
+        .update({
+          status: "failed",
+          failure_reason: errorMsg,
+          finished_at: nowStr || now(),
+        })
+        .eq("id", runRow.id);
+      return { ...toJob(claimedJobRow), status: "failed" as const, failureReason: errorMsg };
+    }
   },
 };

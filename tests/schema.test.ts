@@ -118,6 +118,31 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(sql, /create index if not exists sources_organization_active_type_idx/);
   });
 
+  it("ships TikTok and Instagram connector enum additions as a new production migration", async () => {
+    const migrationsDir = join(process.cwd(), "supabase", "migrations");
+    const migrations = await readdir(migrationsDir);
+    const connectorEnumMigration = migrations.find((file) => file.endsWith("_add_tiktok_instagram_connector_enums.sql"));
+
+    assert.ok(connectorEnumMigration);
+    assert.notEqual(connectorEnumMigration, "20260520134546_initial_rasd_schema.sql");
+
+    const sql = await migrationSql(connectorEnumMigration);
+    assert.match(sql, /alter type public\.source_type add value if not exists 'tiktok_research'/);
+    assert.match(sql, /alter type public\.source_type add value if not exists 'instagram_public_profile'/);
+    assert.match(sql, /alter type public\.usage_event_type add value if not exists 'tiktok_read'/);
+    assert.match(sql, /alter type public\.usage_event_type add value if not exists 'instagram_read'/);
+    assert.match(sql, /alter type public\.usage_event_type add value if not exists 'media_hydration'/);
+  });
+
+  it("registers a protected Vercel cron route for connector scheduling without removing RSS polling", async () => {
+    const config = JSON.parse(await readFile(join(process.cwd(), "vercel.json"), "utf8")) as {
+      crons: Array<{ path: string; schedule: string }>;
+    };
+
+    assert.ok(config.crons.some((cron) => cron.path === "/api/cron/poll-sources" && cron.schedule === "0 5 * * *"));
+    assert.ok(config.crons.some((cron) => cron.path === "/api/cron/run-connectors" && cron.schedule === "15 5 * * *"));
+  });
+
   it("stores legacy link overrides as tenant-scoped reviewed data", async () => {
     const sql = await schemaSql();
     const overrides = tableBlock(sql, "legacy_link_overrides");

@@ -24,6 +24,8 @@ type PersistEvidenceInput = {
   sourceUrl: string;
   nowIso?: string;
   fetcher?: typeof fetch;
+  organizationId?: string;
+  topicId?: string;
 };
 
 export function evidenceStorageBucket() {
@@ -90,8 +92,8 @@ export async function persistEvidenceAsset(input: PersistEvidenceInput): Promise
 
     const bucket = evidenceStorageBucket();
     const storagePath = evidenceStoragePath({
-      organizationId: "default",
-      topicId: "hidayathon",
+      organizationId: input.organizationId ?? input.item.organizationId ?? "default",
+      topicId: input.topicId ?? input.item.topicId ?? "hidayathon",
       itemId: input.item.id,
       captureId: input.captureId,
       kind: input.kind,

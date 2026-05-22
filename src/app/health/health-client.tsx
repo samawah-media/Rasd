@@ -50,7 +50,7 @@ interface HealthClientProps {
     action: string;
     entityId: string;
     actorRole: "owner" | "editor" | "viewer";
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
     createdAt: string;
   }[];
 }
@@ -68,12 +68,8 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
   const [liveActive, setLiveActive] = useState(true);
   const [logFilter, setLogFilter] = useState<"all" | "info" | "success" | "warning" | "error">("all");
   
-  // Terminal log simulation
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
-  
-  // Format initial logs into terminal-friendly lines
-  useEffect(() => {
+  // Terminal log simulation — initialised once from server-side logs
+  const [logs, setLogs] = useState<LogEntry[]>(() => {
     const formatted: LogEntry[] = initialLogs.map((log, idx) => {
       let level: LogEntry["level"] = "info";
       if (log.action.includes("error") || log.action.includes("failed")) level = "error";
@@ -82,7 +78,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
 
       let readableMsg = `حدث تشغيلي: ${log.action}`;
       if (log.action === "item.ingested") readableMsg = `تم سحب وتلقيم مادة جديدة بنجاح (المعرف: ${log.entityId.slice(0, 8)})`;
-      else if (log.action === "item.duplicate_detected") readableMsg = `تم الكشف عن رابط مكرر ومستبعده تفادياً للزحمة.`;
+      else if (log.action === "item.duplicate_detected") readableMsg = `تم الكشف عن رابط مكرر ومستبعده تفاديًا للزحمة.`;
       else if (log.action === "source.rss_polled") readableMsg = `تم فحص مصادر الأخبار وتحديث التغذية الفورية للعميل.`;
       else if (log.action === "source.rss_poll_failed") readableMsg = `فشل فحص مصدر RSS (المعرف: ${log.entityId.slice(0, 8)}) - جاري المحاولة.`;
       else if (log.action === "keyword_rule.updated") readableMsg = `تحديث خوارزمية الفلترة الذكية وتعديل الكلمات الدالة.`;
@@ -111,8 +107,10 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
       },
     ];
 
-    setLogs([...welcomeLogs, ...formatted]);
-  }, [initialLogs]);
+    return [...welcomeLogs, ...formatted];
+  });
+  const consoleEndRef = useRef<HTMLDivElement>(null);
+
 
   // Simulated live logging stream
   useEffect(() => {
@@ -379,7 +377,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                   {/* Log Filter Buttons */}
                   <select 
                     value={logFilter}
-                    onChange={(e) => setLogFilter(e.target.value as any)}
+                    onChange={(e) => setLogFilter(e.target.value as "all" | "info" | "success" | "warning" | "error")}
                     className="bg-stone-800 border border-stone-700 text-stone-300 text-[9px] font-bold rounded-lg px-2 py-1 outline-none cursor-pointer hover:bg-stone-750 transition"
                   >
                     <option value="all">كل السجلات</option>

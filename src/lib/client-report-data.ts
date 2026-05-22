@@ -119,6 +119,7 @@ const platformLabels: Record<string, string> = {
   X: "منصة X",
   Official: "موقع رسمي",
   TikTok: "TikTok",
+  Instagram: "Instagram",
   YouTube: "YouTube",
   Website: "موقع ويب",
   News: "خبر",
@@ -683,9 +684,10 @@ function platformFromDbRow(row: Pick<DbMonitoringItemRow, "source_type" | "origi
 
 function platformFromOriginalUrl(value: string) {
   try {
-    const host = new URL(value).hostname.replace(/^www\./, "");
-    if (host === "x.com" || host === "twitter.com") return "X";
-    if (host.endsWith("x.com") || host.endsWith("twitter.com")) return "X";
+    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) return "X";
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) return "TikTok";
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) return "Instagram";
   } catch {
     return "Unknown";
   }

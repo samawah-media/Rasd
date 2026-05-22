@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/poll-sources",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/run-connectors",
+      "schedule": "15 5 * * *"
     }
   ]
 }

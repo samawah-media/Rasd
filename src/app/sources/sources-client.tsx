@@ -11,10 +11,12 @@ import {
   Globe,
   Loader2,
   Plus,
+  Power,
   RefreshCw,
   Settings,
+  Trash2,
 } from "lucide-react";
-import type { KeywordRule, MonitoringItem, Source } from "@/lib/types";
+import type { ConnectorRun, KeywordRule, MonitoringItem, Source, SourceRule } from "@/lib/types";
 import AppShell from "@/components/AppShell";
 import { BentoCard, BentoGrid } from "@/components/BentoGrid";
 
@@ -23,6 +25,8 @@ type MessageType = "success" | "error" | "info" | "warning";
 type SourcesState = {
   sources: Source[];
   keywordRules: KeywordRule[];
+  sourceRules: SourceRule[];
+  connectorRuns: ConnectorRun[];
 };
 
 type SourcePollResponse = {
@@ -43,9 +47,22 @@ type SourceCreateResponse = {
   duplicate?: boolean;
 };
 
+type WatchlistType = "tiktok_research" | "instagram_public_profile";
+
+type SourceRuleResponse = {
+  source_rule: SourceRule;
+};
+
+type SourceRulesResponse = {
+  source_rules: SourceRule[];
+  connector_runs: ConnectorRun[];
+};
+
 const emptyState: SourcesState = {
   sources: [],
   keywordRules: [],
+  sourceRules: [],
+  connectorRuns: [],
 };
 
 const arabicApiErrors: Record<string, string> = {
@@ -64,6 +81,12 @@ const arabicApiErrors: Record<string, string> = {
   rss_parse_failed: "هذا ليس موجز RSS. لاختبار خبر واحد استخدم خانة رابط مادة واحدة في لوحة التشغيل.",
   rss_feed_empty: "موجز RSS فارغ.",
   rss_feed_too_large: "موجز RSS كبير جدًا.",
+  source_rule_type_unsupported: "نوع قاعدة الرصد غير مدعوم.",
+  tiktok_query_or_url_required: "أدخل كلمة بحث أو رابط TikTok.",
+  instagram_profile_url_required: "أدخل رابط حساب Instagram العام.",
+  instagram_profile_url_invalid: "رابط Instagram يجب أن يكون رابط حساب عام.",
+  source_rule_url_not_public: "الرابط يجب أن يكون عامًا ويبدأ بـ http أو https.",
+  source_rule_not_found: "قاعدة الرصد غير موجودة.",
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
 };
 
@@ -142,6 +165,27 @@ function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
   return base;
 }
 
+function sourceRulePlatform(rule: SourceRule) {
+  return rule.type === "tiktok_research" ? "TikTok" : "Instagram";
+}
+
+function sourceRuleTarget(rule: SourceRule) {
+  return [rule.query, rule.url].filter(Boolean).join(" · ") || "بدون هدف";
+}
+
+function latestRunForRule(rule: SourceRule, runs: ConnectorRun[]) {
+  return runs
+    .filter((run) => run.sourceRuleId === rule.id)
+    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0];
+}
+
+function connectorRunLabel(run?: ConnectorRun) {
+  if (!run) return "لم يعمل بعد";
+  if (run.status === "success") return `نجح · ${run.fetchedCount.toLocaleString("ar-SA")} مواد`;
+  if (run.status === "failed") return `فشل · ${run.failureReason ?? "سبب غير معروف"}`;
+  return run.status;
+}
+
 export function SourcesClient() {
   const [state, setState] = useState<SourcesState>(emptyState);
   const [rssName, setRssName] = useState("");
@@ -149,6 +193,9 @@ export function SourcesClient() {
   const [requiredTerms, setRequiredTerms] = useState("");
   const [optionalTerms, setOptionalTerms] = useState("");
   const [excludeTerms, setExcludeTerms] = useState("");
+  const [watchlistType, setWatchlistType] = useState<WatchlistType>("tiktok_research");
+  const [watchlistQuery, setWatchlistQuery] = useState("");
+  const [watchlistUrl, setWatchlistUrl] = useState("");
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
@@ -166,14 +213,17 @@ export function SourcesClient() {
   const activeKeywordRule = state.keywordRules[0] ?? null;
 
   async function fetchSnapshot(): Promise<SourcesState> {
-    const [sourcesData, keywordRulesData] = await Promise.all([
+    const [sourcesData, keywordRulesData, sourceRulesData] = await Promise.all([
       apiJson<{ sources: Source[] }>("/api/sources"),
       apiJson<{ keyword_rules: KeywordRule[] }>("/api/keyword-rules"),
+      apiJson<SourceRulesResponse>("/api/source-rules"),
     ]);
 
     return {
       sources: sourcesData.sources,
       keywordRules: keywordRulesData.keyword_rules,
+      sourceRules: sourceRulesData.source_rules,
+      connectorRuns: sourceRulesData.connector_runs,
     };
   }
 
@@ -359,6 +409,75 @@ export function SourcesClient() {
     }
   }
 
+  async function submitWatchlistRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPending("watchlist-rule");
+    setMessage("جاري حفظ قاعدة رصد TikTok/Instagram...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourceRuleResponse>("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: watchlistType,
+          query: watchlistQuery,
+          url: watchlistUrl,
+        }),
+      });
+      await refreshSilently();
+      setWatchlistQuery("");
+      setWatchlistUrl("");
+      setMessage(`تم حفظ قاعدة ${sourceRulePlatform(result.source_rule)} الآلية.`);
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حفظ قاعدة الرصد الآلي.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function toggleWatchlistRule(rule: SourceRule) {
+    setPending(`watchlist-toggle-${rule.id}`);
+    setMessage("جاري تحديث قاعدة الرصد...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourceRuleResponse>(`/api/source-rules/${rule.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: !rule.active }),
+      });
+      await refreshSilently();
+      setMessage(`${sourceRulePlatform(result.source_rule)}: ${result.source_rule.active ? "نشطة" : "متوقفة"}.`);
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تحديث قاعدة الرصد.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function deleteWatchlistRule(rule: SourceRule) {
+    setPending(`watchlist-delete-${rule.id}`);
+    setMessage("جاري حذف قاعدة الرصد...");
+    setMessageType("info");
+
+    try {
+      await apiJson<{ ok: boolean }>(`/api/source-rules/${rule.id}`, {
+        method: "DELETE",
+      });
+      await refreshSilently();
+      setMessage(`تم حذف قاعدة ${sourceRulePlatform(rule)}.`);
+      setMessageType("success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حذف قاعدة الرصد.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
   return (
     <AppShell>
       <div className="min-h-screen bg-[var(--color-bg-main)] p-5 md:p-8" dir="rtl">
@@ -507,6 +626,94 @@ export function SourcesClient() {
                 {pending === "poll-active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 فحص كل المصادر النشطة
               </button>
+            </div>
+          </BentoCard>
+
+          <BentoCard colSpan="col-span-12 xl:col-span-5" title="رصد TikTok/Instagram الآلي" icon={Power} subtitle="Watchlists لحسابات محددة أو بحث TikTok Research">
+            <div className="space-y-4">
+              <form onSubmit={submitWatchlistRule} className="space-y-3">
+                <select
+                  value={watchlistType}
+                  onChange={(event) => setWatchlistType(event.target.value as WatchlistType)}
+                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold outline-none transition focus:border-[#2383E2] focus:bg-white"
+                >
+                  <option value="tiktok_research">TikTok Research</option>
+                  <option value="instagram_public_profile">Instagram Profile</option>
+                </select>
+                <input
+                  value={watchlistQuery}
+                  onChange={(event) => setWatchlistQuery(event.target.value)}
+                  placeholder={watchlistType === "tiktok_research" ? "كلمة بحث أو هاشتاق..." : "استعلام اختياري للفلترة..."}
+                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                />
+                <input
+                  value={watchlistUrl}
+                  onChange={(event) => setWatchlistUrl(event.target.value)}
+                  placeholder={watchlistType === "instagram_public_profile" ? "https://instagram.com/profile" : "رابط TikTok اختياري..."}
+                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  dir="ltr"
+                  required={watchlistType === "instagram_public_profile"}
+                />
+                <button
+                  type="submit"
+                  disabled={pending !== null}
+                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
+                >
+                  {pending === "watchlist-rule" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  إضافة قاعدة رصد
+                </button>
+              </form>
+
+              {state.sourceRules.length ? (
+                <div className="space-y-2">
+                  {state.sourceRules.map((rule) => {
+                    const latestRun = latestRunForRule(rule, state.connectorRuns);
+                    return (
+                      <div key={rule.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full ${rule.active ? "bg-[#00C853]" : "bg-stone-300"}`} />
+                              <p className="text-sm font-extrabold text-[var(--color-text-title)]">{sourceRulePlatform(rule)}</p>
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
+                                {rule.active ? "نشطة" : "متوقفة"}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
+                              {sourceRuleTarget(rule)}
+                            </p>
+                            <p className="mt-2 text-[10px] font-bold text-[var(--color-text-muted)]">{connectorRunLabel(latestRun)}</p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleWatchlistRule(rule)}
+                              disabled={pending !== null}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
+                              title={rule.active ? "إيقاف" : "تفعيل"}
+                            >
+                              {pending === `watchlist-toggle-${rule.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteWatchlistRule(rule)}
+                              disabled={pending !== null}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#f1b6aa] bg-[#fff8f6] text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
+                              title="حذف"
+                            >
+                              {pending === `watchlist-delete-${rule.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-main)] p-6 text-center text-xs font-bold text-[var(--color-text-muted)]">
+                  لا توجد قواعد TikTok أو Instagram محفوظة بعد.
+                </div>
+              )}
             </div>
           </BentoCard>
 

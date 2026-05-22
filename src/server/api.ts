@@ -31,6 +31,7 @@ import {
 } from "@/server/client-access";
 import { SourceValidationError } from "@/server/source-validation";
 import { RssIngestionError } from "@/server/rss-ingestion";
+import { DEFAULT_ORGANIZATION_ID, DEFAULT_TOPIC_ID } from "@/lib/auth-config";
 
 type AppBindings = {
   Variables: {
@@ -73,6 +74,66 @@ function isHttpUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function isSupportedSourceRuleType(value: unknown): value is Extract<SourceType, "tiktok_research" | "instagram_public_profile"> {
+  return value === "tiktok_research" || value === "instagram_public_profile";
+}
+
+function isInstagramProfileUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./u, "").toLowerCase();
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    if (host !== "instagram.com" && host !== "instagr.am") return false;
+    const firstSegment = url.pathname.split("/").filter(Boolean)[0]?.toLowerCase();
+    return Boolean(firstSegment && !["p", "reel", "reels", "tv", "stories", "explore"].includes(firstSegment));
+  } catch {
+    return false;
+  }
+}
+
+function validateSourceRulePayload(body: JsonBody, existing?: Awaited<ReturnType<typeof persistentStore.listSourceRules>>[number]) {
+  const requestedType = body.type ?? existing?.type;
+  if (!isSupportedSourceRuleType(requestedType)) {
+    return { ok: false as const, error: "source_rule_type_unsupported" };
+  }
+
+  const organizationId = optionalString(body.organization_id, body.organizationId, existing?.organizationId) ?? DEFAULT_ORGANIZATION_ID;
+  const topicId = optionalString(body.topic_id, body.topicId, existing?.topicId) ?? DEFAULT_TOPIC_ID;
+  const query = optionalString(body.query, existing?.query);
+  const url = optionalString(body.url, existing?.url);
+  const sourceId = optionalString(body.source_id, body.sourceId, existing?.sourceId ?? undefined) ?? null;
+  const active = typeof body.active === "boolean" ? body.active : existing?.active ?? true;
+
+  if (requestedType === "tiktok_research") {
+    if (!query && !url) return { ok: false as const, error: "tiktok_query_or_url_required" };
+    if (url && (!isHttpUrl(url) || !isSafePublicHttpUrl(url))) {
+      return { ok: false as const, error: "source_rule_url_not_public" };
+    }
+  }
+
+  if (requestedType === "instagram_public_profile") {
+    if (!url) return { ok: false as const, error: "instagram_profile_url_required" };
+    if (!isInstagramProfileUrl(url) || !isSafePublicHttpUrl(url)) {
+      return { ok: false as const, error: "instagram_profile_url_invalid" };
+    }
+  }
+
+  return {
+    ok: true as const,
+    value: {
+      id: optionalString(body.id, existing?.id),
+      organizationId,
+      topicId,
+      sourceId,
+      type: requestedType,
+      query: query ?? null,
+      url: url ?? null,
+      cursor: existing?.cursor ?? null,
+      active,
+    },
+  };
 }
 
 function optionalIsoDate(value: unknown) {
@@ -185,6 +246,46 @@ async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore
     skipped,
     failed,
     runs,
+  };
+}
+
+async function runDueConnectors(organizationId?: string) {
+  const dueRules = await persistentStore.findDueSourceRules(organizationId);
+  const jobs = [];
+  for (const rule of dueRules) {
+    const job = await persistentStore.enqueueConnectorJob(rule);
+    jobs.push(job);
+  }
+
+  const executed = [];
+  const failed = [];
+  for (const job of jobs) {
+    try {
+      const finalJob = await persistentStore.runConnectorJob(job.id);
+      if (finalJob?.status === "failed" || finalJob?.status === "dead_letter") {
+        failed.push({
+          jobId: job.id,
+          error: finalJob.failureReason ?? "connector_job_failed",
+        });
+      } else {
+        executed.push(job.id);
+      }
+    } catch (error) {
+      failed.push({
+        jobId: job.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    dueRulesCount: dueRules.length,
+    enqueuedCount: jobs.length,
+    executedCount: executed.length,
+    failedCount: failed.length,
+    executedJobs: executed,
+    failedJobs: failed,
   };
 }
 
@@ -472,6 +573,27 @@ api.get("/cron/poll-sources", async (c) => {
   );
 });
 
+api.get("/cron/run-connectors", async (c) => {
+  if (!process.env.CRON_SECRET) {
+    return c.json(withRequestId(c, { error: "cron_not_configured" }), 503);
+  }
+  if (!isCronAuthorized(c)) {
+    return c.json(withRequestId(c, { error: "cron_unauthorized" }), 401);
+  }
+
+  try {
+    return c.json(withRequestId(c, await runDueConnectors()));
+  } catch (error) {
+    return c.json(
+      withRequestId(c, {
+        error: "run_due_failed",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+      500,
+    );
+  }
+});
+
 api.post("/sources/:id/poll", async (c) => {
   try {
     const result = sourcePollPayload(await persistentStore.ingestRssSource(c.req.param("id")));
@@ -482,18 +604,41 @@ api.post("/sources/:id/poll", async (c) => {
   }
 });
 
+api.get("/source-rules", async (c) => {
+  const organizationId = optionalString(c.req.query("organization_id"), c.req.query("organizationId")) ?? DEFAULT_ORGANIZATION_ID;
+  const [sourceRules, connectorRuns] = await Promise.all([
+    persistentStore.listSourceRules(organizationId),
+    persistentStore.listConnectorRuns(organizationId),
+  ]);
+  return c.json(withRequestId(c, { source_rules: sourceRules, connector_runs: connectorRuns }));
+});
+
 api.post("/source-rules", async (c) => {
   const body = await readJson(c);
-  return c.json(
-    withRequestId(c, {
-      id: crypto.randomUUID(),
-      source_id: body.source_id,
-      type: body.type ?? "manual_url",
-      cursor: null,
-      active: true,
-    }),
-    201,
-  );
+  const parsed = validateSourceRulePayload(body);
+  if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
+
+  const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
+  return c.json(withRequestId(c, { source_rule: sourceRule }), 201);
+});
+
+api.patch("/source-rules/:id", async (c) => {
+  const body = await readJson(c);
+  const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
+  const existing = (await persistentStore.listSourceRules(organizationId)).find((rule) => rule.id === c.req.param("id"));
+  if (!existing) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
+
+  const parsed = validateSourceRulePayload({ ...body, id: existing.id }, existing);
+  if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
+
+  const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
+  return c.json(withRequestId(c, { source_rule: sourceRule }));
+});
+
+api.delete("/source-rules/:id", async (c) => {
+  const deleted = await persistentStore.deleteSourceRule(c.req.param("id"));
+  if (!deleted) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
+  return c.json(withRequestId(c, { ok: true, id: c.req.param("id") }));
 });
 
 api.get("/keyword-rules", async (c) => c.json(withRequestId(c, { keyword_rules: await persistentStore.listKeywordRules() })));
@@ -574,6 +719,73 @@ api.get("/items/:id/evidence-card.svg", async (c) => {
     });
   } catch {
     return c.json(withRequestId(c, { error: "evidence_card_render_failed" }), 500);
+  }
+});
+
+api.post("/connectors/run-due", async (c) => {
+  if (!process.env.CRON_SECRET) {
+    return c.json(withRequestId(c, { error: "cron_not_configured" }), 503);
+  }
+  if (!isCronAuthorized(c)) {
+    return c.json(withRequestId(c, { error: "cron_unauthorized" }), 401);
+  }
+
+  const body = await readJson(c);
+  const organizationId = typeof body.organization_id === "string" ? body.organization_id : undefined;
+
+  try {
+    return c.json(withRequestId(c, await runDueConnectors(organizationId)));
+  } catch (error) {
+    return c.json(
+      withRequestId(c, {
+        error: "run_due_failed",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+      500,
+    );
+  }
+});
+
+api.get("/connectors/runs", async (c) => {
+  const organizationId = optionalString(c.req.query("organization_id"), c.req.query("organizationId")) ?? DEFAULT_ORGANIZATION_ID;
+  return c.json(withRequestId(c, { connector_runs: await persistentStore.listConnectorRuns(organizationId) }));
+});
+
+api.post("/connectors/run-job", async (c) => {
+  if (!process.env.CRON_SECRET) {
+    return c.json(withRequestId(c, { error: "cron_not_configured" }), 503);
+  }
+  if (!isCronAuthorized(c)) {
+    return c.json(withRequestId(c, { error: "cron_unauthorized" }), 401);
+  }
+
+  const body = await readJson(c);
+  const jobId = typeof body.jobId === "string" ? body.jobId : typeof body.job_id === "string" ? body.job_id : undefined;
+
+  if (!jobId) {
+    return c.json(withRequestId(c, { error: "job_id_required" }), 400);
+  }
+
+  try {
+    const job = await persistentStore.runConnectorJob(jobId);
+    if (job?.status === "failed" || job?.status === "dead_letter") {
+      return c.json(
+        withRequestId(c, {
+          ok: false,
+          jobId,
+          status: job.status,
+          failureReason: job.failureReason ?? "connector_job_failed",
+        }),
+        500,
+      );
+    }
+    return c.json(withRequestId(c, { ok: true, jobId, status: job?.status ?? "unknown" }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "job_not_found") {
+      return c.json(withRequestId(c, { error: "job_not_found" }), 404);
+    }
+    return c.json(withRequestId(c, { error: "run_job_failed", message }), 500);
   }
 });
 

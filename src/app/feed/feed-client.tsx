@@ -80,8 +80,15 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
 
   // Map backend sourceType to user friendly platform name
   const getPlatformLabel = (item: MonitoringItem): string => {
-    if (item.sourceType.startsWith("x_") || item.originalUrl.includes("x.com") || item.originalUrl.includes("twitter.com")) {
+    const url = item.originalUrl || "";
+    if (item.sourceType.startsWith("x_") || url.includes("x.com") || url.includes("twitter.com")) {
       return "X";
+    }
+    if (url.includes("tiktok.com")) {
+      return "TikTok";
+    }
+    if (url.includes("instagram.com") || url.includes("instagr.am")) {
+      return "Instagram";
     }
     if (item.sourceType === "rss") {
       return "صحيفة رقمية";
@@ -94,8 +101,15 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
 
   // Normalize platform string for filtering
   const getPlatformKey = (item: MonitoringItem): string => {
-    if (item.sourceType.startsWith("x_") || item.originalUrl.includes("x.com") || item.originalUrl.includes("twitter.com")) {
+    const url = item.originalUrl || "";
+    if (item.sourceType.startsWith("x_") || url.includes("x.com") || url.includes("twitter.com")) {
       return "X";
+    }
+    if (url.includes("tiktok.com")) {
+      return "TikTok";
+    }
+    if (url.includes("instagram.com") || url.includes("instagr.am")) {
+      return "Instagram";
     }
     if (item.sourceType === "rss") return "News";
     if (item.sourceType === "manual_url") return "Manual";
@@ -382,6 +396,8 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               <div className="space-y-2.5">
                 {[
                   { key: "X", label: "منصة X (تويتر)" },
+                  { key: "TikTok", label: "تيك توك (TikTok)" },
+                  { key: "Instagram", label: "انستقرام (Instagram)" },
                   { key: "News", label: "صحافة إلكترونية" },
                   { key: "Web", label: "مواقع ويب" },
                   { key: "Manual", label: "إدخال يدوي" },
@@ -446,7 +462,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               <select
                 className="h-10 w-full rounded-xl border border-[#dfe3de] bg-[#fbfbfa] px-3 text-sm focus:border-[#1f675d] focus:outline-none transition-all"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => setSortBy(e.target.value as "newest" | "relevance" | "reach")}
               >
                 <option value="newest">الأحدث أولاً</option>
                 <option value="relevance">الأكثر صلة</option>

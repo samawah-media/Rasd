@@ -264,7 +264,10 @@ function captureAsset(captures: Capture[] | undefined) {
 }
 
 function platformLabel(item: MonitoringItem) {
-  if (item.originalUrl.includes("x.com") || item.originalUrl.includes("twitter.com")) return "X";
+  const url = item.originalUrl || "";
+  if (url.includes("x.com") || url.includes("twitter.com")) return "X";
+  if (url.includes("tiktok.com")) return "TikTok";
+  if (url.includes("instagram.com") || url.includes("instagr.am")) return "Instagram";
   if (item.sourceName.includes("خبر") || item.sourceType === "rss") return "خبر";
   return "موقع";
 }
@@ -840,14 +843,14 @@ export function OpsClient() {
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12 xl:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
+          <BentoCard colSpan="col-span-12 xl:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="ألصق رابط X أو TikTok أو Instagram أو خبر/صفحة ويب واحدة">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
               <div className="relative">
                 <input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   onFocus={() => setIntakeMode("manual")}
-                  placeholder="حط رابط التغريدة أو الخبر هنا..."
+                  placeholder="ألصق رابط X أو TikTok أو Instagram أو خبر هنا..."
                   className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 focus:outline focus:outline-2 focus:outline-[#2383E2]/50 ${
                     isXUrl
                       ? "border-[#1DA1F2] pr-16 pl-3 shadow-[0_0_10px_rgba(29,161,242,0.15)] bg-blue-50/5 focus:border-[#1DA1F2]"
@@ -862,6 +865,13 @@ export function OpsClient() {
                     <span className="text-[10px] font-extrabold text-[#1DA1F2] tracking-wider font-mono">X LINK</span>
                   </div>
                 )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 text-[10px] font-extrabold text-[var(--color-text-muted)]">
+                {["X", "TikTok", "Instagram", "خبر/موقع"].map((platform) => (
+                  <span key={platform} className="rounded-full border border-[var(--color-border)] bg-white px-2 py-1">
+                    {platform}
+                  </span>
+                ))}
               </div>
 
               <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">

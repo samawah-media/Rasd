@@ -1,4 +1,4 @@
-import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey } from "@/lib/connectors";
+import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
 import { checkBudget, type UsageSnapshot } from "@/lib/guardrails";
 import { getImportedReportsDataset, type ImportedReportItem } from "@/lib/imported-reports";
 import {
@@ -18,6 +18,8 @@ import {
   SourceValidationError,
   type SourceCreateInput,
 } from "@/server/source-validation";
+import { TikTokResearchConnector } from "@/lib/connectors/tiktok/research";
+import { InstagramPublicProfileConnector } from "@/lib/connectors/instagram/public-profile";
 import {
   buildRssIngestionItem,
   evaluateRssEntryRelevance,
@@ -36,6 +38,9 @@ import type {
   MonitoringItem,
   Source,
   SourceType,
+  SourceRule,
+  Job,
+  ConnectorRun,
 } from "@/lib/types";
 
 type ReviewAction = "approve" | "reject";
@@ -71,7 +76,7 @@ type ShareLink = {
   lastViewedAt: string | null;
 };
 
-type ConnectorRun = {
+type LocalLegacyConnectorRun = {
   id: string;
   connector: SourceType;
   status: "queued" | "success" | "failed" | "not_configured";
@@ -114,8 +119,11 @@ const keywordRulesState = keywordRules.map((rule) => ({ ...rule }));
 const reportItems: ReportItem[] = [];
 const auditLogs: AuditEvent[] = [];
 const shareLinks: ShareLink[] = [];
-const connectorRuns: ConnectorRun[] = [];
+const connectorRuns: LocalLegacyConnectorRun[] = [];
 let xSearchLastRun: XSearchRunResult | null = null;
+const sourceRulesState: SourceRule[] = [];
+const jobsState: Job[] = [];
+const schedulerConnectorRunsState: ConnectorRun[] = [];
 
 const initialUsage: UsageSnapshot = {
   xReadsToday: 120,
@@ -393,6 +401,9 @@ export const store = {
     shareLinks.splice(0, shareLinks.length);
     connectorRuns.splice(0, connectorRuns.length);
     keywordRulesState.splice(0, keywordRulesState.length, ...keywordRules.map((rule) => ({ ...rule })));
+    sourceRulesState.splice(0, sourceRulesState.length);
+    jobsState.splice(0, jobsState.length);
+    schedulerConnectorRunsState.splice(0, schedulerConnectorRunsState.length);
     usage = { ...initialUsage };
   },
 
@@ -436,6 +447,43 @@ export const store = {
 
   listSources() {
     return sources;
+  },
+
+  async listSourceRules(organizationId: string) {
+    return sourceRulesState.filter((rule) => rule.organizationId === organizationId);
+  },
+
+  async upsertSourceRule(input: Partial<SourceRule> & { organizationId: string; topicId: string; type: SourceType }) {
+    const id = input.id ?? crypto.randomUUID();
+    const existingIndex = sourceRulesState.findIndex((r) => r.id === id);
+    const rule: SourceRule = {
+      id,
+      organizationId: input.organizationId,
+      topicId: input.topicId,
+      sourceId: input.sourceId ?? null,
+      type: input.type,
+      query: input.query ?? null,
+      url: input.url ?? null,
+      cursor: input.cursor ?? null,
+      active: input.active ?? true,
+      createdAt: existingIndex >= 0 ? sourceRulesState[existingIndex].createdAt : now(),
+      keywordRule: input.keywordRule,
+    };
+    if (existingIndex >= 0) {
+      sourceRulesState[existingIndex] = rule;
+    } else {
+      sourceRulesState.push(rule);
+    }
+    return rule;
+  },
+
+  async deleteSourceRule(id: string) {
+    const index = sourceRulesState.findIndex((r) => r.id === id);
+    if (index >= 0) {
+      sourceRulesState.splice(index, 1);
+      return true;
+    }
+    return false;
   },
 
   listKeywordRules() {
@@ -1113,7 +1161,7 @@ export const store = {
     if (!budget.allowed) return { ok: false as const, budget };
 
     if (type === "x_filtered_stream") {
-      const run: ConnectorRun = {
+      const run: LocalLegacyConnectorRun = {
         id: crypto.randomUUID(),
         connector: type,
         status: "not_configured",
@@ -1124,7 +1172,7 @@ export const store = {
       return { ok: true as const, run, budget };
     }
 
-    const run: ConnectorRun = {
+    const run: LocalLegacyConnectorRun = {
       id: crypto.randomUUID(),
       connector: type,
       status: "queued",
@@ -1217,7 +1265,7 @@ export const store = {
     // Update usage
     usage = { ...usage, xReadsToday: usage.xReadsToday + 1, xReadsThisMonth: usage.xReadsThisMonth + 1 };
 
-    const connectorRun: ConnectorRun = {
+    const connectorRun: LocalLegacyConnectorRun = {
       id: crypto.randomUUID(),
       connector: "x_recent_search",
       status: "success",
@@ -1234,5 +1282,237 @@ export const store = {
       items: ingestedItems,
       budget,
     };
+  },
+
+  async listJobs(organizationId?: string) {
+    if (organizationId) {
+      return jobsState.filter((j) => j.organizationId === organizationId);
+    }
+    return jobsState;
+  },
+
+  async listConnectorRuns(organizationId?: string) {
+    if (organizationId) {
+      return schedulerConnectorRunsState.filter((r) => r.organizationId === organizationId);
+    }
+    return schedulerConnectorRunsState;
+  },
+
+  async findDueSourceRules(organizationId?: string, nowStr?: string) {
+    const referenceTime = nowStr ? new Date(nowStr) : new Date();
+    let rules = sourceRulesState.filter((r) => r.active);
+    if (organizationId) {
+      rules = rules.filter((r) => r.organizationId === organizationId);
+    }
+    const dueRules: SourceRule[] = [];
+    for (const rule of rules) {
+      let pollIntervalMinutes = 60;
+      if (rule.sourceId) {
+        const src = sources.find((s) => s.id === rule.sourceId);
+        if (src && src.pollIntervalMinutes) {
+          pollIntervalMinutes = src.pollIntervalMinutes;
+        }
+      }
+      // Find latest finished connector run for this rule
+      const completedRuns = schedulerConnectorRunsState
+        .filter((r) => r.sourceRuleId === rule.id && r.finishedAt)
+        .sort((a, b) => new Date(b.finishedAt!).getTime() - new Date(a.finishedAt!).getTime());
+
+      const latestRun = completedRuns[0];
+      if (!latestRun) {
+        dueRules.push(rule);
+      } else {
+        const elapsedMs = referenceTime.getTime() - new Date(latestRun.finishedAt!).getTime();
+        if (elapsedMs >= pollIntervalMinutes * 60 * 1000) {
+          dueRules.push(rule);
+        }
+      }
+    }
+    return dueRules;
+  },
+
+  async enqueueConnectorJob(rule: SourceRule, nowStr?: string) {
+    const time = nowStr ? new Date(nowStr) : new Date();
+    const year = time.getUTCFullYear();
+    const month = String(time.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(time.getUTCDate()).padStart(2, "0");
+    const hour = String(time.getUTCHours()).padStart(2, "0");
+    const idempotencyKey = `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
+
+    const existingJob = jobsState.find(
+      (j) => j.organizationId === rule.organizationId && j.idempotencyKey === idempotencyKey
+    );
+    if (existingJob) {
+      return existingJob;
+    }
+
+    const jobId = crypto.randomUUID();
+    const job: Job = {
+      id: jobId,
+      organizationId: rule.organizationId,
+      jobType: "connector_poll",
+      status: "queued",
+      idempotencyKey,
+      attempts: 0,
+      payload: { ruleId: rule.id },
+      failureReason: null,
+      availableAt: nowStr || now(),
+      createdAt: nowStr || now(),
+    };
+    jobsState.push(job);
+
+    const runId = crypto.randomUUID();
+    const run: ConnectorRun = {
+      id: runId,
+      organizationId: rule.organizationId,
+      sourceRuleId: rule.id,
+      status: "queued",
+      cursorBefore: rule.cursor,
+      cursorAfter: null,
+      fetchedCount: 0,
+      failureReason: null,
+      startedAt: nowStr || now(),
+      finishedAt: null,
+    };
+    schedulerConnectorRunsState.unshift(run);
+
+    return job;
+  },
+
+  async runConnectorJob(jobId: string, nowStr?: string) {
+    const job = jobsState.find((j) => j.id === jobId);
+    if (!job) throw new Error("job_not_found");
+    if (job.status !== "queued" && job.status !== "failed") {
+      return job;
+    }
+    job.status = "running";
+    job.attempts += 1;
+
+    const ruleId = job.payload.ruleId as string;
+    const rule = sourceRulesState.find((r) => r.id === ruleId);
+    if (!rule) {
+      job.status = "failed";
+      job.failureReason = "source_rule_not_found";
+      return job;
+    }
+
+    let run = schedulerConnectorRunsState.find((r) => r.sourceRuleId === ruleId && r.status === "queued");
+    if (!run) {
+      run = {
+        id: crypto.randomUUID(),
+        organizationId: job.organizationId,
+        sourceRuleId: ruleId,
+        status: "running",
+        cursorBefore: rule.cursor,
+        cursorAfter: null,
+        fetchedCount: 0,
+        failureReason: null,
+        startedAt: nowStr || now(),
+        finishedAt: null,
+      };
+      schedulerConnectorRunsState.unshift(run);
+    } else {
+      run.status = "running";
+      run.startedAt = nowStr || now();
+    }
+
+    try {
+      let fetched: IngestedItem[] = [];
+      if (rule.type === "tiktok_research") {
+        const connector = new TikTokResearchConnector();
+        fetched = await connector.fetch(rule, rule.cursor);
+      } else if (rule.type === "instagram_public_profile") {
+        const connector = new InstagramPublicProfileConnector();
+        fetched = await connector.fetch(rule, rule.cursor);
+      } else {
+        throw new Error(`unsupported_connector_type:${rule.type}`);
+      }
+
+      const activeRules = await this.listKeywordRules();
+      const activeRule = activeRules[0] || keywordRulesState[0] || keywordRules[0];
+
+      let insertedCount = 0;
+      const parsedItems: MonitoringItem[] = [];
+
+      for (const rawItem of fetched) {
+        const relevance = explainKeywordMatch(`${rawItem.title} ${rawItem.text} ${rawItem.url}`, activeRule);
+        if (relevance.score < 35) {
+          continue;
+        }
+
+        const dedupeKey = makeDedupeKey(rawItem, rule.type);
+        const duplicate = items.some((i) => i.dedupeKey === dedupeKey || i.originalUrl === rawItem.url);
+        if (duplicate) {
+          continue;
+        }
+
+        const newItem: MonitoringItem = {
+          id: crypto.randomUUID(),
+          sourceId: rule.sourceId || "watchlist",
+          sourceName: rawItem.authorName || "Watchlist",
+          sourceType: rule.type,
+          state: "needs_review",
+          title: rawItem.title,
+          originalUrl: rawItem.url,
+          authorName: rawItem.authorName ?? "غير محدد",
+          authorHandle: rawItem.authorHandle ?? undefined,
+          publishedAt: rawItem.publishedAt,
+          summary: rawItem.text,
+          summarySourceText: rawItem.text,
+          sentiment: estimateSentiment(relevance.score),
+          sentimentConfidence: Math.max(50, Math.min(95, relevance.score)),
+          relevanceScore: relevance.score,
+          relevanceReason: relevance.reason,
+          matchedTerms: relevance.matchedTerms,
+          dedupeKey,
+          hasReportGradeCapture: false,
+          sourceItemId: rawItem.sourceItemId,
+          raw_response: rawItem.raw,
+          discoveryMethod: "auto_search",
+          organizationId: rule.organizationId,
+          topicId: rule.topicId,
+        };
+
+        items.unshift(newItem);
+        parsedItems.push(newItem);
+        insertedCount += 1;
+
+        audit("item.ingested", newItem.id, {
+          sourceType: rule.type,
+          sourceId: rule.sourceId,
+          canonicalUrl: rawItem.url,
+        });
+      }
+
+      let nextCursor = rule.cursor;
+      if (fetched.length > 0) {
+        const sorted = [...fetched].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+        const latest = sorted[0];
+        if (rule.type === "tiktok_research") {
+          nextCursor = { search_id: latest.sourceItemId };
+        } else if (rule.type === "instagram_public_profile") {
+          nextCursor = { lastPublishedAt: latest.publishedAt };
+        }
+      }
+
+      rule.cursor = nextCursor;
+      job.status = "succeeded";
+      job.failureReason = null;
+
+      run.status = "success";
+      run.cursorAfter = nextCursor;
+      run.fetchedCount = insertedCount;
+      run.finishedAt = nowStr || now();
+      return job;
+    } catch (e: unknown) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      job.status = "failed";
+      job.failureReason = errorMsg;
+
+      run.status = "failed";
+      run.failureReason = errorMsg;
+      run.finishedAt = nowStr || now();
+      return job;
+    }
   },
 };

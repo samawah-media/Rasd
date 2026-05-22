@@ -6,7 +6,7 @@ import {
   extractLegacyPublishDateIso,
   getHidayathonClientReportData,
 } from "../src/lib/client-report-data";
-import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey } from "../src/lib/connectors";
+import { canonicalizeUrl, detectPlatformFromUrl, explainKeywordMatch, makeDedupeKey } from "../src/lib/connectors";
 import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
@@ -409,5 +409,98 @@ describe("connector and budget utilities", () => {
     assert.equal(isSafePublicHttpUrl("http://192.168.1.20/admin"), false);
     assert.equal(isSafePublicHttpUrl("http://[::1]/admin"), false);
     assert.equal(isSafePublicHttpUrl("https://user:pass@example.com/news"), false);
+  });
+
+  it("proves storage path resolves dynamically based on real organizationId and topicId", async () => {
+    const uploads: Array<{ bucket: string; path: string; contentType?: string; bytes: number }> = [];
+    const fakeSupabase = {
+      storage: {
+        getBucket: async () => ({ data: { id: "rasd-evidence" }, error: null }),
+        from: (bucket: string) => ({
+          upload: async (path: string, body: Uint8Array, options: { contentType?: string }) => {
+            uploads.push({ bucket, path, contentType: options.contentType, bytes: body.byteLength });
+            return { data: { path }, error: null };
+          },
+        }),
+      },
+    };
+
+    const result = await persistEvidenceAsset({
+      supabase: fakeSupabase as never,
+      item: {
+        id: "item-special",
+        sourceId: "source-1",
+        sourceName: "TikTok Ingestion",
+        sourceType: "manual_url",
+        state: "needs_review",
+        title: "فيديو رائع",
+        originalUrl: "https://tiktok.com/@user/video/123",
+        publishedAt: "2026-05-22T00:00:00.000Z",
+        summary: "ملخص",
+        summarySourceText: "ملخص",
+        sentiment: "positive",
+        sentimentConfidence: 90,
+        relevanceScore: 80,
+        relevanceReason: "matched",
+        matchedTerms: ["تيك توك"],
+        dedupeKey: "manual_url:https://tiktok.com/@user/video/123",
+        hasReportGradeCapture: false,
+        organizationId: "my-custom-org",
+        topicId: "my-custom-topic",
+      },
+      captureId: "capture-special",
+      kind: "report_grade",
+      sourceUrl: "https://cdn.example.com/evidence.webp",
+      nowIso: "2026-05-22T00:00:00.000Z",
+      fetcher: async () =>
+        new Response(new Uint8Array([1, 2, 3, 4, 5]), {
+          status: 200,
+          headers: { "content-type": "image/webp" },
+        }),
+    });
+
+    assert.equal(result.persisted, true);
+    assert.equal(uploads.length, 1);
+    assert.equal(uploads[0].path, "organizations/my-custom-org/topics/my-custom-topic/items/item-special/captures/2026-05-22T00-00-00-000Z-report_grade-capture-special.webp");
+  });
+
+  it("detects and canonicalizes TikTok and Instagram URLs correctly", () => {
+    // 1. Detection
+    assert.equal(detectPlatformFromUrl("https://tiktok.com/@username/video/12345"), "tiktok");
+    assert.equal(detectPlatformFromUrl("https://vm.tiktok.com/ABC"), "tiktok");
+    assert.equal(detectPlatformFromUrl("https://instagram.com/p/ABCDE"), "instagram");
+    assert.equal(detectPlatformFromUrl("https://instagr.am/p/ABCDE"), "instagram");
+    assert.equal(detectPlatformFromUrl("https://example.com/news"), "web");
+
+    // 2. Canonicalization
+    assert.equal(canonicalizeUrl("https://instagram.com/p/ABCDE/"), "https://instagram.com/p/ABCDE");
+    assert.equal(canonicalizeUrl("https://instagr.am/p/ABCDE?igsh=123"), "https://instagram.com/p/ABCDE");
+    assert.equal(canonicalizeUrl("https://tiktok.com/@username/video/12345?is_from_webapp=1"), "https://tiktok.com/@username/video/12345");
+  });
+
+  it("extracts TikTok and Instagram metadata correctly with platform detection", async () => {
+    const tiktokMeta = await fetchUrlMetadata("https://tiktok.com/@username/video/12345", async () => {
+      return new Response(
+        '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+    });
+
+    const instagramMeta = await fetchUrlMetadata("https://instagram.com/p/ABCDE", async () => {
+      return new Response(
+        '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور على انستغرام"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+    });
+
+    assert.equal(tiktokMeta.platform, "TikTok");
+    assert.equal(tiktokMeta.title, "TikTok Video");
+    assert.equal(tiktokMeta.text, "فيديو رائع على تيك توك");
+    assert.equal(tiktokMeta.imageUrl, "https://tiktok.com/image.jpg");
+
+    assert.equal(instagramMeta.platform, "Instagram");
+    assert.equal(instagramMeta.title, "Instagram Post");
+    assert.equal(instagramMeta.text, "منشور على انستغرام");
+    assert.equal(instagramMeta.imageUrl, "https://instagram.com/image.jpg");
   });
 });
