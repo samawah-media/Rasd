@@ -78,7 +78,18 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     .stat b { display: block; font-size: 24px; margin-top: 8px; }
     section { padding: 18px; margin-bottom: 16px; }
     article { display: grid; grid-template-columns: 170px 1fr; gap: 16px; padding: 14px; margin-bottom: 12px; break-inside: avoid; }
-    img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #edf0eb; background: #f2f4ef; }
+    img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: contain;
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #edf0eb;
+      background: linear-gradient(180deg, #fafaf8 0%, #eef2eb 100%);
+      padding: 6px;
+    }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
     .chip { border-radius: 999px; background: #e8f5ef; color: #116a5c; padding: 4px 10px; font-size: 12px; font-weight: 700; }
     a { color: #116a5c; font-weight: 700; }

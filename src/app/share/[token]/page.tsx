@@ -65,11 +65,19 @@ export default async function SharedReportPage({
           <div className="divide-y divide-[#edf0eb]">
             {items.map((item) => {
               const imagePath = item.contentImagePath ?? item.evidenceImagePath;
+              const isEvidenceCard = Boolean(imagePath && imagePath.includes("/evidence-card.svg"));
               return (
                 <article className="grid gap-4 p-4 md:grid-cols-[150px_1fr]" key={item.id}>
-                  <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-[#dfe3d9] bg-[#f2f4ef]">
+                  <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-[#dfe3d9] bg-[linear-gradient(180deg,#fafaf8_0%,#eef2eb_100%)]">
                     {imagePath ? (
-                      <Image alt="صورة المحتوى" className="h-full w-full object-cover object-top" height={220} src={imagePath} unoptimized width={300} />
+                      <>
+                        <Image alt="صورة المحتوى" className="h-full w-full object-contain p-1.5" height={220} src={imagePath} unoptimized width={300} />
+                        {isEvidenceCard ? (
+                          <span className="absolute left-2 top-2 rounded-md bg-white/95 px-2 py-1 text-[10px] font-extrabold text-[#6a5a23] border border-[#eadfb7]">
+                            دليل محتوى
+                          </span>
+                        ) : null}
+                      </>
                     ) : null}
                   </div>
                   <div>

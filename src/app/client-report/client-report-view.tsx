@@ -522,6 +522,7 @@ export function ClientReportView({ data }: { data: ClientReportData; role: Role 
 function ReportRow({ item, selected, onClick }: { item: ClientReportItem; selected: boolean; onClick: () => void }) {
   const imagePath = item.contentImagePath ?? item.evidenceImagePath;
   const isPreparing = !item.originalUrl || !imagePath;
+  const isEvidenceCard = isEvidenceCardAsset(imagePath);
 
   return (
     <button
@@ -535,9 +536,23 @@ function ReportRow({ item, selected, onClick }: { item: ClientReportItem; select
     >
       <div className="flex flex-col md:flex-row gap-4 w-full">
         {/* Aspect Image Wrapper */}
-        <div className="relative w-full md:w-[130px] aspect-[4/3] shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)]">
+        <div className="relative w-full md:w-[172px] aspect-[4/3] shrink-0 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[linear-gradient(180deg,#fafaf8_0%,#f0f3ec_100%)]">
           {imagePath ? (
-            <Image alt="صورة التغطية" className="h-full w-full object-cover object-top" height={180} src={imagePath} unoptimized width={240} />
+            <>
+              <Image
+                alt="صورة التغطية"
+                className="h-full w-full object-contain p-1.5"
+                height={240}
+                src={imagePath}
+                unoptimized
+                width={320}
+              />
+              {isEvidenceCard ? (
+                <span className="absolute left-2 top-2 rounded-lg bg-white/95 px-2 py-1 text-[10px] font-extrabold text-[#6a5a23] shadow-sm border border-[#eadfb7]">
+                  دليل محتوى
+                </span>
+              ) : null}
+            </>
           ) : (
             <div className="grid h-full place-items-center text-[var(--color-text-muted)]">
               <ImageIcon size={22} />
@@ -606,6 +621,7 @@ function DetailPanel({
 
   const imagePath = item.contentImagePath ?? item.evidenceImagePath;
   const publishDateIso = item.publishDateIso;
+  const isEvidenceCard = isEvidenceCardAsset(imagePath);
 
   return (
     <aside className={mobile ? "" : "hidden lg:block lg:sticky lg:top-24 lg:self-start shrink-0"}>
@@ -625,15 +641,30 @@ function DetailPanel({
         <div className="space-y-4">
           {imagePath ? (
             <button
-              className="group relative block w-full overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] shadow-sm hover:shadow"
+              className="group relative block w-full overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[linear-gradient(180deg,#fafaf8_0%,#eef2eb_100%)] shadow-sm hover:shadow"
               onClick={() => onZoom(imagePath)}
               type="button"
             >
-              <Image alt="صورة التغطية المحددة" className="h-auto w-full rounded-xl transition group-hover:scale-[1.01]" height={1200} priority src={imagePath} unoptimized width={900} />
+              <div className="relative aspect-[10/7] w-full">
+                <Image
+                  alt="صورة التغطية المحددة"
+                  className="h-full w-full rounded-xl object-contain p-2 transition group-hover:scale-[1.01]"
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 380px"
+                  src={imagePath}
+                  unoptimized
+                />
+              </div>
               <span className="absolute left-3 top-3 inline-flex h-8 items-center gap-1.5 rounded-xl bg-white/95 px-3 text-[10px] font-bold shadow-sm select-none border border-stone-100">
                 <Maximize2 size={12} />
                 تكبير الصورة
               </span>
+              {isEvidenceCard ? (
+                <span className="absolute bottom-3 right-3 rounded-xl bg-[#fff7db]/95 px-3 py-1.5 text-[10px] font-extrabold text-[#6a5a23] shadow-sm border border-[#eadfb7]">
+                  هذه معاينة دليل محتوى وليست لقطة شاشة حقيقية
+                </span>
+              ) : null}
             </button>
           ) : (
             <div className="grid min-h-36 place-items-center rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] text-[var(--color-text-muted)] font-semibold text-xs">
@@ -887,4 +918,8 @@ function sentimentDisplay(label: string, sentiment: string) {
 function onFilterDate(value: string, onFilter: (key: ClickableFilterKey, value: string) => void) {
   onFilter("from", value);
   onFilter("to", value);
+}
+
+function isEvidenceCardAsset(value: string | null | undefined) {
+  return Boolean(value && value.includes("/evidence-card.svg"));
 }
