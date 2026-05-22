@@ -3,19 +3,12 @@ import type {
   KeywordRule,
   MonitoringItem,
   SourceType,
+  SourceRule,
 } from "./types";
 
 export type Cursor = {
   sinceId?: string;
   lastFetchedAt?: string;
-};
-
-export type SourceRule = {
-  id: string;
-  type: SourceType;
-  url?: string;
-  query?: string;
-  keywordRule: KeywordRule;
 };
 
 export type IngestedItem = {
@@ -41,17 +34,55 @@ export function makeDedupeKey(item: IngestedItem, sourceType: SourceType) {
   return `${sourceType}:${canonicalizeUrl(item.url)}`;
 }
 
+export function detectPlatformFromUrl(url: string): "tiktok" | "instagram" | "x" | "web" | "rss" | "unknown" {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
+      return "x";
+    }
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+      return "tiktok";
+    }
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
+      return "instagram";
+    }
+    return "web";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function canonicalizeUrl(url: string) {
   try {
     const parsed = new URL(url);
+    parsed.protocol = "https:";
     const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
 
     if (
       (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) &&
       /\/status\/\d+/u.test(parsed.pathname)
     ) {
-      parsed.protocol = "https:";
       parsed.hostname = "x.com";
+      parsed.search = "";
+      parsed.hash = "";
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+      return parsed.toString().replace(/\/$/, "");
+    }
+
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
+      parsed.hostname = "instagram.com";
+      parsed.search = "";
+      parsed.hash = "";
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+      return parsed.toString().replace(/\/$/, "");
+    }
+
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+      if (host !== "vm.tiktok.com" && host !== "vt.tiktok.com") {
+        parsed.hostname = "tiktok.com";
+      }
       parsed.search = "";
       parsed.hash = "";
       parsed.pathname = parsed.pathname.replace(/\/+$/, "");

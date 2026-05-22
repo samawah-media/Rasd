@@ -7,7 +7,9 @@ create type public.source_type as enum (
   'web_page',
   'x_oembed',
   'x_recent_search',
-  'x_filtered_stream'
+  'x_filtered_stream',
+  'tiktok_research',
+  'instagram_public_profile'
 );
 create type public.source_credibility as enum ('official', 'media', 'influencer', 'public');
 create type public.item_state as enum (
@@ -36,7 +38,10 @@ create type public.usage_event_type as enum (
   'screenshot',
   'storage_mb',
   'pdf_export',
-  'report_view'
+  'report_view',
+  'tiktok_read',
+  'instagram_read',
+  'media_hydration'
 );
 
 create table public.organizations (

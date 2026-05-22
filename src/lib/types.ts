@@ -6,7 +6,9 @@ export type SourceType =
   | "web_page"
   | "x_oembed"
   | "x_recent_search"
-  | "x_filtered_stream";
+  | "x_filtered_stream"
+  | "tiktok_research"
+  | "instagram_public_profile";
 
 export type SourceCredibility = "official" | "media" | "influencer" | "public";
 
@@ -101,6 +103,8 @@ export type MonitoringItem = {
   sourceItemId?: string;
   raw_response?: unknown;
   discoveryMethod?: "manual" | "rss" | "auto_search";
+  organizationId?: string;
+  topicId?: string;
 };
 
 export type Capture = {
@@ -114,7 +118,7 @@ export type Capture = {
 };
 
 export type ReportItemCard = {
-  platform: "X" | "Website" | "News" | "Official";
+  platform: "X" | "Website" | "News" | "Official" | "TikTok" | "Instagram";
   source_name: string;
   author_name?: string;
   author_handle?: string;
@@ -149,4 +153,44 @@ export type HealthMetric = {
   label: string;
   value: string;
   status: "good" | "warning" | "danger";
+};
+
+export type SourceRule = {
+  id: string;
+  organizationId: string;
+  topicId: string;
+  sourceId: string | null;
+  type: SourceType;
+  query: string | null;
+  url: string | null;
+  cursor: Record<string, unknown> | null;
+  active: boolean;
+  createdAt: string;
+  keywordRule?: KeywordRule;
+};
+
+export type Job = {
+  id: string;
+  organizationId: string;
+  jobType: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "dead_letter";
+  idempotencyKey: string;
+  attempts: number;
+  payload: Record<string, unknown>;
+  failureReason: string | null;
+  availableAt: string;
+  createdAt: string;
+};
+
+export type ConnectorRun = {
+  id: string;
+  organizationId: string;
+  sourceRuleId: string;
+  status: string;
+  cursorBefore: Record<string, unknown> | null;
+  cursorAfter: Record<string, unknown> | null;
+  fetchedCount: number;
+  failureReason: string | null;
+  startedAt: string;
+  finishedAt: string | null;
 };

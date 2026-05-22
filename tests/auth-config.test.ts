@@ -51,8 +51,13 @@ describe("auth and role routing rules", () => {
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/source-1/poll"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/sources/poll-active"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/x-search"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/source-rules"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/source-rules"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("DELETE", "/api/source-rules/rule-1"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/connectors/runs"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("GET", "/api/captures/capture-1/asset"), memberRoles);
     assert.equal(getApiRouteRolesForTest("GET", "/api/cron/poll-sources"), "public");
+    assert.equal(getApiRouteRolesForTest("GET", "/api/cron/run-connectors"), "public");
     assert.equal(isRoleAllowed("viewer", adminRoles), false);
   });
 });

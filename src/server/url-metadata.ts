@@ -12,7 +12,7 @@ export type ExtractionResult = {
   publishedAt?: string;
   canonicalUrl?: string;
   imageUrl?: string;
-  platform: "X" | "Website" | "Unknown";
+  platform: "X" | "TikTok" | "Instagram" | "Website" | "Unknown";
   source: "x_oembed" | "html_metadata" | "url_only";
   readabilityUsed?: boolean;
   warnings?: string[];
@@ -59,9 +59,15 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch):
 
 export function platformFromUrl(value: string): UrlMetadata["platform"] {
   try {
-    const host = new URL(value).hostname.replace(/^www\./, "");
+    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
     if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
       return "X";
+    }
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+      return "TikTok";
+    }
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
+      return "Instagram";
     }
     return "Website";
   } catch {
@@ -231,7 +237,7 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
     publishedAt,
     canonicalUrl,
     imageUrl,
-    platform: "Website",
+    platform: platformFromUrl(canonicalUrl ?? url),
     source: "html_metadata",
     readabilityUsed: Boolean(readableArticle),
     warnings: warnings.length ? warnings : undefined,

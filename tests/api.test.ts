@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { api } from "../src/server/api";
 import { store } from "../src/server/store";
+import { TikTokResearchConnector } from "../src/lib/connectors/tiktok/research";
+import { InstagramPublicProfileConnector } from "../src/lib/connectors/instagram/public-profile";
+import { DEFAULT_ORGANIZATION_ID, DEFAULT_TOPIC_ID } from "../src/lib/auth-config";
 
 async function requestJson(path: string, init?: RequestInit) {
   const response = await api.fetch(
@@ -958,5 +961,565 @@ describe("Hono API acceptance workflow", () => {
     assert.match(svg.text, /<svg/);
     assert.match(svg.text, /صورة دليل محتوى/);
     assert.match(svg.text, /اختبار/);
+  });
+
+  it("handles TikTok manual URL ingestion and verification workflow smoke test", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك حول هاكاثون هداية"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+
+    try {
+      const liveReport = await requestJson("/api/reports/hidayathon-live");
+      assert.equal(liveReport.response.status, 200);
+
+      const manual = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://tiktok.com/@username/video/12345" }),
+      });
+
+      assert.equal(manual.response.status, 201);
+      assert.equal(manual.json.metadata.platform, "TikTok");
+      assert.equal(manual.json.item.state, "needs_review");
+      assert.equal(manual.json.item.title, "TikTok Video");
+
+      const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
+        method: "POST",
+        body: JSON.stringify({ action: "approve", review_notes: "TikTok smoke test approval" }),
+      });
+
+      assert.equal(approved.response.status, 200);
+      assert.equal(approved.json.item.state, "approved_pending_capture");
+
+      const captured = await requestJson(`/api/items/${manual.json.item.id}/capture-report-grade`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      assert.equal(captured.response.status, 200);
+      assert.equal(captured.json.item.state, "report_ready");
+
+      const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({ item_id: manual.json.item.id }),
+      });
+
+      assert.equal(inserted.response.status, 200);
+      assert.equal(inserted.json.ok, true);
+      assert.equal(inserted.json.reportItem.itemId, manual.json.item.id);
+
+      const duplicate = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://tiktok.com/@username/video/12345?utm_source=again" }),
+      });
+      assert.equal(duplicate.response.status, 200);
+      assert.equal(duplicate.json.duplicate, true);
+      assert.equal(duplicate.json.item.id, manual.json.item.id);
+      assert.equal(duplicate.json.item.state, "added_to_report");
+
+      const items = await requestJson("/api/items");
+      const storedItem = items.json.items.find((item: { id: string }) => item.id === manual.json.item.id);
+      assert.equal(storedItem.state, "added_to_report");
+      assert.equal(storedItem.originalUrl, "https://tiktok.com/@username/video/12345");
+
+      const reportItems = await requestJson(`/api/reports/${liveReport.json.report.id}/items`);
+      assert.ok(reportItems.json.report_items.some((item: { itemId: string }) => item.itemId === manual.json.item.id));
+
+      const clientReport = await requestJson("/api/client-report/hidayathon");
+      const clientReportItem = clientReport.json.report.items.find((item: { id: string }) => item.id === manual.json.item.id);
+      assert.equal(clientReport.response.status, 200);
+      assert.equal(clientReport.json.report.summary.items, 125);
+      assert.equal(clientReportItem.platform, "TikTok");
+      assert.equal(clientReportItem.title, "TikTok Video");
+      assert.equal(clientReportItem.originalUrl, "https://tiktok.com/@username/video/12345");
+      assert.equal(clientReportItem.screenshotStatus, "available");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("handles Instagram manual URL ingestion and verification workflow smoke test", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور رائع على انستغرام حول رصد هداية"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
+        { status: 200, headers: { "content-type": "text/html" } }
+      );
+
+    try {
+      const liveReport = await requestJson("/api/reports/hidayathon-live");
+      assert.equal(liveReport.response.status, 200);
+
+      const manual = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://instagram.com/p/ABCDE" }),
+      });
+
+      assert.equal(manual.response.status, 201);
+      assert.equal(manual.json.metadata.platform, "Instagram");
+      assert.equal(manual.json.item.state, "needs_review");
+      assert.equal(manual.json.item.title, "Instagram Post");
+
+      const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
+        method: "POST",
+        body: JSON.stringify({ action: "approve", review_notes: "Instagram smoke test approval" }),
+      });
+
+      assert.equal(approved.response.status, 200);
+      assert.equal(approved.json.item.state, "approved_pending_capture");
+
+      const captured = await requestJson(`/api/items/${manual.json.item.id}/capture-report-grade`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      assert.equal(captured.response.status, 200);
+      assert.equal(captured.json.item.state, "report_ready");
+
+      const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
+        method: "POST",
+        body: JSON.stringify({ item_id: manual.json.item.id }),
+      });
+
+      assert.equal(inserted.response.status, 200);
+      assert.equal(inserted.json.ok, true);
+      assert.equal(inserted.json.reportItem.itemId, manual.json.item.id);
+
+      const duplicate = await requestJson("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: "https://instagram.com/p/ABCDE?utm_source=again" }),
+      });
+      assert.equal(duplicate.response.status, 200);
+      assert.equal(duplicate.json.duplicate, true);
+      assert.equal(duplicate.json.item.id, manual.json.item.id);
+      assert.equal(duplicate.json.item.state, "added_to_report");
+
+      const items = await requestJson("/api/items");
+      const storedItem = items.json.items.find((item: { id: string }) => item.id === manual.json.item.id);
+      assert.equal(storedItem.state, "added_to_report");
+      assert.equal(storedItem.originalUrl, "https://instagram.com/p/ABCDE");
+
+      const reportItems = await requestJson(`/api/reports/${liveReport.json.report.id}/items`);
+      assert.ok(reportItems.json.report_items.some((item: { itemId: string }) => item.itemId === manual.json.item.id));
+
+      const clientReport = await requestJson("/api/client-report/hidayathon");
+      const clientReportItem = clientReport.json.report.items.find((item: { id: string }) => item.id === manual.json.item.id);
+      assert.equal(clientReport.response.status, 200);
+      assert.equal(clientReport.json.report.summary.items, 125);
+      assert.equal(clientReportItem.platform, "Instagram");
+      assert.equal(clientReportItem.title, "Instagram Post");
+      assert.equal(clientReportItem.originalUrl, "https://instagram.com/p/ABCDE");
+      assert.equal(clientReportItem.screenshotStatus, "available");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("creates, lists, disables, and deletes TikTok and Instagram source rules through the API", async () => {
+    const invalidType = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({ type: "rss", query: "hidayathon" }),
+    });
+    const invalidInstagram = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({ type: "instagram_public_profile", url: "https://instagram.com/p/ABCDE" }),
+    });
+    const missingTikTokTarget = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({ type: "tiktok_research" }),
+    });
+
+    assert.equal(invalidType.response.status, 400);
+    assert.equal(invalidType.json.error, "source_rule_type_unsupported");
+    assert.equal(invalidInstagram.response.status, 400);
+    assert.equal(invalidInstagram.json.error, "instagram_profile_url_invalid");
+    assert.equal(missingTikTokTarget.response.status, 400);
+    assert.equal(missingTikTokTarget.json.error, "tiktok_query_or_url_required");
+
+    const tiktok = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "tiktok_research",
+        query: "hidayathon",
+      }),
+    });
+    const instagram = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "instagram_public_profile",
+        url: "https://instagram.com/hidayathon",
+        query: "hidayathon",
+      }),
+    });
+
+    assert.equal(tiktok.response.status, 201);
+    assert.equal(tiktok.json.source_rule.organizationId, DEFAULT_ORGANIZATION_ID);
+    assert.equal(tiktok.json.source_rule.topicId, DEFAULT_TOPIC_ID);
+    assert.equal(tiktok.json.source_rule.type, "tiktok_research");
+    assert.equal(tiktok.json.source_rule.query, "hidayathon");
+    assert.equal(tiktok.json.source_rule.active, true);
+
+    assert.equal(instagram.response.status, 201);
+    assert.equal(instagram.json.source_rule.type, "instagram_public_profile");
+    assert.equal(instagram.json.source_rule.url, "https://instagram.com/hidayathon");
+
+    const listed = await requestJson("/api/source-rules");
+    assert.equal(listed.response.status, 200);
+    assert.equal(listed.json.source_rules.length, 2);
+    assert.equal(Array.isArray(listed.json.connector_runs), true);
+
+    const disabled = await requestJson(`/api/source-rules/${tiktok.json.source_rule.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active: false }),
+    });
+    assert.equal(disabled.response.status, 200);
+    assert.equal(disabled.json.source_rule.active, false);
+
+    const deleted = await requestJson(`/api/source-rules/${instagram.json.source_rule.id}`, {
+      method: "DELETE",
+    });
+    assert.equal(deleted.response.status, 200);
+    assert.equal(deleted.json.ok, true);
+
+    const listedAfterDelete = await requestJson("/api/source-rules");
+    assert.deepEqual(
+      listedAfterDelete.json.source_rules.map((rule: { id: string }) => rule.id),
+      [tiktok.json.source_rule.id],
+    );
+  });
+
+  it("runs due connector jobs from source rules created by the API", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
+    process.env.CRON_SECRET = "cron_api_rules_secret";
+    process.env.RASD_CONNECTOR_MOCKS = "true";
+
+    try {
+      const tiktok = await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "tiktok_research",
+          query: "hidayathon",
+        }),
+      });
+      const instagram = await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "instagram_public_profile",
+          url: "https://instagram.com/hidayathon",
+          query: "hidayathon",
+        }),
+      });
+
+      assert.equal(tiktok.response.status, 201);
+      assert.equal(instagram.response.status, 201);
+
+      const result = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_api_rules_secret" },
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 2);
+      assert.equal(result.json.enqueuedCount, 2);
+      assert.equal(result.json.executedCount, 2);
+      assert.equal(result.json.failedCount, 0);
+
+      const items = store
+        .listItems()
+        .filter((item) => item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile");
+      assert.equal(items.length, 2);
+      assert.equal(items.every((item) => item.state === "needs_review"), true);
+      assert.ok(items.some((item) => item.sourceType === "tiktok_research"));
+      assert.ok(items.some((item) => item.sourceType === "instagram_public_profile"));
+    } finally {
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
+    }
+  });
+
+  it("runs connector scheduler through the Vercel cron wrapper", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
+    process.env.CRON_SECRET = "cron_wrapper_secret";
+    process.env.RASD_CONNECTOR_MOCKS = "true";
+
+    try {
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "tiktok_research",
+          query: "hidayathon",
+        }),
+      });
+
+      const unauthorized = await requestJson("/api/cron/run-connectors");
+      const result = await requestJson("/api/cron/run-connectors", {
+        headers: { authorization: "Bearer cron_wrapper_secret" },
+      });
+
+      assert.equal(unauthorized.response.status, 401);
+      assert.equal(unauthorized.json.error, "cron_unauthorized");
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 1);
+      assert.equal(result.json.executedCount, 1);
+      assert.equal(result.json.failedJobs.length, 0);
+    } finally {
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
+    }
+  });
+
+  it("does not ingest automated TikTok or Instagram items without mocks or credentials", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousTikTokEnabled = process.env.TIKTOK_RESEARCH_ENABLED;
+    const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+    const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+
+    process.env.CRON_SECRET = "cron_no_mock_secret";
+    delete process.env.TIKTOK_RESEARCH_ENABLED;
+    delete process.env.TIKTOK_CLIENT_KEY;
+    delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    delete process.env.RASD_CONNECTOR_MOCKS;
+
+    try {
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({ type: "tiktok_research", query: "hidayathon" }),
+      });
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "instagram_public_profile",
+          url: "https://instagram.com/hidayathon",
+        }),
+      });
+
+      const result = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_no_mock_secret" },
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 2);
+      assert.equal(result.json.executedCount, 2);
+      assert.equal(result.json.failedCount, 0);
+      assert.equal(
+        store.listItems().some((item) => item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile"),
+        false,
+      );
+    } finally {
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
+      else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
+      if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;
+      else process.env.TIKTOK_CLIENT_KEY = previousTikTokKey;
+      if (previousInstagramEnabled === undefined) delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+      else process.env.INSTAGRAM_WATCHLIST_ENABLED = previousInstagramEnabled;
+      if (previousMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousMocks;
+    }
+  });
+
+  it("executes the watchlist scheduler and worker API pipeline for due rules", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
+    process.env.CRON_SECRET = "cron_integration_test_secret";
+    process.env.RASD_CONNECTOR_MOCKS = "true";
+
+    try {
+      store.resetForTest();
+
+      await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "tiktok_research",
+        query: "هداية",
+        active: true,
+      });
+
+      await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "instagram_public_profile",
+        url: "https://instagram.com/hidayathon",
+        query: "هداية",
+        active: true,
+      });
+
+      const unauthorized = await requestJson("/api/connectors/run-due", { method: "POST" });
+      assert.equal(unauthorized.response.status, 401);
+      assert.equal(unauthorized.json.error, "cron_unauthorized");
+
+      const result = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_integration_test_secret" },
+        body: JSON.stringify({ organization_id: "demo-org" }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 2);
+      assert.equal(result.json.enqueuedCount, 2);
+      assert.equal(result.json.executedCount, 2);
+      assert.equal(result.json.failedCount, 0);
+
+      const jobs = await store.listJobs("demo-org");
+      assert.equal(jobs.length, 2);
+      assert.equal(jobs.every((j) => j.status === "succeeded"), true);
+
+      const items = store.listItems();
+      assert.ok(items.length > 0);
+      assert.ok(items.some((item) => item.sourceType === "tiktok_research"));
+      assert.ok(items.some((item) => item.sourceType === "instagram_public_profile"));
+      const automatedItems = items.filter((item) => item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile");
+      assert.equal(automatedItems.every((item) => item.state === "needs_review"), true);
+
+      const ruleFresh = await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "tiktok_research",
+        query: "هداية",
+        active: true,
+      });
+
+      const jobFresh = await store.enqueueConnectorJob(ruleFresh);
+      assert.equal(jobFresh.status, "queued");
+
+      const unauthorizedJob = await requestJson("/api/connectors/run-job", {
+        method: "POST",
+        body: JSON.stringify({ jobId: jobFresh.id }),
+      });
+      assert.equal(unauthorizedJob.response.status, 401);
+
+      const runJobResult = await requestJson("/api/connectors/run-job", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_integration_test_secret" },
+        body: JSON.stringify({ jobId: jobFresh.id }),
+      });
+      assert.equal(runJobResult.response.status, 200);
+      assert.equal(runJobResult.json.ok, true);
+      assert.equal(runJobResult.json.status, "succeeded");
+
+      const updatedJobs = await store.listJobs("demo-org");
+      const ranJob = updatedJobs.find((j) => j.id === jobFresh.id);
+      assert.ok(ranJob);
+      assert.equal(ranJob.status, "succeeded");
+
+    } finally {
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
+    }
+  });
+
+  it("does not return TikTok or Instagram mock connector items unless mock mode is explicit", async () => {
+    const previousTikTokEnabled = process.env.TIKTOK_RESEARCH_ENABLED;
+    const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+    const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+    const previousNodeEnv = process.env["NODE_ENV"];
+
+    delete process.env.TIKTOK_RESEARCH_ENABLED;
+    delete process.env.TIKTOK_CLIENT_KEY;
+    delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    delete process.env.RASD_CONNECTOR_MOCKS;
+
+    try {
+      const rule = await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "tiktok_research",
+        query: "Ù‡Ø¯Ø§ÙŠØ©",
+        active: true,
+      });
+
+      assert.deepEqual(await new TikTokResearchConnector().fetch(rule, null), []);
+      assert.deepEqual(await new InstagramPublicProfileConnector().fetch({ ...rule, type: "instagram_public_profile" }, null), []);
+
+      process.env.RASD_CONNECTOR_MOCKS = "true";
+      assert.equal((await new TikTokResearchConnector().fetch(rule, null)).length, 1);
+      assert.equal((await new InstagramPublicProfileConnector().fetch({ ...rule, type: "instagram_public_profile" }, null)).length, 1);
+
+      Object.assign(process.env, { NODE_ENV: "production" });
+      assert.deepEqual(await new TikTokResearchConnector().fetch(rule, null), []);
+      assert.deepEqual(await new InstagramPublicProfileConnector().fetch({ ...rule, type: "instagram_public_profile" }, null), []);
+    } finally {
+      if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
+      else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
+      if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;
+      else process.env.TIKTOK_CLIENT_KEY = previousTikTokKey;
+      if (previousInstagramEnabled === undefined) delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+      else process.env.INSTAGRAM_WATCHLIST_ENABLED = previousInstagramEnabled;
+      if (previousMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousMocks;
+      if (previousNodeEnv === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+      else Object.assign(process.env, { NODE_ENV: previousNodeEnv });
+    }
+  });
+
+  it("reports connector job failures from run-job and run-due responses", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "cron_failure_test_secret";
+
+    try {
+      store.resetForTest();
+      const unsupportedRule = await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "rss",
+        query: "Ù‡Ø¯Ø§ÙŠØ©",
+        active: true,
+      });
+      const job = await store.enqueueConnectorJob(unsupportedRule);
+
+      const runJobResult = await requestJson("/api/connectors/run-job", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_failure_test_secret" },
+        body: JSON.stringify({ jobId: job.id }),
+      });
+
+      assert.equal(runJobResult.response.status, 500);
+      assert.equal(runJobResult.json.ok, false);
+      assert.equal(runJobResult.json.status, "failed");
+      assert.match(runJobResult.json.failureReason, /unsupported_connector_type:rss/);
+
+      await store.upsertSourceRule({
+        organizationId: "demo-org",
+        topicId: "demo-topic",
+        type: "rss",
+        query: "Ù‡Ø¯Ø§ÙŠØ©",
+        active: true,
+      });
+
+      const dueFailure = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_failure_test_secret" },
+        body: JSON.stringify({ organization_id: "demo-org" }),
+      });
+
+      assert.equal(dueFailure.response.status, 200);
+      assert.equal(dueFailure.json.ok, true);
+      assert.equal(dueFailure.json.executedCount, 0);
+      assert.equal(dueFailure.json.failedCount, 1);
+      assert.match(dueFailure.json.failedJobs[0].error, /unsupported_connector_type:rss/);
+    } finally {
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+    }
   });
 });
