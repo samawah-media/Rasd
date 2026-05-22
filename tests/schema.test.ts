@@ -134,6 +134,23 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(sql, /alter type public\.usage_event_type add value if not exists 'media_hydration'/);
   });
 
+  it("stores source-rule polling intervals in schema and migration", async () => {
+    const sql = await schemaSql();
+    const sourceRules = tableBlock(sql, "source_rules");
+    assert.match(sourceRules, /poll_interval_minutes integer not null default 1440/);
+    assert.match(sourceRules, /poll_interval_minutes between 15 and 10080/);
+
+    const migrationsDir = join(process.cwd(), "supabase", "migrations");
+    const migrations = await readdir(migrationsDir);
+    const intervalMigration = migrations.find((file) => file.endsWith("_add_source_rule_poll_interval.sql"));
+    assert.ok(intervalMigration);
+
+    const migration = await migrationSql(intervalMigration);
+    assert.match(migration, /alter table public\.source_rules/);
+    assert.match(migration, /add column if not exists poll_interval_minutes integer not null default 1440/);
+    assert.match(migration, /source_rules_poll_interval_minutes_check/);
+  });
+
   it("registers a protected Vercel cron route for connector scheduling without removing RSS polling", async () => {
     const config = JSON.parse(await readFile(join(process.cwd(), "vercel.json"), "utf8")) as {
       crons: Array<{ path: string; schedule: string }>;

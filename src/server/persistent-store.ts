@@ -94,6 +94,7 @@ type DbSourceRuleRow = {
   url: string | null;
   cursor: Record<string, unknown> | null;
   active: boolean;
+  poll_interval_minutes: number | null;
   created_at: string;
 };
 
@@ -285,6 +286,7 @@ function toSourceRule(row: DbSourceRuleRow): SourceRule {
     url: row.url,
     cursor: row.cursor,
     active: row.active ?? true,
+    pollIntervalMinutes: row.poll_interval_minutes ?? 1440,
     createdAt: row.created_at,
   };
 }
@@ -317,6 +319,83 @@ function toConnectorRun(row: DbConnectorRunRow): ConnectorRun {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
   };
+}
+
+async function buildAutomationHealth(input: {
+  listSourceRules: () => Promise<SourceRule[]>;
+  listConnectorRuns: () => Promise<ConnectorRun[]>;
+  listJobs: () => Promise<Job[]>;
+}) {
+  const base = {
+    schemaReady: true,
+    cronSecretConfigured: Boolean(process.env.CRON_SECRET),
+    connectorCronPath: "/api/cron/run-connectors",
+    connectorCronScheduleUtc: "15 5 * * *",
+    mocksEnabled:
+      process.env.NODE_ENV !== "production" &&
+      (process.env.RASD_CONNECTOR_MOCKS === "true" || process.env.CONNECTOR_MOCK_MODE === "true"),
+  };
+
+  try {
+    const [sourceRules, connectorRuns, jobs, tiktokHealth, instagramHealth] = await Promise.all([
+      input.listSourceRules(),
+      input.listConnectorRuns(),
+      input.listJobs(),
+      new TikTokResearchConnector().testConnection(),
+      new InstagramPublicProfileConnector().testConnection(),
+    ]);
+    const failedJobs = jobs.filter((job) => job.status === "failed" || job.status === "dead_letter");
+    const activeRules = sourceRules.filter((rule) => rule.active);
+    return {
+      ...base,
+      sourceRulesCount: sourceRules.length,
+      activeSourceRulesCount: activeRules.length,
+      queuedJobsCount: jobs.filter((job) => job.status === "queued" || job.status === "running").length,
+      failedJobsCount: failedJobs.length,
+      latestRun: connectorRuns[0] ?? null,
+      latestFailedJob: failedJobs[0] ?? null,
+      tiktok: {
+        status: tiktokHealth.status,
+        message: tiktokHealth.message,
+        enabled: process.env.TIKTOK_RESEARCH_ENABLED === "true",
+        credentialsConfigured: Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET),
+        activeRulesCount: activeRules.filter((rule) => rule.type === "tiktok_research").length,
+      },
+      instagram: {
+        status: instagramHealth.status,
+        message: instagramHealth.message,
+        enabled: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true",
+        extractorConfigured: instagramHealth.status === "healthy",
+        activeRulesCount: activeRules.filter((rule) => rule.type === "instagram_public_profile").length,
+      },
+    };
+  } catch (error) {
+    return {
+      ...base,
+      schemaReady: false,
+      schemaError: error instanceof Error ? error.message : String(error),
+      sourceRulesCount: 0,
+      activeSourceRulesCount: 0,
+      queuedJobsCount: 0,
+      failedJobsCount: 0,
+      latestRun: null,
+      latestFailedJob: null,
+      tiktok: {
+        status: "not_configured",
+        message: "Source-rule health is unavailable until migrations are applied.",
+        enabled: process.env.TIKTOK_RESEARCH_ENABLED === "true",
+        credentialsConfigured: Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET),
+        activeRulesCount: 0,
+      },
+      instagram: {
+        status: "not_configured",
+        message: "Source-rule health is unavailable until migrations are applied.",
+        enabled: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true",
+        extractorConfigured: false,
+        activeRulesCount: 0,
+      },
+    };
+  }
 }
 
 function normalizeTerms(terms: string[] | undefined) {
@@ -807,7 +886,15 @@ export const persistentStore = {
 
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
-    const [items, usage] = await Promise.all([this.listItems(), getUsageSnapshot(supabase)]);
+    const [items, usage, automation] = await Promise.all([
+      this.listItems(),
+      getUsageSnapshot(supabase),
+      buildAutomationHealth({
+        listSourceRules: () => this.listSourceRules(DEFAULT_ORGANIZATION_ID),
+        listConnectorRuns: () => this.listConnectorRuns(DEFAULT_ORGANIZATION_ID),
+        listJobs: () => this.listJobs(DEFAULT_ORGANIZATION_ID),
+      }),
+    ]);
     const auditLogs = await this.listAuditLogs();
     const dynamicHealth: HealthMetric[] = [
       {
@@ -827,8 +914,11 @@ export const persistentStore = {
         web_page: "degraded",
         x_oembed: "not_configured",
         x_recent_search: "ready",
+        tiktok_research: automation.tiktok.status,
+        instagram_public_profile: automation.instagram.status,
       },
       usage,
+      automation,
     };
   },
 
@@ -883,6 +973,7 @@ export const persistentStore = {
         url: input.url ?? null,
         cursor: input.cursor ?? null,
         active: input.active ?? true,
+        poll_interval_minutes: input.pollIntervalMinutes ?? 1440,
       })
       .select("*")
       .single();
@@ -2019,7 +2110,7 @@ export const persistentStore = {
       if (runsError) throw runsError;
 
       const latestRun = runs?.[0];
-      const pollIntervalMinutes = row.sources?.poll_interval_minutes ?? 60;
+      const pollIntervalMinutes = row.poll_interval_minutes ?? row.sources?.poll_interval_minutes ?? 1440;
 
       if (!latestRun) {
         dueRules.push(toSourceRule(row as DbSourceRuleRow));

@@ -113,6 +113,8 @@ create table public.source_rules (
   url text,
   cursor jsonb,
   active boolean not null default true,
+  poll_interval_minutes integer not null default 1440
+    check (poll_interval_minutes between 15 and 10080),
   created_at timestamptz not null default now()
 );
 

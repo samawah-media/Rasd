@@ -1130,6 +1130,10 @@ describe("Hono API acceptance workflow", () => {
       method: "POST",
       body: JSON.stringify({ type: "tiktok_research" }),
     });
+    const invalidInterval = await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({ type: "tiktok_research", query: "hidayathon", poll_interval_minutes: 10 }),
+    });
 
     assert.equal(invalidType.response.status, 400);
     assert.equal(invalidType.json.error, "source_rule_type_unsupported");
@@ -1137,12 +1141,15 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(invalidInstagram.json.error, "instagram_profile_url_invalid");
     assert.equal(missingTikTokTarget.response.status, 400);
     assert.equal(missingTikTokTarget.json.error, "tiktok_query_or_url_required");
+    assert.equal(invalidInterval.response.status, 400);
+    assert.equal(invalidInterval.json.error, "poll_interval_minutes must be between 15 and 10080");
 
     const tiktok = await requestJson("/api/source-rules", {
       method: "POST",
       body: JSON.stringify({
         type: "tiktok_research",
         query: "hidayathon",
+        poll_interval_minutes: 360,
       }),
     });
     const instagram = await requestJson("/api/source-rules", {
@@ -1160,10 +1167,12 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(tiktok.json.source_rule.type, "tiktok_research");
     assert.equal(tiktok.json.source_rule.query, "hidayathon");
     assert.equal(tiktok.json.source_rule.active, true);
+    assert.equal(tiktok.json.source_rule.pollIntervalMinutes, 360);
 
     assert.equal(instagram.response.status, 201);
     assert.equal(instagram.json.source_rule.type, "instagram_public_profile");
     assert.equal(instagram.json.source_rule.url, "https://instagram.com/hidayathon");
+    assert.equal(instagram.json.source_rule.pollIntervalMinutes, 1440);
 
     const listed = await requestJson("/api/source-rules");
     assert.equal(listed.response.status, 200);
@@ -1176,6 +1185,13 @@ describe("Hono API acceptance workflow", () => {
     });
     assert.equal(disabled.response.status, 200);
     assert.equal(disabled.json.source_rule.active, false);
+
+    const rescheduled = await requestJson(`/api/source-rules/${tiktok.json.source_rule.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ poll_interval_minutes: 2880 }),
+    });
+    assert.equal(rescheduled.response.status, 200);
+    assert.equal(rescheduled.json.source_rule.pollIntervalMinutes, 2880);
 
     const deleted = await requestJson(`/api/source-rules/${instagram.json.source_rule.id}`, {
       method: "DELETE",
@@ -1244,6 +1260,34 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("lets admins run due source rules without exposing the cron secret to the browser", async () => {
+    const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
+    process.env.RASD_CONNECTOR_MOCKS = "true";
+
+    try {
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "tiktok_research",
+          query: "hidayathon",
+        }),
+      });
+
+      const result = await requestJson("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 1);
+      assert.equal(result.json.executedCount, 1);
+    } finally {
+      if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
+    }
+  });
+
   it("runs connector scheduler through the Vercel cron wrapper", async () => {
     const previousSecret = process.env.CRON_SECRET;
     const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
@@ -1277,6 +1321,25 @@ describe("Hono API acceptance workflow", () => {
       if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
       else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
     }
+  });
+
+  it("exposes TikTok and Instagram automation status in admin health", async () => {
+    await requestJson("/api/source-rules", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "tiktok_research",
+        query: "hidayathon",
+        poll_interval_minutes: 60,
+      }),
+    });
+
+    const health = await requestJson("/api/admin/health");
+
+    assert.equal(health.response.status, 200);
+    assert.equal(health.json.automation.schemaReady, true);
+    assert.equal(typeof health.json.automation.cronSecretConfigured, "boolean");
+    assert.equal(health.json.automation.connectorCronPath, "/api/cron/run-connectors");
+    assert.equal(health.json.automation.tiktok.activeRulesCount, 1);
   });
 
   it("does not ingest automated TikTok or Instagram items without mocks or credentials", async () => {

@@ -2,6 +2,64 @@
 
 Last updated: 2026-05-22
 
+## 2026-05-22 Follow-up: Operator Controls And Health
+
+Decision from product owner:
+
+- Watchlist timing should be controllable from the UI.
+- Anything useful for diagnosing TikTok/Instagram automation should appear in `/health`.
+- The enum migration `20260522120000_add_tiktok_instagram_connector_enums.sql` was applied manually through Supabase SQL Editor.
+- Source-rule errors should be explicit instead of the generic `رد غير متوقع من السيرفر`.
+
+Implemented in the follow-up branch:
+
+- Added `poll_interval_minutes` directly to `source_rules` so each TikTok/Instagram watchlist rule controls its own cadence.
+- Added `/sources` schedule controls for watchlists: hourly, every 6 hours, daily, every 2 days, weekly.
+- Added an admin-only `/api/source-rules/run-due` trigger so owners/editors can run due watchlists from the UI without exposing `CRON_SECRET`.
+- Improved `/api/source-rules` error responses with JSON details for missing schema/migration states.
+- Improved `/sources` API error display so HTTP status and server details are visible when a non-JSON response is returned.
+- Added `/health` automation visibility for:
+  - source-rule schema readiness
+  - `CRON_SECRET`
+  - mock mode
+  - TikTok enablement and credentials
+  - Instagram enablement and extractor readiness
+  - source-rule counts
+  - queued/failed jobs
+  - latest connector run
+  - latest failed job reason
+
+Follow-up validation result:
+
+| Check | Result |
+| --- | --- |
+| `npm run test` | Passed: 141/141 |
+| `npm run typecheck` | Passed |
+| `npm run lint` | Exit code 0, with the same 13 pre-existing warnings |
+| `npm run build` | Passed |
+| `npm run supabase:db:dry-run` | Passed; would push `20260522120000_add_tiktok_instagram_connector_enums.sql` and `20260522143000_add_source_rule_poll_interval.sql` |
+| `npm audit --audit-level=moderate` | Failed: same residual Next/PostCSS moderate advisory; `npm audit fix --force` still suggests a breaking Next downgrade and was not applied |
+
+New production migration required after this follow-up:
+
+- `supabase/migrations/20260522143000_add_source_rule_poll_interval.sql`
+- Apply it before using the new schedule selector in production.
+
+Remaining operator setup:
+
+- Confirm `CRON_SECRET` exists in Vercel Production.
+- Confirm production Vercel has `TIKTOK_RESEARCH_ENABLED`, `TIKTOK_CLIENT_KEY`, and `TIKTOK_CLIENT_SECRET` only when TikTok Research API credentials are approved.
+- Confirm production Vercel has `INSTAGRAM_WATCHLIST_ENABLED=true` only when the Instagram extractor runtime is available.
+- Confirm `RASD_CONNECTOR_MOCKS` and `CONNECTOR_MOCK_MODE` are not enabled in production.
+- Use `/health` after deploy to confirm all readiness checks.
+
+Open tasks after deployment:
+
+- Apply `20260522143000_add_source_rule_poll_interval.sql` in Supabase SQL Editor.
+- Re-test `/sources` by creating one TikTok rule and one Instagram profile rule with chosen schedules.
+- Click `تشغيل القواعد المستحقة الآن` once from `/sources` to verify jobs/runs are recorded.
+- Open `/health` and confirm schema, CRON_SECRET, mock mode, connector credentials, active rules, latest run, and failed jobs.
+
 ## Current Status
 
 The TikTok/Instagram manual and automated MVP paths are implemented locally:
@@ -42,6 +100,7 @@ Production deployment prerequisites:
 
 - Apply `supabase/migrations/20260522120000_add_tiktok_instagram_connector_enums.sql` before creating TikTok/Instagram `source_rules` in production.
 - Set `CRON_SECRET` so `/api/cron/run-connectors`, `/api/connectors/run-due`, and `/api/connectors/run-job` can reject unauthenticated calls.
+- Apply `supabase/migrations/20260522143000_add_source_rule_poll_interval.sql` before using per-rule schedule controls in production.
 - Set `TIKTOK_RESEARCH_ENABLED=true` only when TikTok Research API access is approved.
 - Set `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET` for production TikTok Research API calls.
 - Set `INSTAGRAM_WATCHLIST_ENABLED=true` only when the Instagram public-profile extractor runtime is available and approved.

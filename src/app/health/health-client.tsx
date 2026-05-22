@@ -36,6 +36,8 @@ interface HealthClientProps {
       web_page: string;
       x_oembed: string;
       x_recent_search: string;
+      tiktok_research?: string;
+      instagram_public_profile?: string;
     };
     usage?: {
       xReadsToday: number;
@@ -43,6 +45,44 @@ interface HealthClientProps {
       aiTokensThisMonth: number;
       screenshotsThisMonth: number;
       storageMb: number;
+    };
+    automation?: {
+      schemaReady: boolean;
+      schemaError?: string;
+      cronSecretConfigured: boolean;
+      connectorCronPath: string;
+      connectorCronScheduleUtc: string;
+      mocksEnabled: boolean;
+      sourceRulesCount: number;
+      activeSourceRulesCount: number;
+      queuedJobsCount: number;
+      failedJobsCount: number;
+      latestRun: {
+        status: string;
+        fetchedCount: number;
+        failureReason: string | null;
+        startedAt: string;
+        finishedAt: string | null;
+      } | null;
+      latestFailedJob: {
+        status: string;
+        failureReason: string | null;
+        createdAt: string;
+      } | null;
+      tiktok: {
+        status?: string;
+        message?: string;
+        enabled: boolean;
+        credentialsConfigured: boolean;
+        activeRulesCount: number;
+      };
+      instagram: {
+        status?: string;
+        message?: string;
+        enabled: boolean;
+        extractorConfigured: boolean;
+        activeRulesCount: number;
+      };
     };
   };
   initialLogs: {
@@ -193,6 +233,19 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
     return "فيه عطل";
   };
 
+  const getAutomationTone = (ok: boolean) => {
+    return ok ? "bg-[#00C853]/10 text-[#007f3a]" : "bg-[#fff1ed] text-[#9a341f]";
+  };
+
+  const automationStatusText = (ok: boolean) => {
+    return ok ? "جاهز" : "يحتاج ضبط";
+  };
+
+  const formatRunTime = (value?: string | null) => {
+    if (!value) return "لا يوجد";
+    return new Date(value).toLocaleString("ar-SA", { hour12: false });
+  };
+
   const getLogColor = (level: LogEntry["level"]) => {
     switch (level) {
       case "success": return "text-[#00C853]";
@@ -331,7 +384,9 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                   { label: "OEmbed (تويتر)", key: "x_oembed", color: "#111111" },
                   { label: "سحب المواقع", key: "web_page", color: "#7568d8" },
                   { label: "موجز RSS", key: "rss", color: "#FF8C00" },
-                  { label: "تلقيم يدوي", key: "manual_url", color: "#00C853" }
+                  { label: "تلقيم يدوي", key: "manual_url", color: "#00C853" },
+                  { label: "TikTok", key: "tiktok_research", color: "#111111" },
+                  { label: "Instagram", key: "instagram_public_profile", color: "#e1306c" }
                 ].map((conn) => {
                   const status = health.connectors?.[conn.key as keyof typeof health.connectors] ?? "healthy";
                   const isActive = status === "healthy" || status === "degraded";
@@ -357,6 +412,110 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                 })}
               </div>
             </div>
+
+            {/* TikTok / Instagram automation health */}
+            {health.automation ? (
+              <div className="bg-white rounded-3xl border border-[var(--color-border)] p-6 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+                  <h2 className="text-sm font-black text-[var(--color-text-title)] flex items-center gap-2">
+                    <Activity className="h-4.5 w-4.5 text-[#2383E2]" />
+                    صحة رصد TikTok/Instagram الآلي
+                  </h2>
+                  <Link href="/sources" className="text-[10px] font-extrabold text-[#2383E2] hover:underline">
+                    إدارة القواعد من المصادر
+                  </Link>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  {[
+                    { label: "Migration source_rules", ok: health.automation.schemaReady, detail: health.automation.schemaReady ? "الجداول والأعمدة جاهزة" : (health.automation.schemaError ?? "تحتاج migration") },
+                    { label: "CRON_SECRET", ok: health.automation.cronSecretConfigured, detail: health.automation.cronSecretConfigured ? "محمي ومفعّل" : "أضف CRON_SECRET في Vercel" },
+                    { label: "Mock mode", ok: !health.automation.mocksEnabled, detail: health.automation.mocksEnabled ? "مفعّل خارج الإنتاج فقط" : "غير مفعّل" },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-[var(--color-border)] bg-stone-50 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-extrabold text-[var(--color-text-muted)]">{item.label}</span>
+                        <span className={`rounded-lg px-2 py-1 text-[9px] font-extrabold ${getAutomationTone(item.ok)}`}>
+                          {automationStatusText(item.ok)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[10px] font-semibold leading-relaxed text-[var(--color-text-title)]">{item.detail}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-[var(--color-border)] bg-stone-50 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-[var(--color-text-title)]">TikTok Research</span>
+                      <span className={`rounded-lg px-2 py-1 text-[9px] font-extrabold ${getAutomationTone(health.automation.tiktok.enabled && health.automation.tiktok.credentialsConfigured)}`}>
+                        {health.automation.tiktok.status ?? "not_configured"}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Enabled</span>
+                        <span className="text-[10px] font-black">{health.automation.tiktok.enabled ? "نعم" : "لا"}</span>
+                      </div>
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Credentials</span>
+                        <span className="text-[10px] font-black">{health.automation.tiktok.credentialsConfigured ? "موجودة" : "ناقصة"}</span>
+                      </div>
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Rules</span>
+                        <span className="text-[10px] font-black">{health.automation.tiktok.activeRulesCount.toLocaleString("ar-SA")}</span>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-[10px] font-semibold leading-relaxed text-[var(--color-text-muted)]">{health.automation.tiktok.message}</p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--color-border)] bg-stone-50 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-black text-[var(--color-text-title)]">Instagram Profiles</span>
+                      <span className={`rounded-lg px-2 py-1 text-[9px] font-extrabold ${getAutomationTone(health.automation.instagram.enabled && health.automation.instagram.extractorConfigured)}`}>
+                        {health.automation.instagram.status ?? "not_configured"}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Enabled</span>
+                        <span className="text-[10px] font-black">{health.automation.instagram.enabled ? "نعم" : "لا"}</span>
+                      </div>
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Extractor</span>
+                        <span className="text-[10px] font-black">{health.automation.instagram.extractorConfigured ? "جاهز" : "ناقص"}</span>
+                      </div>
+                      <div className="rounded-xl bg-white p-2">
+                        <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">Rules</span>
+                        <span className="text-[10px] font-black">{health.automation.instagram.activeRulesCount.toLocaleString("ar-SA")}</span>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-[10px] font-semibold leading-relaxed text-[var(--color-text-muted)]">{health.automation.instagram.message}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 md:grid-cols-4">
+                  {[
+                    { label: "كل القواعد", value: health.automation.sourceRulesCount.toLocaleString("ar-SA") },
+                    { label: "القواعد النشطة", value: health.automation.activeSourceRulesCount.toLocaleString("ar-SA") },
+                    { label: "Jobs قيد التنفيذ", value: health.automation.queuedJobsCount.toLocaleString("ar-SA") },
+                    { label: "Jobs فاشلة", value: health.automation.failedJobsCount.toLocaleString("ar-SA") },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-2xl border border-[var(--color-border)] bg-stone-50 p-3 text-center">
+                      <span className="block text-[9px] font-bold text-[var(--color-text-muted)]">{item.label}</span>
+                      <span className="mt-1 block text-sm font-black text-[var(--color-text-title)]">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-[var(--color-border)] bg-stone-50 p-4 text-[10px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                  <div>مسار cron: <span className="font-mono text-[var(--color-text-title)]">{health.automation.connectorCronPath}</span></div>
+                  <div>جدولة Vercel العامة: <span className="font-mono text-[var(--color-text-title)]">{health.automation.connectorCronScheduleUtc}</span> UTC</div>
+                  <div>آخر تشغيل: <span className="text-[var(--color-text-title)]">{health.automation.latestRun ? `${health.automation.latestRun.status} · ${health.automation.latestRun.fetchedCount} مواد · ${formatRunTime(health.automation.latestRun.finishedAt ?? health.automation.latestRun.startedAt)}` : "لا يوجد تشغيل بعد"}</span></div>
+                  <div>آخر فشل: <span className="text-[var(--color-text-title)]">{health.automation.latestFailedJob ? `${health.automation.latestFailedJob.failureReason ?? health.automation.latestFailedJob.status} · ${formatRunTime(health.automation.latestFailedJob.createdAt)}` : "لا توجد jobs فاشلة"}</span></div>
+                </div>
+              </div>
+            ) : null}
 
             {/* Simulated Live DevOps Console Logs Simulator */}
             <div className="bg-stone-900 rounded-3xl border border-stone-800 p-5 shadow-lg relative overflow-hidden flex flex-col h-[350px]">

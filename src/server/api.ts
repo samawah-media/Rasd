@@ -93,6 +93,17 @@ function isInstagramProfileUrl(value: string) {
   }
 }
 
+function optionalPollIntervalMinutes(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return Math.trunc(parsed);
+    }
+  }
+  return undefined;
+}
+
 function validateSourceRulePayload(body: JsonBody, existing?: Awaited<ReturnType<typeof persistentStore.listSourceRules>>[number]) {
   const requestedType = body.type ?? existing?.type;
   if (!isSupportedSourceRuleType(requestedType)) {
@@ -105,6 +116,12 @@ function validateSourceRulePayload(body: JsonBody, existing?: Awaited<ReturnType
   const url = optionalString(body.url, existing?.url);
   const sourceId = optionalString(body.source_id, body.sourceId, existing?.sourceId ?? undefined) ?? null;
   const active = typeof body.active === "boolean" ? body.active : existing?.active ?? true;
+  const pollIntervalMinutes =
+    optionalPollIntervalMinutes(body.poll_interval_minutes, body.pollIntervalMinutes, existing?.pollIntervalMinutes) ?? 1440;
+
+  if (!Number.isInteger(pollIntervalMinutes) || pollIntervalMinutes < 15 || pollIntervalMinutes > 10080) {
+    return { ok: false as const, error: "poll_interval_minutes must be between 15 and 10080" };
+  }
 
   if (requestedType === "tiktok_research") {
     if (!query && !url) return { ok: false as const, error: "tiktok_query_or_url_required" };
@@ -132,7 +149,36 @@ function validateSourceRulePayload(body: JsonBody, existing?: Awaited<ReturnType
       url: url ?? null,
       cursor: existing?.cursor ?? null,
       active,
+      pollIntervalMinutes,
     },
+  };
+}
+
+function sourceRuleErrorStatus(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const message = rawMessage.toLowerCase();
+  if (
+    message.includes("source_rules") &&
+    (message.includes("does not exist") ||
+      message.includes("could not find") ||
+      message.includes("schema cache") ||
+      message.includes("42p01") ||
+      message.includes("42703") ||
+      message.includes("22p02"))
+  ) {
+    return {
+      status: 500 as const,
+      error: "source_rules_schema_not_ready",
+      detail: "Apply the latest Supabase source_rules migrations, then redeploy or retry.",
+    };
+  }
+  if (rawMessage === "source_rule_not_found") {
+    return { status: 404 as const, error: "source_rule_not_found", detail: undefined };
+  }
+  return {
+    status: 500 as const,
+    error: "source_rule_request_failed",
+    detail: rawMessage,
   };
 }
 
@@ -605,40 +651,71 @@ api.post("/sources/:id/poll", async (c) => {
 });
 
 api.get("/source-rules", async (c) => {
-  const organizationId = optionalString(c.req.query("organization_id"), c.req.query("organizationId")) ?? DEFAULT_ORGANIZATION_ID;
-  const [sourceRules, connectorRuns] = await Promise.all([
-    persistentStore.listSourceRules(organizationId),
-    persistentStore.listConnectorRuns(organizationId),
-  ]);
-  return c.json(withRequestId(c, { source_rules: sourceRules, connector_runs: connectorRuns }));
+  try {
+    const organizationId = optionalString(c.req.query("organization_id"), c.req.query("organizationId")) ?? DEFAULT_ORGANIZATION_ID;
+    const [sourceRules, connectorRuns] = await Promise.all([
+      persistentStore.listSourceRules(organizationId),
+      persistentStore.listConnectorRuns(organizationId),
+    ]);
+    return c.json(withRequestId(c, { source_rules: sourceRules, connector_runs: connectorRuns }));
+  } catch (error) {
+    const mapped = sourceRuleErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
+  }
 });
 
 api.post("/source-rules", async (c) => {
-  const body = await readJson(c);
-  const parsed = validateSourceRulePayload(body);
-  if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
+  try {
+    const body = await readJson(c);
+    const parsed = validateSourceRulePayload(body);
+    if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
 
-  const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
-  return c.json(withRequestId(c, { source_rule: sourceRule }), 201);
+    const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
+    return c.json(withRequestId(c, { source_rule: sourceRule }), 201);
+  } catch (error) {
+    const mapped = sourceRuleErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
+  }
+});
+
+api.post("/source-rules/run-due", async (c) => {
+  try {
+    const body = await readJson(c);
+    const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
+    return c.json(withRequestId(c, await runDueConnectors(organizationId)));
+  } catch (error) {
+    const mapped = sourceRuleErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
+  }
 });
 
 api.patch("/source-rules/:id", async (c) => {
-  const body = await readJson(c);
-  const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
-  const existing = (await persistentStore.listSourceRules(organizationId)).find((rule) => rule.id === c.req.param("id"));
-  if (!existing) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
+  try {
+    const body = await readJson(c);
+    const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
+    const existing = (await persistentStore.listSourceRules(organizationId)).find((rule) => rule.id === c.req.param("id"));
+    if (!existing) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
 
-  const parsed = validateSourceRulePayload({ ...body, id: existing.id }, existing);
-  if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
+    const parsed = validateSourceRulePayload({ ...body, id: existing.id }, existing);
+    if (!parsed.ok) return c.json(withRequestId(c, { error: parsed.error }), 400);
 
-  const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
-  return c.json(withRequestId(c, { source_rule: sourceRule }));
+    const sourceRule = await persistentStore.upsertSourceRule(parsed.value);
+    return c.json(withRequestId(c, { source_rule: sourceRule }));
+  } catch (error) {
+    const mapped = sourceRuleErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
+  }
 });
 
 api.delete("/source-rules/:id", async (c) => {
-  const deleted = await persistentStore.deleteSourceRule(c.req.param("id"));
-  if (!deleted) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
-  return c.json(withRequestId(c, { ok: true, id: c.req.param("id") }));
+  try {
+    const deleted = await persistentStore.deleteSourceRule(c.req.param("id"));
+    if (!deleted) return c.json(withRequestId(c, { error: "source_rule_not_found" }), 404);
+    return c.json(withRequestId(c, { ok: true, id: c.req.param("id") }));
+  } catch (error) {
+    const mapped = sourceRuleErrorStatus(error);
+    return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
+  }
 });
 
 api.get("/keyword-rules", async (c) => c.json(withRequestId(c, { keyword_rules: await persistentStore.listKeywordRules() })));
