@@ -43,16 +43,45 @@ export default async function Home() {
 
         {/* Header Branding */}
         <header className="w-full flex flex-col items-center text-center mb-10 md:mb-12">
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-[#2383E2] bg-[#2383E2]/5 border border-[#2383E2]/15 px-4 py-1.5 rounded-full shadow-sm mb-4">
-            <Activity size={14} className="animate-pulse" />
-            <span>منصة الرصد الإعلامي الذكي</span>
+          {/* Pulsing AI Activity Badge */}
+          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-[#2383E2] bg-[#2383E2]/5 border border-[#2383E2]/15 px-4 py-1.5 rounded-full shadow-sm mb-6 animate-pulse select-none">
+            <Activity size={14} className="text-[#00C853]" />
+            <span>نظام رصد الذكي يعمل بأعلى كفاءة</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-extrabold text-[var(--color-text-title)] tracking-tight">
-            بوابة التحكم الموحدة
+
+          {/* Core Arabic Title */}
+          <h1 className="text-4xl md:text-6xl font-black text-[var(--color-text-title)] tracking-tight drop-shadow-sm">
+            منصة رصد إعلامي
           </h1>
-          <p className="text-sm md:text-base text-[var(--color-text-muted)] mt-3 max-w-xl leading-relaxed font-medium">
-            مرحباً بك في لوحة تحكم رصد الإعلام والتغطيات. يرجى اختيار البوابة المطلوب الدخول إليها لبدء العمل والتشغيل.
-          </p>
+
+          {/* Connected Logos Side-by-Side with Glow */}
+          <div className="relative my-8 flex items-center justify-center gap-6">
+            {/* Glowing background blur behind logos */}
+            <div className="absolute inset-0 w-44 h-20 bg-gradient-to-r from-[#2383E2]/20 to-[#00C853]/20 blur-2xl -z-10 rounded-full animate-pulse" />
+            
+            <div className="transform hover:scale-105 transition-transform duration-300">
+              <HedayaIcon />
+            </div>
+            <div className="w-8 h-[1px] bg-stone-300 flex items-center justify-center text-[10px] text-stone-400 font-bold select-none">
+              &
+            </div>
+            <div className="transform hover:scale-105 transition-transform duration-300">
+              <SamawahIcon />
+            </div>
+          </div>
+
+          {/* Clean English Tagline (observability focus) */}
+          <div className="mt-2 p-4 bg-white/40 border border-stone-200/50 rounded-2xl max-w-2xl shadow-sm backdrop-blur-[2px] transition hover:border-[#2383E2]/20">
+            <p className="text-sm md:text-base font-extrabold text-[#2383E2] tracking-wide font-mono">
+              AI-Powered Observability and Security
+            </p>
+            <p className="text-xs md:text-sm text-stone-600 mt-1 font-semibold leading-relaxed">
+              See inside any stack, any app, at any scale, anywhere.
+            </p>
+            <p className="text-[11px] md:text-xs text-[#00C853] font-bold mt-1.5 tracking-wider font-mono">
+              AI-Powered Automation for Every Decision
+            </p>
+          </div>
         </header>
 
         {/* Daydream workflow timeline component */}
@@ -60,13 +89,11 @@ export default async function Home() {
           <AnimatedWorkflowHero />
         </section>
 
-        {/* Massive Landing Choice Cards */}
+        {/* Massive Landing Choice Cards with Hover Animations */}
         <section className="w-full grid gap-8 md:grid-cols-2 max-w-5xl mx-auto mb-16">
 
           {/* 1. Hedaya Portal Card */}
-          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between overflow-hidden">
-            {/* Hover card border highlight */}
-            <div className="absolute inset-0 border-2 border-transparent group-hover:border-[#204733]/20 rounded-3xl transition-colors duration-300" />
+          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-2xl hover:scale-[1.02] hover:border-[#204733]/20 transition-all duration-300 flex flex-col justify-between overflow-hidden">
             {/* Background blur gradient */}
             <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#204733]/5 rounded-full blur-3xl group-hover:bg-[#204733]/10 transition-colors duration-300" />
 
@@ -78,43 +105,41 @@ export default async function Home() {
                 </span>
               </div>
 
-              <h2 className="text-xl md:text-2xl font-extrabold text-[#204733] mb-3">
-                هاكاثون هداية
+              <h2 className="text-xl md:text-2xl font-black text-[#204733] mb-3 flex items-center gap-1.5">
+                هاكاثون هداية 🕌
               </h2>
-              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-medium">
-                استعراض الإحصائيات التفاعلية الفورية، تدفق التغطيات المعتمدة، ونتائج التقرير الإعلامي الفاخر الموجه للشؤون الدينية برئاسة الحرمين الشريفين.
+              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
+                تقارير وإحصائيات فورية وتغطيات معتمدة للشؤون الدينية بالحرمين الشريفين. اضغط تحت وادخل تقرير العميل الفخم.
               </p>
 
               {/* Bullet Features */}
               <ul className="space-y-3.5 mb-8 text-xs font-semibold text-[var(--color-text-body)]">
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />
-                  <span>عرض التقرير التنفيذي العام</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
+                  <span>تصفّح التقرير التنفيذي العام</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />
-                  <span>توزيع التغريدات حسب المشاعر والتصنيف</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
+                  <span>شوف تحليل مشاعر الناس وتصنيف التغريدات</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853]" />
-                  <span>مشاركة روابط التقرير الفورية مع الإدارة</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
+                  <span>شارك روابط التقرير بضغطة زر مع الإدارة</span>
                 </li>
               </ul>
             </div>
 
             <Link
               href="/client-report"
-              className="relative z-10 w-full h-12 rounded-2xl bg-[#204733] hover:bg-[#1a3829] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all"
+              className="relative z-10 w-full h-12 rounded-2xl bg-[#204733] hover:bg-[#1a3829] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
             >
-              <span>دخول بوابة هداية</span>
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+              <span>دخول بوابة هداية من هنا</span>
+              <ArrowLeft size={16} className="group-hover:-translate-x-1.5 transition-transform duration-300" />
             </Link>
           </div>
 
           {/* 2. Samawah Operations Dashboard Card */}
-          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between overflow-hidden">
-            {/* Hover card border highlight */}
-            <div className="absolute inset-0 border-2 border-transparent group-hover:border-[#2383E2]/20 rounded-3xl transition-colors duration-300" />
+          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-2xl hover:scale-[1.02] hover:border-[#2383E2]/20 transition-all duration-300 flex flex-col justify-between overflow-hidden">
             {/* Background blur gradient */}
             <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#2383E2]/5 rounded-full blur-3xl group-hover:bg-[#2383E2]/10 transition-colors duration-300" />
 
@@ -126,50 +151,50 @@ export default async function Home() {
                 </span>
               </div>
 
-              <h2 className="text-xl md:text-2xl font-extrabold text-[var(--color-text-title)] mb-3">
-                غرفة الرصد الإعلامي (سماوة)
+              <h2 className="text-xl md:text-2xl font-black text-[var(--color-text-title)] mb-3 flex items-center gap-1.5">
+                غرفة الرصد والعمليات (سماوة) ⚡
               </h2>
-              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-medium">
-                التحكم بالبنية التحتية للمنصة وسير العمليات. استيراد روابط التغطيات من منصات التواصل الاجتماعي، التدقيق والاعتماد البشري للمواد، وتعديل خيارات التشغيل.
+              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
+                من هنا تتحكم بكل شيء وتتابع سير العمل وتلقيم الروابط والتدقيق البشري وإقرار التغطيات وصحة الخوادم.
               </p>
 
               {/* Bullet Features */}
               <ul className="space-y-3.5 mb-8 text-xs font-semibold text-[var(--color-text-body)]">
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2]" />
-                  <span>تلقيم واستيراد روابط الأخبار والتغريدات</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
+                  <span>تلقيم واستيراد روابط التغريدات والأخبار</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2]" />
-                  <span>منصة التشغيل وتتبع صحة الخوادم والأكواد</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
+                  <span>تتبع خوادمنا وصحتها وشغلها بالملي</span>
                 </li>
                 <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2]" />
-                  <span>إدارة صلاحيات الوصول والمسؤولين</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
+                  <span>إدارة صلاحيات المشرفين والوصول</span>
                 </li>
               </ul>
             </div>
 
             <Link
               href="/ops"
-              className="relative z-10 w-full h-12 rounded-2xl bg-[#2383E2] hover:bg-[#1b6ec4] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all"
+              className="relative z-10 w-full h-12 rounded-2xl bg-[#2383E2] hover:bg-[#1b6ec4] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
             >
-              <span>دخول غرفة الرصد والعمليات</span>
-              <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+              <span>دخول غرفة العمليات من هنا</span>
+              <ArrowLeft size={16} className="group-hover:-translate-x-1.5 transition-transform duration-300" />
             </Link>
           </div>
 
         </section>
 
         {/* Footer info & security */}
-        <footer className="w-full flex flex-col md:flex-row items-center justify-between gap-4 border-t border-[var(--color-border)] pt-8 pb-4 text-xs font-semibold text-[var(--color-text-muted)]">
+        <footer className="w-full flex flex-col md:flex-row items-center justify-between gap-4 border-t border-[var(--color-border)] pt-8 pb-4 text-xs font-semibold text-[var(--color-text-muted)] select-none">
           <div className="flex items-center gap-2">
-            <ShieldCheck size={16} className="text-[#00C853]" />
+            <ShieldCheck size={16} className="text-[#00C853] animate-pulse" />
             <span>الاتصال مشفر ومؤمن بالكامل عبر بروتوكولات حماية الأنظمة</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] text-[#2383E2] bg-[#2383E2]/5 px-2 py-0.5 rounded">إصدار منصة التشغيل: 1.0.4</span>
-            <div className="flex items-center gap-1 hover:text-[var(--color-text-title)] cursor-pointer">
+            <span className="text-[10px] text-[#2383E2] bg-[#2383E2]/5 px-2 py-0.5 rounded">إصدار منصة التشغيل: 1.0.5</span>
+            <div className="flex items-center gap-1 hover:text-[var(--color-text-title)] cursor-pointer transition-colors">
               <HelpCircle size={14} />
               <span>المساعدة والدعم الفني</span>
             </div>

@@ -138,20 +138,6 @@ export default async function OverviewPage() {
 
   // 5. System Health Statuses
   const failedCapturesCount = items.filter((i) => i.state === "capture_failed").length;
-  const liveAlerts = [
-    { label: "وضع التخزين", value: dbModeText, status: dbModeStatus },
-    {
-      label: "تراكم المراجعة",
-      value: `${needsReviewCount} مواد`,
-      status: needsReviewCount > 3 ? "warning" : "good",
-    },
-    {
-      label: "أخطاء الالتقاط",
-      value: `${failedCapturesCount} لقطات`,
-      status: failedCapturesCount > 0 ? "warning" : "good",
-    },
-    { label: "حالة الذكاء الاصطناعي", value: "متصل ونشط", status: "good" },
-  ];
 
   // 6. Extract operational warnings/errors
   const itemsWithAlerts = items
@@ -220,15 +206,15 @@ export default async function OverviewPage() {
       <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-white/90 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-5">
           <div>
-            <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+            <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)] font-bold">
               <span>مشروع</span>
-              <span className="font-semibold text-[var(--color-text-title)]">هاكاثون هداية</span>
-              <span className="rounded-md bg-[#2383E2]/10 px-2 py-0.5 text-[10px] text-[#2383E2] font-semibold">
-                لوحة عمليات الأدمن
+              <span className="font-extrabold text-[var(--color-text-title)]">هاكاثون هداية 🕌</span>
+              <span className="rounded-md bg-[#2383E2]/10 px-2 py-0.5 text-[10px] text-[#2383E2] font-black">
+                لوحة تحكم المشرفين
               </span>
             </div>
-            <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-[var(--color-text-title)] md:text-3xl">
-              لوحة المتابعة والتشغيل (Ops)
+            <h1 className="mt-1.5 text-2xl font-black tracking-tight text-[var(--color-text-title)] md:text-3xl">
+              غرفة المتابعة والتشغيل الفوري ⚡
             </h1>
           </div>
 
@@ -236,14 +222,14 @@ export default async function OverviewPage() {
             <IconButton label="بحث">
               <Search size={18} />
             </IconButton>
-            <FilterButton icon={<CalendarDays size={16} />} label="تحليلات حية" />
-            <FilterButton icon={<Layers3 size={16} />} label={`الوضع: ${dbModeText}`} />
+            <FilterButton icon={<CalendarDays size={16} />} label="تحليلات حية 📊" />
+            <FilterButton icon={<Layers3 size={16} />} label={`مستودع البيانات: ${dbModeText}`} />
             <Link
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2383E2] px-4 text-sm font-semibold text-white transition hover:bg-opacity-90 shadow-sm"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#2383E2] hover:bg-[#1b6ec4] px-4 text-sm font-bold text-white transition shadow-sm active:scale-[0.97] transition-transform"
               href="/ops"
             >
               <Activity size={17} />
-              منصة التشغيل والتجربة
+              افتح لوحة العمليات الحين 🚀
             </Link>
           </div>
         </div>
@@ -264,8 +250,8 @@ export default async function OverviewPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-semibold text-[var(--color-text-muted)]">{kpi.label}</div>
-                      <div className="mt-3 text-3xl font-extrabold text-[var(--color-text-title)] tracking-tight">{kpi.value}</div>
+                      <div className="text-xs font-bold text-[var(--color-text-muted)]">{kpi.label}</div>
+                      <div className="mt-3 text-3xl font-black text-[var(--color-text-title)] tracking-tight">{kpi.value}</div>
                     </div>
                     <div className={`rounded-xl p-3 ${kpi.bg} ${kpi.tone}`}>
                       <Icon size={20} />
@@ -279,33 +265,33 @@ export default async function OverviewPage() {
           {/* Volume & Funnel Grid */}
           <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             {/* Volume chart */}
-            <Panel title="منحنى رصد المواد والنشاط" icon={<LineChart size={18} />}>
+            <Panel title="منحنى نشاط الرصد والحركة 📈" icon={<LineChart size={18} />}>
               <LineViz points={displayVolumePoints} />
               <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
                 <MetricPill
-                  label="إجمالي المواد"
+                  label="كل المواد اللي رصدناها"
                   value={totalItems.toLocaleString("ar-SA")}
                   tone="bg-[#2383E2]/10 text-[#2383E2]"
                 />
                 <MetricPill
-                  label="نشاط اليوم"
-                  value="نشط"
+                  label="الوضع اليوم"
+                  value="نشط وحي"
                   tone="bg-[#00C853]/10 text-[#00C853]"
                 />
                 <MetricPill
-                  label="آخر تحديث"
-                  value="تحديث فوري"
+                  label="التحديث الفوري"
+                  value="شغال لحظة بلحظة"
                   tone="bg-[#FFAB00]/10 text-[#FFAB00]"
                 />
               </div>
             </Panel>
 
             {/* Workflow Funnel */}
-            <Panel title="قمع سير العمليات (Workflow Funnel)" icon={<Layers3 size={18} />}>
+            <Panel title="مسار ومراحل الرصد (قمع العمليات) 🌪️" icon={<Layers3 size={18} />}>
               <div className="flex flex-col gap-3 py-1">
                 {funnelSteps.map((step) => (
                   <div className="relative" key={step.label}>
-                    <div className="flex items-center justify-between text-xs mb-1 font-semibold">
+                    <div className="flex items-center justify-between text-xs mb-1 font-bold">
                       <span className="flex items-center gap-2">
                         <span className={`w-2.5 h-2.5 rounded-full ${step.color}`} />
                         {step.label}
@@ -323,9 +309,8 @@ export default async function OverviewPage() {
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-xs leading-relaxed text-[var(--color-text-muted)]">
-                يوضح قمع سير العمل توزيع المواد المرصودة على طول خط التحرير والالتقاط، مما يساعد
-                في التعرف على مواضع التكدس.
+              <p className="mt-4 text-xs leading-relaxed text-[var(--color-text-muted)] font-semibold">
+                هذا القمع يوضح لك وين واصلة المواد المرصودة الحين، عشان تعرف لو فيه زحمة أو تكدس في أي مرحلة برمشة عين.
               </p>
             </Panel>
           </section>
@@ -333,7 +318,7 @@ export default async function OverviewPage() {
           {/* Platform Share & Sentiment Analysis Grid */}
           <section className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
             {/* Platform share */}
-            <Panel title="حصة المنصات الفعلية" icon={<BarChart3 size={18} />}>
+            <Panel title="توزيع المواد حسب المنصات 📊" icon={<BarChart3 size={18} />}>
               <div className="space-y-4 py-2">
                 {platformShare.map((item) => (
                   <ShareRow item={item} key={item.label} />
@@ -342,7 +327,7 @@ export default async function OverviewPage() {
             </Panel>
 
             {/* Sentiment donut chart */}
-            <Panel title="تحليل المشاعر التلقائي" icon={<Sparkles size={18} />}>
+            <Panel title="تحليل الذكاء الاصطناعي للمشاعر 🧠" icon={<Sparkles size={18} />}>
               <div className="flex flex-wrap items-center justify-center gap-6 py-2 sm:flex-nowrap">
                 <Donut
                   negativePct={negativePct}
@@ -355,9 +340,8 @@ export default async function OverviewPage() {
                   <SentimentBar color="bg-[#ef6262]" label="سلبي" value={negativePct} />
                 </div>
               </div>
-              <p className="mt-4 text-xs leading-relaxed text-[var(--color-text-muted)] text-center sm:text-right">
-                الذكاء الاصطناعي يقترح المشاعر بشكل آلي، وتخضع للمراجعة والاعتماد التحريري قبل
-                نشرها.
+              <p className="mt-4 text-xs leading-relaxed text-[var(--color-text-muted)] text-center sm:text-right font-semibold">
+                ذكاؤنا الاصطناعي يقيس المشاعر تلقائياً، والمدقق البشري يقدر يعدلها ويعتمدها قبل ما تروح للتقرير الفخم.
               </p>
             </Panel>
           </section>
@@ -367,11 +351,11 @@ export default async function OverviewPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-4">
               <div className="flex items-center gap-2">
                 <Inbox size={18} className="text-[#2383E2]" />
-                <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">التغذية الحية للرصد (Live Feed)</h2>
+                <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">البث المباشر للمواد المرصودة 📡</h2>
               </div>
               <div className="flex items-center gap-2">
                 <FilterButton icon={<Filter size={14} />} label="الأحدث" />
-                <span className="text-[10px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md font-semibold">محدث تلقائياً</span>
+                <span className="text-[10px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md font-semibold">يتحدث من حاله</span>
               </div>
             </div>
             <div className="divide-y divide-[#edf0eb]">
@@ -384,56 +368,32 @@ export default async function OverviewPage() {
 
         {/* Sidebar / Health Panel */}
         <aside className="space-y-6">
-          {/* System Health Info */}
-          <Panel title="حالة تشغيل المنصة" icon={<Activity size={18} />}>
-            <div className="space-y-2.5">
-              {liveAlerts.map((alert) => (
-                <HealthRow alert={alert} key={alert.label} />
-              ))}
+          {/* System Health CTA */}
+          <section className="rounded-2xl border border-[#2383E2]/35 bg-gradient-to-tr from-[#2383E2]/[0.02] to-white p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 text-[#2383E2]">
+              <Activity size={18} className="animate-pulse" />
+              <h2 className="font-bold text-sm md:text-base text-[var(--color-text-title)]">صحة وسلامة الأنظمة 🟢</h2>
             </div>
-          </Panel>
-
-          {/* Resource Consumption & Cost */}
-          <Panel title="استهلاك الموارد والميزانية" icon={<Gauge size={18} />}>
-            <div className="space-y-4 py-1">
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-semibold text-stone-600">لقطات الشاشة (Screenshots)</span>
-                  <span className="text-stone-500 font-bold">
-                    {screenshotsUsed} / {screenshotsLimit}
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-[#edf0eb] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      screenshotsPct > 80 ? "bg-[#ef6262]" : "bg-[#2383E2]"
-                    }`}
-                    style={{ width: `${screenshotsPct}%` }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="font-semibold text-stone-600">المساحة التخزينية (Storage)</span>
-                  <span className="text-stone-500 font-bold">
-                    {storageUsed}MB / {storageLimit}MB
-                  </span>
-                </div>
-                <div className="h-2 rounded-full bg-[#edf0eb] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      storagePct > 80 ? "bg-[#ef6262]" : "bg-[#2383E2]"
-                    }`}
-                    style={{ width: `${storagePct}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="mt-3 text-[10px] leading-relaxed text-stone-400">
-              تطبق حواجز الحماية (Guardrails) تلقائياً لمنع أي تكاليف زائدة في الاستخدام.
+            <p className="text-xs leading-relaxed text-[var(--color-text-muted)] font-semibold">
+              نقلنا كل تفاصيل نبض الخوادم، الاتصالات مع السيرفرات الخارجية وسجلات النظام لصفحة فخمة ومستقلة عشان ما تزحم عليك لوحة البيانات.
             </p>
-          </Panel>
+            <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+              <div className="bg-[var(--color-bg-main)] p-2.5 rounded-xl border border-[var(--color-border)] text-right">
+                <span className="block text-[10px] text-stone-500 font-bold mb-0.5">لقطات الشاشة</span>
+                <span className="font-extrabold text-[var(--color-text-title)]">{screenshotsUsed} / {screenshotsLimit}</span>
+              </div>
+              <div className="bg-[var(--color-bg-main)] p-2.5 rounded-xl border border-[var(--color-border)] text-right">
+                <span className="block text-[10px] text-stone-500 font-bold mb-0.5">التخزين الفعلي</span>
+                <span className="font-extrabold text-[var(--color-text-title)]">{storageUsed}MB</span>
+              </div>
+            </div>
+            <Link
+              href="/health"
+              className="w-full flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#2383E2] hover:bg-[#1b6ec4] text-xs font-bold text-white shadow-md hover:shadow-lg transition-all active:scale-[0.97] transition-transform cursor-pointer"
+            >
+              <span>افتح صحة النظام من هنا 🚀</span>
+            </Link>
+          </section>
 
           {/* Active warnings and operational errors */}
           <Panel title="إنذارات وأخطاء العمليات" icon={<AlertTriangle size={18} />}>

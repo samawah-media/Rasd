@@ -74,6 +74,31 @@ Production checks passed:
 - Latest Vercel production deployment is Ready and aliased to `rasd-gamma.vercel.app`.
 - Signed-out request to `/api/captures/not-real/asset` returns `401 auth_required`.
 
+## C3 X/Twitter Workflow Quality Gate
+
+Status: passed locally on 2026-05-22; production smoke pending.
+
+- X URL parser supports standard, mobile, and alternate X/Twitter domains.
+- X metadata provider manager supports `mock`, `oembed`, `apify`, `official`, and `agent` providers.
+- Paid/keyed providers are gated by credentials and fall back to no-cost oEmbed where appropriate.
+- `/api/items/x-refresh` is owner/editor-only and refreshes stored X metadata into `raw_response.x_post`.
+- X search foundation exists with mock search for local tests and Grok/xAI search behind `XAI_API_KEY`.
+
+Local checks passed:
+
+- `npm run test`: 123 tests, 0 failures.
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm audit --audit-level=moderate` still reports the known Next/PostCSS advisory; npm's suggested force fix is breaking and remains deferred.
+
+Production smoke:
+
+- Paste a fresh X URL in `/ops`.
+- Confirm the item stores a clean canonical original link.
+- Refresh or hydrate metadata without paid credentials when possible.
+- Approve, capture, add to report, and confirm it appears in `/client-report`.
+
 ## Post-A10 Local Quality Gate
 
 Status: passed on 2026-05-21.
@@ -259,6 +284,7 @@ Use this after C1.2 deploy:
 - End-to-end manual intake through `/ops` should be repeated with a fresh URL after each workflow change.
 - Filtered PDF export is currently a printable browser HTML export capped at 50 visible items, not a server-generated binary PDF.
 - X metadata depends on public oEmbed availability. When X blocks or omits metadata, `/ops` should still save the original link and show a clear warning instead of silently losing the item.
+- C3 paid-provider behavior is intentionally not production-enabled; Official X, Apify, and Grok/xAI usage need owner approval, keys, and budget guardrails before real use.
 - Share-link API/RLS security passed production checks, but share links are intentionally dormant for now; primary client access is Viewer login to `/client-report`.
 - RSS/source automation has manual owner/editor polling plus a daily Vercel cron protected by `CRON_SECRET`; each source decides whether it is due by its admin schedule.
 - Link backfill still matters for future corrections, but the current legacy PDF archive now has original links from interactive PDF annotations.

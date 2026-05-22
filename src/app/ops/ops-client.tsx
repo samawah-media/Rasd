@@ -129,11 +129,11 @@ const arabicApiErrors: Record<string, string> = {
 };
 
 const tabLabels: Record<WorkTab, string> = {
-  active: "الكل",
-  review: "تحتاج اعتماد",
-  capture: "تحتاج لقطة",
-  report: "جاهزة للتقرير",
-  done: "داخل التقرير",
+  active: "كل المواد 📋",
+  review: "يبي لها مراجعة 🔍",
+  capture: "بانتظار لقطة الشاشة 📸",
+  report: "جاهزة للتقرير الفخم ✨",
+  done: "مضافة بالتقرير 🥳",
 };
 
 function arabicError(key: string): string {
@@ -184,18 +184,18 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 function stateLabel(state: MonitoringItem["state"]) {
   const labels: Record<MonitoringItem["state"], string> = {
-    ingested: "محفوظ",
-    normalized: "منظم",
-    deduped: "مكرر",
-    candidate: "مرشح",
-    needs_review: "يحتاج اعتماد",
+    ingested: "تم سحبه",
+    normalized: "منظم ومعدل",
+    deduped: "مكرر ومستبعد",
+    candidate: "مرشح الحين",
+    needs_review: "يبي له مراجعة",
     rejected: "مرفوض",
-    approved_pending_capture: "تحتاج لقطة",
-    capture_pending: "جاري الالتقاط",
-    capture_failed: "تعثر الالتقاط",
+    approved_pending_capture: "بانتظار اللقطة",
+    capture_pending: "جاري التقاط الشاشة",
+    capture_failed: "فشل تصوير الشاشة",
     report_ready: "جاهز للتقرير",
-    added_to_report: "داخل التقرير",
-    published: "منشور",
+    added_to_report: "تمت إضافته للتقرير",
+    published: "منشور ومكتمل",
     archived: "مؤرشف",
   };
   return labels[state];
@@ -667,7 +667,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => approveItem(item)} className="ops-primary" disabled={pending !== null}>
           <Check className="h-4 w-4" />
-          اعتماد
+          اعتماد الحين ✅
         </button>
       );
     }
@@ -675,7 +675,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => captureItem(item)} className="ops-primary" disabled={pending !== null}>
           <Camera className="h-4 w-4" />
-          لقطة
+          تصوير الشاشة 📸
         </button>
       );
     }
@@ -683,7 +683,7 @@ export function OpsClient() {
       return (
         <button type="button" onClick={() => addToReport(item)} className="ops-primary" disabled={pending !== null}>
           <Archive className="h-4 w-4" />
-          إضافة للتقرير
+          أضف للتقرير الفخم 📥
         </button>
       );
     }
@@ -711,6 +711,9 @@ export function OpsClient() {
           .ops-primary:hover {
             background: #2383E2;
           }
+          .ops-primary:active {
+            transform: scale(0.97);
+          }
           .ops-primary:disabled {
             opacity: 0.55;
           }
@@ -727,24 +730,24 @@ export function OpsClient() {
                 {systemText(state.metrics)}
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى</h1>
+            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى 📊</h1>
           </div>
           <div className="flex items-center gap-2">
             <a
               href="/client-report"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition hover:text-[#2383E2]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition hover:text-[#2383E2] active:scale-[0.97] transition-transform"
             >
-              واجهة التقرير النهائي
+              عرض تقرير العميل 📊
               <ChevronLeft className="h-3.5 w-3.5" />
             </a>
             <button
               type="button"
               onClick={refresh}
               disabled={pending !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] hover:border-[#2383E2]/40 transition disabled:opacity-50 active:scale-[0.97] transition-transform"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${pending === "refresh" ? "animate-spin" : ""}`} />
-              تحديث البيانات
+              تحديث الحالة 🔄
             </button>
           </div>
         </header>
@@ -769,15 +772,15 @@ export function OpsClient() {
             <div>
               <h2 className="text-sm font-black text-[var(--color-text-title)] flex items-center gap-2">
                 <Activity className="h-4 w-4 text-[#2383E2]" />
-                سير المعالجة والتشغيل الفوري
+                مسار معالجة البيانات الفوري ⚡
               </h2>
               <p className="text-[11px] text-[var(--color-text-muted)] mt-1 font-semibold">
-                مراقبة حية لتدفق البيانات الذكي من المصادر الخارجية وصولاً للتقارير المعتمدة.
+                متابعة حية وشلون تمشي بياناتك من السحب الين التقرير الفخم.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#00C853] animate-pulse" />
-              <span className="text-[10px] font-extrabold text-[#00C853]">متصل بالنظام المباشر</span>
+              <span className="text-[10px] font-extrabold text-[#00C853]">شغالين ومتصلين بالبث المباشر 🟢</span>
             </div>
           </div>
 
@@ -787,8 +790,8 @@ export function OpsClient() {
               <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
                 <Database className="h-4.5 w-4.5" />
               </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">سحب البيانات</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{activeRssSources.length} مصادر نشطة</span>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">سحب وتلقيم</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{activeRssSources.length} مصادر نشطة الحين</span>
             </div>
 
             {/* Node 2: Filter */}
@@ -796,8 +799,8 @@ export function OpsClient() {
               <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
                 <Search className="h-4.5 w-4.5" />
               </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">تصفية الكلمات</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.active} مواد بالتدفق</span>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">تصفية ذكية</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.active} مواد قيد الرصد</span>
             </div>
 
             {/* Node 3: Validation */}
@@ -805,8 +808,8 @@ export function OpsClient() {
               <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2] mb-3 group-hover/node:scale-110 transition-transform">
                 <CheckSquare className="h-4.5 w-4.5" />
               </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">التدقيق الفني</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.review} بانتظار الاعتماد</span>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">مراجعة واعتماد</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.review} يبي لها موافقة</span>
             </div>
 
             {/* Node 4: Ready */}
@@ -814,8 +817,8 @@ export function OpsClient() {
               <div className="w-9 h-9 rounded-xl bg-[#00C853]/10 flex items-center justify-center text-[#00C853] mb-3 group-hover/node:scale-110 transition-transform">
                 <Sparkles className="h-4.5 w-4.5" />
               </div>
-              <span className="text-xs font-bold text-[var(--color-text-title)]">جاهز للتقرير</span>
-              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.report} مواد جاهزة للعميل</span>
+              <span className="text-xs font-bold text-[var(--color-text-title)]">جاهز للتقرير الفخم</span>
+              <span className="text-[10px] text-[var(--color-text-muted)] mt-1">{tabCounts.report} جاهزة لتقرير العميل</span>
             </div>
           </div>
         </div>
@@ -823,14 +826,14 @@ export function OpsClient() {
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12 md:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="إضافة تغريدة أو مقال إخباري مستقل">
+          <BentoCard colSpan="col-span-12" title="رصد مادة فردية 📝" icon={LinkIcon} subtitle="تقدر تضيف تغريدة أو خبر لحاله وبسرعة">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
               <div className="relative">
                 <input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
-                  placeholder="الصق الرابط المباشر للمادة..."
-                  className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 ${
+                  placeholder="حط رابط التغريدة أو الخبر هنا..."
+                  className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 focus:outline focus:outline-2 focus:outline-[#2383E2]/50 ${
                     isXUrl
                       ? "border-[#1DA1F2] pr-16 pl-3 shadow-[0_0_10px_rgba(29,161,242,0.15)] bg-blue-50/5 focus:border-[#1DA1F2]"
                       : "border-[var(--color-border)] pr-3 pl-3 focus:border-[#2383E2] focus:bg-white"
@@ -848,20 +851,20 @@ export function OpsClient() {
 
               <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
                 <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-muted)] hover:text-[#2383E2] select-none">
-                  تعديل يدوي للتفاصيل
+                  تبي تعدل التفاصيل يدوي؟ اضغط هنا ⚙️
                 </summary>
                 <div className="mt-2.5 space-y-2">
                   <input
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
-                    placeholder="عنوان المادة"
+                    placeholder="عنوان الخبر أو التغريدة"
                     className="h-8 w-full rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs outline-none focus:border-[#2383E2]"
                   />
                   <div className="grid gap-2 grid-cols-2">
                     <input
                       value={authorName}
                       onChange={(event) => setAuthorName(event.target.value)}
-                      placeholder="الناشر"
+                      placeholder="اسم الناشر / الحساب"
                       className="h-8 w-full rounded-lg border border-[var(--color-border)] bg-white px-2.5 text-xs outline-none focus:border-[#2383E2]"
                     />
                     <input
@@ -874,7 +877,7 @@ export function OpsClient() {
                   <textarea
                     value={text}
                     onChange={(event) => setText(event.target.value)}
-                    placeholder="ملخص محتوى المادة"
+                    placeholder="اكتب ملخص أو وش السالفة..."
                     className="min-h-16 w-full rounded-lg border border-[var(--color-border)] bg-white p-2 text-xs leading-5 outline-none focus:border-[#2383E2] resize-none"
                   />
                 </div>
@@ -883,30 +886,12 @@ export function OpsClient() {
               <button
                 type="submit"
                 disabled={pending !== null}
-                className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-stone-900 transition disabled:opacity-50"
+                className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-[#2383E2] transition active:scale-[0.97] transition-transform disabled:opacity-50 cursor-pointer"
               >
                 {pending === "manual" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                سحب وإضافة المادة
+                اضغط هنا ونسحبها لك فوراً 🚀
               </button>
             </form>
-          </BentoCard>
-
-          {/* Card 2: Sources Shortcut */}
-          <BentoCard colSpan="col-span-12 md:col-span-6" title="المصادر والكلمات الدالة" icon={Database} subtitle="إدارة RSS والجدولة والاستيراد القديم في صفحة منفصلة">
-            <div className="flex h-full flex-col justify-between gap-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Info label="مصادر نشطة" value={activeRssSources.length.toLocaleString("ar-SA")} />
-                <Info label="مركز الكلمات" value="منفصل" />
-                <Info label="استيراد قديم" value="أداة متقدمة" />
-              </div>
-              <a
-                href="/sources"
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#111111] px-4 text-xs font-bold text-white transition hover:bg-stone-900"
-              >
-                فتح صفحة المصادر
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </a>
-            </div>
           </BentoCard>
         </BentoGrid>
 
@@ -914,40 +899,6 @@ export function OpsClient() {
         <div className="grid grid-cols-12 gap-5">
           {/* Left pane: Health Widgets & Selected Item details (col-span-12 lg:col-span-4) */}
           <div className="col-span-12 lg:col-span-4 space-y-5">
-            {/* Server Health Card */}
-            <BentoCard colSpan="col-span-12" title="مراقبة الخوادم والبنية التحتية" icon={Server}>
-              <div className="space-y-3.5 mt-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
-                    <Database className="h-3.5 w-3.5 text-[#2383E2]" /> Supabase API
-                  </span>
-                  <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> متصل
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[var(--color-text-muted)] font-bold flex items-center gap-1.5">
-                    <HeartbeatIcon className="h-3.5 w-3.5 text-[#2383E2]" /> Scraper Cron
-                  </span>
-                  <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> مستقر
-                  </span>
-                </div>
-
-                {/* System logs console */}
-                <div className="rounded-xl bg-zinc-950 p-3 font-mono text-[9px] text-zinc-400 select-all border border-zinc-800 space-y-1.5 overflow-hidden">
-                  <div className="flex items-center gap-1.5">
-                    <Terminal className="h-3 w-3 text-amber-500" />
-                    <span className="text-zinc-500 font-extrabold select-none">[CONSOLE LOGS]</span>
-                  </div>
-                  <p className="text-emerald-400 leading-4"><span className="text-zinc-600">[SUCCESS]</span> Connected to Supabase DB</p>
-                  <p className="text-zinc-400 leading-4"><span className="text-zinc-600">[INFO]</span> Scraper listening on port 3000</p>
-                  <p className="text-amber-400 leading-4"><span className="text-zinc-600">[WARN]</span> Rate limit reset in 12m</p>
-                </div>
-              </div>
-            </BentoCard>
-
             {/* Connected X Engine & Auto-Discovery Bento Card */}
             <BentoCard colSpan="col-span-12" title="محرك البحث التلقائي في X" icon={Cpu}>
               <div className="space-y-3 mt-1">
@@ -1096,20 +1047,20 @@ export function OpsClient() {
                       type="button"
                       onClick={() => archiveItem(selectedItem)}
                       disabled={pending !== null}
-                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-2.5 text-xs font-bold text-[#9a341f] hover:border-[#d7745f] transition disabled:opacity-50"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-2.5 text-xs font-bold text-[#9a341f] hover:border-[#d7745f] transition disabled:opacity-50 active:scale-[0.97] transition-transform"
                     >
                       <Archive className="h-3.5 w-3.5" />
-                      أرشفة
+                      أرشفة المادة 📦
                     </button>
                     {selectedItem.state === "approved_pending_capture" || selectedItem.state === "capture_failed" || selectedItem.state === "report_ready" ? (
                       <button
                         type="button"
                         onClick={() => approveItem(selectedItem)}
                         disabled={pending !== null}
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] px-2.5 text-xs font-bold hover:border-[#2383E2]/40 transition disabled:opacity-50"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] px-2.5 text-xs font-bold hover:border-[#2383E2]/40 transition disabled:opacity-50 active:scale-[0.97] transition-transform"
                       >
                         <Check className="h-3.5 w-3.5" />
-                        اعتماد
+                        اعتماد الحين ✅
                       </button>
                     ) : null}
                   </div>
@@ -1182,10 +1133,10 @@ export function OpsClient() {
                       <button
                         type="submit"
                         disabled={pending !== null}
-                        className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#111111] text-[11px] font-bold text-white hover:bg-stone-900 transition"
+                        className="w-full inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#111111] hover:bg-[#2383E2] text-[11px] font-bold text-white transition active:scale-[0.97] transition-transform cursor-pointer"
                       >
                         {pending === `edit-${selectedItem.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                        تحديث التفاصيل
+                        حفظ التعديلات 💾
                       </button>
                     </form>
                   </details>
@@ -1201,7 +1152,7 @@ export function OpsClient() {
               </div>
             ) : (
               <div className="flex min-h-64 items-center justify-center p-6 text-center text-xs font-bold text-[var(--color-text-muted)] select-none">
-                الرجاء اختيار مادة رصد لعرض تفاصيل التوثيق.
+                اختر لك مادة رصد من القائمة عشان تشوف تفاصيلها الكاملة هنا 👇
               </div>
             )}
           </div>
@@ -1234,17 +1185,17 @@ export function OpsClient() {
                     type="button"
                     onClick={archiveVisibleItems}
                     disabled={pending !== null || !visibleItems.length}
-                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-[#f1b6aa] bg-[#fff8f6] px-3 text-xs font-bold text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50 active:scale-[0.97] transition-transform cursor-pointer"
                   >
                     {pending === "archive-visible" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    أرشفة الظاهرة
+                    أرشفة كل المعروضين 📦
                   </button>
                   <div className="relative">
                     <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
                     <input
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder="بحث سريع في المواد..."
+                      placeholder="بحث سريع في اللي رصدناه..."
                       className="h-8 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] pr-8 pl-3 text-xs outline-none transition focus:border-[#2383E2] focus:bg-white xl:w-56"
                     />
                   </div>
@@ -1321,8 +1272,8 @@ export function OpsClient() {
               ) : (
                 <div className="p-12 text-center select-none flex flex-col items-center">
                   <CircleCheck className="h-8 w-8 text-[#00C853] animate-pulse" />
-                  <h2 className="mt-3 text-xs font-extrabold text-[var(--color-text-title)]">تهانينا! لا توجد مواد للمراجعة</h2>
-                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">كافة المواد تمت تصفيتها ومعالجتها بنجاح.</p>
+                  <h2 className="mt-3 text-xs font-extrabold text-[var(--color-text-title)]">يا سلام! ما فيه شيء يبي له مراجعة الحين 🎉</h2>
+                  <p className="text-[10px] text-[var(--color-text-muted)] mt-1">كل شيء تمام ومصفى على أكمل وجه.</p>
                 </div>
               )}
             </div>

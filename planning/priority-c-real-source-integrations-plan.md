@@ -357,6 +357,35 @@ Acceptance checks:
 - Missing fallback key does not break ingestion.
 - Fallback usage is visible in health/status metrics.
 
+## Phase C3 - X/Twitter Workflow Foundation
+
+Outcome: X/Twitter links have a reliable, low-cost foundation for manual intake, metadata refresh, and future search automation.
+
+Status: completed locally on 2026-05-22; standard local quality gate passed; pending production smoke.
+
+Tasks:
+
+- [x] Add X URL parser and canonicalizer for `x.com`, `twitter.com`, mobile domains, `vxtwitter.com`, `fxtwitter.com`, `fixupx.com`, and `fixvx.com`.
+- [x] Add a typed `XPost` model and provider interfaces under `src/lib/x/`.
+- [x] Add `MockXProvider` for deterministic local tests.
+- [x] Add `OEmbedXProvider` as the no-key, no-cost basic metadata path.
+- [x] Add credential-gated stubs for Official X, Apify, and agent/xAI providers.
+- [x] Keep premium provider fallback cost-safe by falling back to oEmbed instead of escalating to a paid provider.
+- [x] Add owner/editor-only `/api/items/x-refresh` to refresh X metadata and persist `raw_response.x_post`.
+- [x] Add X search foundation through `XSearchManager`, `GrokXSearchProvider`, and `MockSearchProvider`.
+- [x] Add automated tests for parsing, canonicalization, provider choice, fallback, API refresh, and search dedupe.
+- [x] Remove temporary C3 implementation plans after the living roadmap absorbed the completed state.
+- [x] Run the full local quality gate after the C3 cleanup.
+- [ ] Production-smoke one fresh X URL through `/ops` and `/client-report`.
+
+Acceptance checks:
+
+- Basic X workflow does not require paid X, Apify, or xAI credentials.
+- Unknown or missing premium credentials fail safely and do not block the fallback path.
+- Alternate X URL formats dedupe to a clean `https://x.com/.../status/...` original link.
+- Refreshed X metadata is stored internally without exposing raw provider internals to viewers.
+- Search automation remains optional and credential-gated until a later sprint.
+
 ## Recommended Start
 
 Start with Phase C1.0, then C1.1, then C1.2.

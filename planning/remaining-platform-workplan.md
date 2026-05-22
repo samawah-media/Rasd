@@ -13,7 +13,7 @@ Owner/editor live capture smoke for Supabase Storage evidence persistence
 Immediate prerequisite:
 
 ```text
-Completed: premium UI refresh synced to GitHub and deployed
+Completed: C3 X/Twitter workflow foundation
 ```
 
 The 2026-05-21 production deploy was originally made directly from the local working tree. Commit `87575f5` synced those deployed changes to GitHub `main`, and Vercel redeployed from GitHub to production.
@@ -24,6 +24,7 @@ Why this is next:
 - The premium admin/client shell refresh was merged and deployed to Vercel production on 2026-05-22 with commit `6896679`.
 - The legacy archive, links, content crops, and publisher crops are already wired into the client report path.
 - Manual intake and evidence-lite capture have automated coverage, but the full production browser loop still needs owner-side confirmation.
+- C3 is now complete locally: X URL parsing, metadata provider fallback, refresh API coverage, and optional search provider foundations are in place without requiring paid credentials.
 - Before building more UI or automation, the team needs one trusted owner-side production pass proving the refreshed UI works with the real Supabase runtime.
 
 ## North Star
@@ -586,17 +587,25 @@ Status: C2.0, C2.1 metadata baseline, C2.2 editor correction, and C2.3 Readabili
 
 ### C3. X/Twitter Workflow
 
-Short-term:
+Status: completed locally on 2026-05-22; standard local quality gate passed; pending production smoke through `/ops`.
 
-- Manual X URL intake.
-- X oEmbed or link preview where available.
-- Store X URL as original link.
+- [x] Manual X URL intake remains supported through the normal manual URL workflow.
+- [x] Canonicalize X/Twitter post URLs across `x.com`, `twitter.com`, mobile variants, `vxtwitter.com`, `fxtwitter.com`, `fixupx.com`, and `fixvx.com`.
+- [x] Store clean X post permalinks as original links.
+- [x] Add typed X post model and provider interfaces.
+- [x] Add `mock` and public `oembed` providers for no-cost local/basic workflow.
+- [x] Add credential-gated `apify`, `official`, and `agent` provider stubs so paid behavior cannot run accidentally.
+- [x] Add cost-safe fallback from premium/keyed providers to free oEmbed.
+- [x] Add owner/editor-only X stats refresh API and persist refreshed metadata in `raw_response.x_post`.
+- [x] Add X search foundation with deterministic mock search and optional Grok/xAI search behind `XAI_API_KEY`.
+- [x] Add tests for URL parsing, provider selection, fallback behavior, refresh API behavior, and search dedupe.
+- [x] Run the full post-C3 local quality gate: `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
+- [ ] Production smoke one fresh X URL through `/ops`: paste, hydrate, approve, capture, add to report, and confirm in `/client-report`.
 
 Later:
 
-- X API integration if account/credits are available.
-- Search queries and monitored accounts.
-- Rate limit and cost guardrails.
+- Implement real Official API or Apify behavior only after provider choice, credentials, rate limits, and budget guardrails are approved.
+- Connect X search/monitored accounts into source scheduling only after owner smoke proves the manual/source workflow is stable.
 
 ### C4. Screenshot And Evidence Pipeline
 
@@ -713,7 +722,9 @@ Sprint tasks:
 6. [x] Add PDF-cropped content images for legacy items.
 7. [x] Add one real manual URL intake test path.
 8. [x] Deploy the simplified client experience to Vercel.
-9. [ ] Run one end-to-end production smoke test.
+9. [x] Complete the C3 X/Twitter workflow foundation locally.
+10. [x] Run the post-C3 local quality gate.
+11. [ ] Run one end-to-end production smoke test.
 
 Definition of done:
 
@@ -723,6 +734,7 @@ Definition of done:
 - Original links/screenshots/statuses survive redeploy.
 - Legacy items have content images or safe full-page evidence fallback.
 - One manually added item can be reviewed and shown in the client report.
+- One fresh X URL can refresh metadata through the C3 provider/fallback path without paid credentials.
 - Viewer cannot access admin pages.
 
 Next recommended task:

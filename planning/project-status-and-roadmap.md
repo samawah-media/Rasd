@@ -17,7 +17,7 @@ Stabilization + real-source readiness
 Main active threads:
 
 - Owner/editor production smoke for `/ops`, `/sources`, `/client-report`, `/access`, and `/settings`.
-- C3 X/Twitter workflow foundation is currently being continued by another agent.
+- C3 X/Twitter workflow foundation is complete locally and passed the standard quality gate.
 - C4 screenshot/evidence storage foundation is deployed, but needs authenticated live capture smoke.
 - UI is good enough for testing; broad redesign should wait until the real monitoring loop is proven.
 
@@ -242,29 +242,22 @@ Remaining:
 
 ### C3 X/Twitter Workflow
 
-Status: in progress by another agent.
+Status: completed locally on 2026-05-22; standard local quality gate passed; pending production owner smoke.
 
-Current ownership:
+Delivered:
 
-- The other agent should work on:
-  - `src/lib/x/**`
-  - `tests/x-workflow.test.ts`
-  - `planning/implementation_plan_c3*.md`
-  - any X provider/parser/manager foundation files.
+- X URL parser and canonicalizer for `x.com`, `twitter.com`, mobile variants, and alternate domains such as `vxtwitter.com`, `fxtwitter.com`, `fixupx.com`, and `fixvx.com`.
+- Provider abstraction for `mock`, `oembed`, `apify`, `official`, and `agent`, with paid/keyed providers gated behind credentials.
+- Cost-safe metadata fallback to the free oEmbed provider when a premium provider fails.
+- Owner/editor-only `/api/items/x-refresh` endpoint to refresh X metadata and store the typed `x_post` payload in `raw_response`.
+- X search foundation through `XSearchManager`, `GrokXSearchProvider`, and deterministic mock search for local testing.
+- Automated coverage for parsing, canonicalization, provider selection, fallback behavior, refresh API behavior, and search dedupe.
 
-Do not overlap while C3 is active:
+Guardrails:
 
-- Do not modify X provider internals from another thread.
-- Do not redesign `/ops` around C3 until the C3 foundation is merged and reviewed.
-- Do not add paid X API behavior before provider selection and guardrails are reviewed.
-
-Expected C3 deliverables:
-
-- Normalize more X URL variants.
-- Provider abstraction for oEmbed/mock/future Apify/official API.
-- Cost-safe fallback.
-- Tests for URL parsing, provider choice, and fallback behavior.
-- No hard dependency on paid X credentials for basic workflow.
+- Basic X intake still works without paid X or xAI credentials.
+- Official X and Apify integrations remain stubs until keys, budget limits, and provider selection are reviewed.
+- Grok/xAI search is credential-gated and should stay optional until owner approves usage and cost.
 
 ### C4 Screenshot And Evidence Pipeline
 
@@ -379,61 +372,47 @@ Not needed for the first Hidayathon test:
 
 ## Immediate Next Sequence
 
-Do these in order unless C3 requires review:
+Do these in order:
 
-1. Wait for the C3 agent to finish and report changed files, tests, and known risks.
-2. Review C3 without merging unrelated UI/storage changes into it.
-3. Run full local checks after C3:
-   - `npm run test`
-   - `npm run typecheck`
-   - `npm run lint`
-   - `npm run build`
-4. Owner production smoke:
+1. Owner production smoke:
    - `/ops`
    - `/sources`
    - `/client-report`
    - `/access`
    - `/settings`
-5. Test one URL through the full workflow:
+2. Test one X/news URL through the full workflow:
    - paste URL
    - confirm item visible
    - approve
    - capture
    - add to report
    - confirm in `/client-report`
-6. Test RSS source flow:
+3. Test RSS source flow:
    - run one source
    - confirm unrelated items are skipped
    - confirm relevant items enter `/ops`
-7. Test Viewer account:
+4. Test Viewer account:
    - can open `/client-report`
    - cannot open `/ops`, `/sources`, `/imports`, `/reports/*`, or admin APIs.
-8. After smoke passes, choose the next sprint:
+5. After smoke passes, choose the next sprint:
    - C4 real browser capture sample, or
    - PDF export polish, or
    - focused UI cleanup from real feedback.
 
 ## Current Blockers And Risks
 
-- C3 is in progress in parallel, so avoid editing X provider files until it lands.
 - Google OAuth secret rotation is still an owner-side security task.
 - Production owner smoke is still the most important proof after recent changes.
 - X metadata can fail because oEmbed/public X access is not guaranteed.
+- C3 paid-provider behavior is intentionally gated; do not enable paid Official API, Apify, or Grok search usage without explicit budget review.
 - RSS feeds can be noisy; keyword rules must stay editable by admin.
 - Export is currently browser-print style, not a dedicated PDF generation service.
 - `npm audit --audit-level=moderate` has a known Next/PostCSS advisory; do not force downgrade.
 
 ## Best Parallel Work Split
 
-While C3 continues:
+Now that C3 is complete:
 
-- Other agent: C3 X parser/provider/manager/tests only.
-- This thread: planning, QA, production smoke, `/client-report` review, C4 smoke, documentation.
-
-Avoid parallel edits to:
-
-- `src/lib/x/**`
-- `tests/x-workflow.test.ts`
-- `planning/implementation_plan_c3*.md`
-- any shared ingestion code unless both agents agree first.
-
+- This thread can own planning, QA, production smoke, `/client-report` review, C4 smoke, and documentation.
+- X provider/search internals are open for follow-up only when the change is explicitly part of the next source-integration sprint.
+- Avoid enabling paid providers or broad automation in parallel with owner smoke testing.

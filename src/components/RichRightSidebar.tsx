@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   LockKeyhole,
-  Settings
+  Settings,
+  Activity
 } from "lucide-react";
 
 // Beautiful SVG logo placeholder for Samawah
@@ -58,32 +59,44 @@ export default function RichRightSidebar() {
 
   const menuItems = [
     {
-      title: "لوحة التشغيل",
-      subtitle: "إضافة ومراجعة المحتوى",
+      title: "غرفة العمليات ⚡",
+      subtitle: "إضافة وتصفية ومراجعة المحتوى",
       path: "/ops",
       icon: Cpu,
     },
     {
-      title: "تقرير العميل",
-      subtitle: "الواجهة النهائية للعميل",
+      title: "البث المباشر الفوري 📻",
+      subtitle: "متابعة المواد لحظة بلحظة",
+      path: "/feed",
+      icon: Activity,
+    },
+    {
+      title: "تقرير العميل الفخم 📊",
+      subtitle: "الواجهة النهائية للأنيق للعميل",
       path: "/client-report",
       icon: FileText,
     },
     {
-      title: "المصادر",
-      subtitle: "RSS والكلمات الدالة",
+      title: "صحة خوادمنا ونبضها 🟢",
+      subtitle: "مؤشرات حية لكفاءة المنصة",
+      path: "/health",
+      icon: Activity,
+    },
+    {
+      title: "مصادر الرصد والجدولة ⚙️",
+      subtitle: "إدارة الـ RSS والكلمات الدالة",
       path: "/sources",
       icon: Database,
     },
     {
-      title: "المستخدمين",
-      subtitle: "الأدوار والوصول",
+      title: "إدارة المشرفين 👥",
+      subtitle: "تحديد الأدوار والوصول الآمن",
       path: "/access",
       icon: UserRound,
     },
     {
-      title: "الإعدادات",
-      subtitle: "إعدادات المنصة",
+      title: "إعدادات المنصة 🔧",
+      subtitle: "تخصيص الهوية والربط التقني",
       path: "/settings",
       icon: Settings,
     },
@@ -147,7 +160,7 @@ export default function RichRightSidebar() {
                 key={item.path}
                 href={item.path}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group ${
+                className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group active:scale-[0.97] ${
                   isActive
                     ? "bg-[#2383E2]/10 border-r-4 border-[#2383E2]"
                     : "hover:bg-[var(--color-bg-hover)]"
@@ -184,10 +197,10 @@ export default function RichRightSidebar() {
           <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-title)]">
               <LockKeyhole size={14} className="text-[#2383E2]" />
-              <span>SaaS Guardrails Active</span>
+              <span>المنصة تحت الحماية والرقابة 🔐</span>
             </div>
             <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
-              حماية التكلفة والخادم مفعلة لضمان أداء مستقر وفوري لكافة طلبات الرصد.
+              تطمن، حماية استهلاك السيرفر والتكاليف شغالين بأعلى كفاءة لضمان سرعة الرصد.
             </p>
           </div>
         </div>
