@@ -86,10 +86,30 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, 
       let apifyError: string | undefined;
       if (process.env.MEDIA_METADATA_EXTRACTOR !== "off" && isApifyConfigured()) {
         const apifyResult = await extractWithApify(url, platform, options.apifyFetcher ?? fetcher);
-        if (apifyResult.metadata && !isGenericTitle(apifyResult.metadata.title, platform)) {
-          return apifyResult.metadata;
+        if (apifyResult.metadata) {
+          if (!isGenericTitle(apifyResult.metadata.title, platform)) {
+            return apifyResult.metadata;
+          }
+          if (apifyResult.metadata.imageUrl) {
+            const fallbackTitle = platform === "TikTok"
+              ? "تعذر جلب تفاصيل فيديو تيك توك"
+              : "تعذر جلب تفاصيل منشور إنستغرام";
+            return {
+              ...apifyResult.metadata,
+              title: fallbackTitle,
+              text: apifyResult.metadata.text ?? fallbackTitle,
+              warning: "partial_metadata",
+              warningDetail: "Image available but caption could not be extracted",
+              warnings: ["partial_metadata"],
+            };
+          }
         }
-        apifyError = apifyResult.error ?? "apify_metadata_unavailable";
+        let errorMsg = apifyResult.error ?? "apify_metadata_unavailable";
+        if (apifyResult.rawResponse) {
+          const rawKeys = Object.keys(apifyResult.rawResponse).join(", ");
+          errorMsg += ` | response_keys: ${rawKeys}`;
+        }
+        apifyError = errorMsg;
       }
 
       let htmlMetadata: UrlMetadata | null = null;
