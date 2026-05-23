@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock-data";
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 import {
   normalizeSourceCreateInput,
@@ -411,7 +412,8 @@ export const store = {
     usage = { ...usage, ...nextUsage };
   },
 
-  health() {
+  async health() {
+    const mediaMetadataExtractor = await getMediaMetadataHealth();
     const dynamicHealth: HealthMetric[] = [
       ...healthMetrics,
       {
@@ -440,12 +442,14 @@ export const store = {
       },
       usage,
       xSearchLastRun,
+      mediaMetadataExtractor,
       automation: {
         schemaReady: true,
         cronSecretConfigured: Boolean(process.env.CRON_SECRET),
         connectorCronPath: "/api/cron/run-connectors",
         connectorCronScheduleUtc: "15 5 * * *",
         mocksEnabled: process.env.NODE_ENV !== "production" && (process.env.RASD_CONNECTOR_MOCKS === "true" || process.env.CONNECTOR_MOCK_MODE === "true"),
+        mediaMetadataExtractor,
         sourceRulesCount: sourceRulesState.length,
         activeSourceRulesCount: sourceRulesState.filter((rule) => rule.active).length,
         queuedJobsCount: jobsState.filter((job) => job.status === "queued" || job.status === "running").length,

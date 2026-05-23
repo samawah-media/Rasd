@@ -19,6 +19,7 @@ import {
   parseEvidenceStorageReference,
 } from "../src/server/evidence-storage";
 import { fetchUrlMetadata, isSafePublicHttpUrl } from "../src/server/url-metadata";
+import type { YtDlpRunner } from "../src/server/media-metadata-extractor";
 
 describe("connector and budget utilities", () => {
   it("canonicalizes URLs for dedupe without dropping meaningful query params", () => {
@@ -402,6 +403,147 @@ describe("connector and budget utilities", () => {
     assert.match(metadata.text ?? "", /expanded article body/);
   });
 
+  it("uses yt-dlp metadata first for TikTok manual URL intake", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    let htmlFetcherCalled = false;
+    const runner: YtDlpRunner = async (args) => {
+      assert.equal(args.at(-1), "https://tiktok.com/@rasd/video/12345");
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          title: "TikTok title from yt-dlp",
+          description: "TikTok description from yt-dlp",
+          uploader: "Rasd TikTok",
+          uploader_id: "rasd_tiktok",
+          thumbnail: "https://cdn.example.com/tiktok.jpg",
+          webpage_url: "https://www.tiktok.com/@rasd/video/12345",
+          upload_date: "20260522",
+        }),
+        stderr: "",
+      };
+    };
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://tiktok.com/@rasd/video/12345",
+        async () => {
+          htmlFetcherCalled = true;
+          throw new Error("html_fetcher_should_not_run");
+        },
+        { ytdlpRunner: runner },
+      );
+
+      assert.equal(metadata.platform, "TikTok");
+      assert.equal(metadata.source, "yt_dlp_metadata");
+      assert.equal(metadata.title, "TikTok title from yt-dlp");
+      assert.equal(metadata.text, "TikTok description from yt-dlp");
+      assert.equal(metadata.authorName, "Rasd TikTok");
+      assert.equal(metadata.authorHandle, "@rasd_tiktok");
+      assert.equal(metadata.imageUrl, "https://cdn.example.com/tiktok.jpg");
+      assert.equal(metadata.canonicalUrl, "https://www.tiktok.com/@rasd/video/12345");
+      assert.equal(metadata.publishedAt, "2026-05-22T00:00:00.000Z");
+      assert.equal(htmlFetcherCalled, false);
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
+  });
+
+  it("uses yt-dlp metadata first for Instagram manual URL intake", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "yt-dlp";
+    const runner: YtDlpRunner = async () => ({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        title: "Instagram reel title",
+        description: "Instagram caption from yt-dlp",
+        uploader: "Rasd Instagram",
+        uploader_id: "rasd_ig",
+        thumbnail: "https://cdn.example.com/instagram.jpg",
+        webpage_url: "https://www.instagram.com/reel/ABCDE/",
+        timestamp: 1779395400,
+      }),
+      stderr: "",
+    });
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://instagram.com/reel/ABCDE",
+        async () => {
+          throw new Error("html_fetcher_should_not_run");
+        },
+        { ytdlpRunner: runner },
+      );
+
+      assert.equal(metadata.platform, "Instagram");
+      assert.equal(metadata.source, "yt_dlp_metadata");
+      assert.equal(metadata.title, "Instagram reel title");
+      assert.equal(metadata.text, "Instagram caption from yt-dlp");
+      assert.equal(metadata.authorName, "Rasd Instagram");
+      assert.equal(metadata.authorHandle, "@rasd_ig");
+      assert.equal(metadata.imageUrl, "https://cdn.example.com/instagram.jpg");
+      assert.equal(metadata.canonicalUrl, "https://www.instagram.com/reel/ABCDE/");
+      assert.equal(metadata.publishedAt, "2026-05-21T20:30:00.000Z");
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
+  });
+
+  it("falls back to HTML metadata when yt-dlp extraction fails", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    const runner: YtDlpRunner = async () => ({ exitCode: 1, stdout: "", stderr: "login required" });
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://instagram.com/p/HTMLFALLBACK",
+        async () =>
+          new Response(
+            '<html><head><title>Instagram HTML title</title><meta property="og:description" content="HTML fallback caption"><meta property="og:image" content="https://instagram.com/fallback.jpg"></head></html>',
+            { status: 200, headers: { "content-type": "text/html" } },
+          ),
+        { ytdlpRunner: runner },
+      );
+
+      assert.equal(metadata.platform, "Instagram");
+      assert.equal(metadata.source, "html_metadata");
+      assert.equal(metadata.title, "Instagram HTML title");
+      assert.equal(metadata.text, "HTML fallback caption");
+      assert.equal(metadata.imageUrl, "https://instagram.com/fallback.jpg");
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
+  });
+
+  it("does not break TikTok metadata intake when yt-dlp is unavailable", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    const runner: YtDlpRunner = async () => ({ exitCode: null, stdout: "", stderr: "not found", errorCode: "ENOENT" });
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://tiktok.com/@rasd/video/98765",
+        async () =>
+          new Response(
+            '<html><head><title>TikTok HTML title</title><meta property="og:description" content="TikTok fallback description"></head></html>',
+            { status: 200, headers: { "content-type": "text/html" } },
+          ),
+        { ytdlpRunner: runner },
+      );
+
+      assert.equal(metadata.platform, "TikTok");
+      assert.equal(metadata.source, "html_metadata");
+      assert.equal(metadata.title, "TikTok HTML title");
+      assert.equal(metadata.text, "TikTok fallback description");
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
+  });
+
   it("blocks private or credentialed URLs before server-side metadata fetching", () => {
     assert.equal(isSafePublicHttpUrl("https://example.com/news"), true);
     assert.equal(isSafePublicHttpUrl("http://localhost:3000/admin"), false);
@@ -479,28 +621,36 @@ describe("connector and budget utilities", () => {
   });
 
   it("extracts TikTok and Instagram metadata correctly with platform detection", async () => {
-    const tiktokMeta = await fetchUrlMetadata("https://tiktok.com/@username/video/12345", async () => {
-      return new Response(
-        '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
-        { status: 200, headers: { "content-type": "text/html" } }
-      );
-    });
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "off";
 
-    const instagramMeta = await fetchUrlMetadata("https://instagram.com/p/ABCDE", async () => {
-      return new Response(
-        '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور على انستغرام"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
-        { status: 200, headers: { "content-type": "text/html" } }
-      );
-    });
+    try {
+      const tiktokMeta = await fetchUrlMetadata("https://tiktok.com/@username/video/12345", async () => {
+        return new Response(
+          '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
+          { status: 200, headers: { "content-type": "text/html" } }
+        );
+      });
 
-    assert.equal(tiktokMeta.platform, "TikTok");
-    assert.equal(tiktokMeta.title, "TikTok Video");
-    assert.equal(tiktokMeta.text, "فيديو رائع على تيك توك");
-    assert.equal(tiktokMeta.imageUrl, "https://tiktok.com/image.jpg");
+      const instagramMeta = await fetchUrlMetadata("https://instagram.com/p/ABCDE", async () => {
+        return new Response(
+          '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور على انستغرام"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
+          { status: 200, headers: { "content-type": "text/html" } }
+        );
+      });
 
-    assert.equal(instagramMeta.platform, "Instagram");
-    assert.equal(instagramMeta.title, "Instagram Post");
-    assert.equal(instagramMeta.text, "منشور على انستغرام");
-    assert.equal(instagramMeta.imageUrl, "https://instagram.com/image.jpg");
+      assert.equal(tiktokMeta.platform, "TikTok");
+      assert.equal(tiktokMeta.title, "TikTok Video");
+      assert.equal(tiktokMeta.text, "فيديو رائع على تيك توك");
+      assert.equal(tiktokMeta.imageUrl, "https://tiktok.com/image.jpg");
+
+      assert.equal(instagramMeta.platform, "Instagram");
+      assert.equal(instagramMeta.title, "Instagram Post");
+      assert.equal(instagramMeta.text, "منشور على انستغرام");
+      assert.equal(instagramMeta.imageUrl, "https://instagram.com/image.jpg");
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
   });
 });

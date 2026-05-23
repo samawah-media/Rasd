@@ -63,7 +63,7 @@ type IntakeResponse = {
   duplicate?: boolean;
   duplicateType?: "url" | "content" | null;
   metadata?: {
-    source: "x_oembed" | "html_metadata" | "url_only";
+    source: "x_oembed" | "yt_dlp_metadata" | "html_metadata" | "url_only";
     warning?: string;
   } | null;
 };
@@ -253,6 +253,7 @@ function tabForItem(item: MonitoringItem): WorkTab {
 function sourceLabel(source?: IntakeResponse["metadata"]) {
   if (!source) return "تم حفظ الرابط.";
   if (source.source === "x_oembed") return "تم جلب بيانات التغريدة.";
+  if (source.source === "yt_dlp_metadata") return "تم جلب بيانات TikTok/Instagram.";
   if (source.source === "html_metadata") return "تم جلب بيانات الصفحة.";
   return "تم حفظ الرابط.";
 }

@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { XProviderManager } from "../lib/x/manager";
 import { parseXUrl } from "../lib/x/parser";
+import { extractMediaMetadataWithYtDlp, type YtDlpRunner } from "./media-metadata-extractor";
 
 export type ExtractionResult = {
   title?: string;
@@ -13,7 +14,7 @@ export type ExtractionResult = {
   canonicalUrl?: string;
   imageUrl?: string;
   platform: "X" | "TikTok" | "Instagram" | "Website" | "Unknown";
-  source: "x_oembed" | "html_metadata" | "url_only";
+  source: "x_oembed" | "yt_dlp_metadata" | "html_metadata" | "url_only";
   readabilityUsed?: boolean;
   warnings?: string[];
   warning?: string;
@@ -23,13 +24,17 @@ export type UrlMetadata = ExtractionResult;
 
 type FetchLike = typeof fetch;
 
+type FetchUrlMetadataOptions = {
+  ytdlpRunner?: YtDlpRunner;
+};
+
 const metadataTimeoutMs = 6000;
 const maxHtmlExtractionChars = 1_000_000;
 const maxReadabilityChars = 500_000;
 const readabilityTimeoutMs = 2500;
 const minReadableTextLength = 80;
 
-export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch): Promise<UrlMetadata> {
+export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, options: FetchUrlMetadataOptions = {}): Promise<UrlMetadata> {
   const platform = platformFromUrl(url);
 
   if (!isSafePublicHttpUrl(url)) {
@@ -46,6 +51,11 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch):
       return await fetchXMetadata(url, fetcher);
     }
 
+    if (platform === "TikTok" || platform === "Instagram") {
+      const mediaMetadata = await fetchYtDlpMetadata(url, platform, options.ytdlpRunner);
+      if (mediaMetadata) return mediaMetadata;
+    }
+
     return await fetchHtmlMetadata(url, fetcher);
   } catch (error) {
     return {
@@ -55,6 +65,34 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch):
       warnings: [error instanceof Error ? error.message : "metadata_fetch_failed"],
     };
   }
+}
+
+async function fetchYtDlpMetadata(
+  url: string,
+  platform: Extract<UrlMetadata["platform"], "TikTok" | "Instagram">,
+  runner?: YtDlpRunner,
+): Promise<UrlMetadata | null> {
+  const metadata = await extractMediaMetadataWithYtDlp(url, runner).catch(() => null);
+  if (!metadata) return null;
+
+  const canonicalUrl = firstSafePublicUrl(metadata.webpageUrl, url);
+  const imageUrl = firstSafePublicUrl(metadata.thumbnail, url);
+  const text = cleanText(metadata.description) ?? cleanText(metadata.title);
+  const publishedAt = metadata.timestamp
+    ? new Date(metadata.timestamp * 1000).toISOString()
+    : isoUploadDate(metadata.uploadDate);
+
+  return {
+    title: cleanText(metadata.title) ?? text ?? "Media item",
+    text,
+    authorName: cleanText(metadata.uploader),
+    authorHandle: normalizeHandle(metadata.uploaderId),
+    publishedAt,
+    canonicalUrl,
+    imageUrl,
+    platform: canonicalUrl ? platformFromUrl(canonicalUrl) : platform,
+    source: "yt_dlp_metadata",
+  };
 }
 
 export function platformFromUrl(value: string): UrlMetadata["platform"] {
@@ -389,6 +427,20 @@ function isoDate(value: string | null | undefined) {
 
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? undefined : new Date(timestamp).toISOString();
+}
+
+function isoUploadDate(value: string | null | undefined) {
+  if (!value || !/^\d{8}$/u.test(value)) return undefined;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6)) - 1;
+  const day = Number(value.slice(6, 8));
+  return new Date(Date.UTC(year, month, day)).toISOString();
+}
+
+function normalizeHandle(value: string | null | undefined) {
+  const cleaned = cleanText(value);
+  if (!cleaned) return undefined;
+  return cleaned.startsWith("@") ? cleaned : `@${cleaned}`;
 }
 
 function englishMonthNumber(value: string) {
