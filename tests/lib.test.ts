@@ -653,4 +653,55 @@ describe("connector and budget utilities", () => {
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
     }
   });
+
+  it("rejects generic titles and returns structured fallbacks for TikTok and Instagram", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    process.env.MEDIA_METADATA_EXTRACTOR = "yt-dlp";
+
+    const failingRunner = async () => {
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: "ERROR: Sign in to confirm your age.",
+      };
+    };
+
+    try {
+      const tiktokFallback = await fetchUrlMetadata(
+        "https://tiktok.com/@username/video/12345",
+        async () => {
+          return new Response(
+            '<html><head><title>TikTok - Make Your Day</title></head></html>',
+            { status: 200, headers: { "content-type": "text/html" } }
+          );
+        },
+        { ytdlpRunner: failingRunner }
+      );
+
+      assert.equal(tiktokFallback.platform, "TikTok");
+      assert.equal(tiktokFallback.title, "تعذر جلب تفاصيل فيديو تيك توك");
+      assert.equal(tiktokFallback.warning, "media_metadata_unavailable");
+      assert.ok(tiktokFallback.warningDetail?.includes("yt-dlp error: yt-dlp exited with code 1"));
+      assert.ok(tiktokFallback.warningDetail?.includes("HTML scraping returned a generic/denylisted title"));
+
+      const instagramFallback = await fetchUrlMetadata(
+        "https://instagram.com/p/ABCDE",
+        async () => {
+          return new Response(
+            '<html><head><title>Log in • Instagram</title></head></html>',
+            { status: 200, headers: { "content-type": "text/html" } }
+          );
+        },
+        { ytdlpRunner: failingRunner }
+      );
+
+      assert.equal(instagramFallback.platform, "Instagram");
+      assert.equal(instagramFallback.title, "تعذر جلب تفاصيل منشور إنستغرام");
+      assert.equal(instagramFallback.warning, "media_metadata_unavailable");
+      assert.ok(instagramFallback.warningDetail?.includes("ERROR: Sign in to confirm your age."));
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+    }
+  });
 });

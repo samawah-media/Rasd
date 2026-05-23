@@ -18,6 +18,7 @@ export type ExtractionResult = {
   readabilityUsed?: boolean;
   warnings?: string[];
   warning?: string;
+  warningDetail?: string;
 };
 
 export type UrlMetadata = ExtractionResult;
@@ -33,6 +34,27 @@ const maxHtmlExtractionChars = 1_000_000;
 const maxReadabilityChars = 500_000;
 const readabilityTimeoutMs = 2500;
 const minReadableTextLength = 80;
+
+export function isGenericTitle(title: string | undefined, platform: string): boolean {
+  if (!title) return true;
+  const t = title.trim();
+  const lower = t.toLowerCase();
+
+  if (platform === "TikTok" || platform === "Instagram" || platform === "X") {
+    const denylist = [
+      "tiktok - make your day",
+      "tiktok",
+      "instagram",
+      "instagram photo",
+      "instagram video",
+      "log in • instagram",
+      "login • instagram",
+    ];
+    if (denylist.includes(lower)) return true;
+    if (lower.includes("login") || lower.includes("make your day")) return true;
+  }
+  return false;
+}
 
 export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, options: FetchUrlMetadataOptions = {}): Promise<UrlMetadata> {
   const platform = platformFromUrl(url);
@@ -52,8 +74,46 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, 
     }
 
     if (platform === "TikTok" || platform === "Instagram") {
-      const mediaMetadata = await fetchYtDlpMetadata(url, platform, options.ytdlpRunner);
-      if (mediaMetadata) return mediaMetadata;
+      const ytdlpResult = await fetchYtDlpMetadata(url, platform, options.ytdlpRunner);
+      if (ytdlpResult.metadata) {
+        return ytdlpResult.metadata;
+      }
+
+      let htmlMetadata: UrlMetadata | null = null;
+      let htmlError: string | undefined;
+      try {
+        htmlMetadata = await fetchHtmlMetadata(url, fetcher);
+        if (htmlMetadata && isGenericTitle(htmlMetadata.title, platform)) {
+          htmlError = `HTML scraping returned a generic/denylisted title: "${htmlMetadata.title}"`;
+          htmlMetadata = null;
+        }
+      } catch (err) {
+        htmlError = err instanceof Error ? err.message : String(err);
+      }
+
+      if (htmlMetadata) {
+        return htmlMetadata;
+      }
+
+      const warningDetail = [
+        `yt-dlp error: ${ytdlpResult.error || "unknown"}`,
+        ytdlpResult.stderr ? `stderr: ${ytdlpResult.stderr}` : null,
+        htmlError ? `HTML backup error: ${htmlError}` : null,
+      ].filter(Boolean).join(" | ");
+
+      const arTitle = platform === "TikTok"
+        ? "تعذر جلب تفاصيل فيديو تيك توك"
+        : "تعذر جلب تفاصيل منشور إنستغرام";
+
+      return {
+        title: arTitle,
+        text: `تعذر جلب تفاصيل الرابط بشكل كامل من ${platform}. الرابط: ${url}`,
+        platform,
+        source: "url_only",
+        warning: "media_metadata_unavailable",
+        warnings: ["media_metadata_unavailable"],
+        warningDetail: warningDetail.slice(0, 2000),
+      };
     }
 
     return await fetchHtmlMetadata(url, fetcher);
@@ -71,28 +131,52 @@ async function fetchYtDlpMetadata(
   url: string,
   platform: Extract<UrlMetadata["platform"], "TikTok" | "Instagram">,
   runner?: YtDlpRunner,
-): Promise<UrlMetadata | null> {
-  const metadata = await extractMediaMetadataWithYtDlp(url, runner).catch(() => null);
-  if (!metadata) return null;
+): Promise<{ metadata: UrlMetadata | null; error?: string; stderr?: string }> {
+  try {
+    const result = await extractMediaMetadataWithYtDlp(url, runner);
+    if (!result.metadata) {
+      return {
+        metadata: null,
+        error: result.error || "yt-dlp failed",
+        stderr: result.stderr,
+      };
+    }
+    const media = result.metadata;
+    if (isGenericTitle(media.title, platform)) {
+      return {
+        metadata: null,
+        error: "yt_dlp_returned_generic_title",
+        stderr: `Title: "${media.title}" matches denylist. Description: ${media.description || "none"}`,
+      };
+    }
 
-  const canonicalUrl = firstSafePublicUrl(metadata.webpageUrl, url);
-  const imageUrl = firstSafePublicUrl(metadata.thumbnail, url);
-  const text = cleanText(metadata.description) ?? cleanText(metadata.title);
-  const publishedAt = metadata.timestamp
-    ? new Date(metadata.timestamp * 1000).toISOString()
-    : isoUploadDate(metadata.uploadDate);
+    const canonicalUrl = firstSafePublicUrl(media.webpageUrl, url);
+    const imageUrl = firstSafePublicUrl(media.thumbnail, url);
+    const text = cleanText(media.description) ?? cleanText(media.title);
+    const publishedAt = media.timestamp
+      ? new Date(media.timestamp * 1000).toISOString()
+      : isoUploadDate(media.uploadDate);
 
-  return {
-    title: cleanText(metadata.title) ?? text ?? "Media item",
-    text,
-    authorName: cleanText(metadata.uploader),
-    authorHandle: normalizeHandle(metadata.uploaderId),
-    publishedAt,
-    canonicalUrl,
-    imageUrl,
-    platform: canonicalUrl ? platformFromUrl(canonicalUrl) : platform,
-    source: "yt_dlp_metadata",
-  };
+    return {
+      metadata: {
+        title: cleanText(media.title) ?? text ?? "Media item",
+        text,
+        authorName: cleanText(media.uploader),
+        authorHandle: normalizeHandle(media.uploaderId),
+        publishedAt: publishedAt ?? new Date().toISOString(),
+        canonicalUrl,
+        imageUrl,
+        platform: canonicalUrl ? platformFromUrl(canonicalUrl) : platform,
+        source: "yt_dlp_metadata",
+      }
+    };
+  } catch (err) {
+    return {
+      metadata: null,
+      error: "yt_dlp_extraction_exception",
+      stderr: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export function platformFromUrl(value: string): UrlMetadata["platform"] {

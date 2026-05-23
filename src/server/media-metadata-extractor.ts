@@ -15,6 +15,12 @@ export type MediaMetadata = {
   uploadDate?: string;
 };
 
+export type MediaMetadataResult = {
+  metadata: MediaMetadata | null;
+  error?: string;
+  stderr?: string;
+};
+
 export type MediaMetadataHealth = {
   enabled: boolean;
   mode: "auto" | "yt-dlp";
@@ -23,6 +29,7 @@ export type MediaMetadataHealth = {
   proxyConfigured: boolean;
   status: "healthy" | "degraded" | "disabled";
   message: string;
+  lastError?: string;
 };
 
 export type YtDlpRunner = (args: string[], options: { timeoutMs: number }) => Promise<YtDlpRunResult>;
@@ -45,8 +52,34 @@ export function isMediaMetadataExtractorEnabled() {
   return process.env.MEDIA_METADATA_EXTRACTOR !== "off";
 }
 
-export async function extractMediaMetadataWithYtDlp(url: string, runner: YtDlpRunner = runYtDlp): Promise<MediaMetadata | null> {
-  if (!isMediaMetadataExtractorEnabled()) return null;
+let lastYtDlpError: string | undefined;
+
+export function sanitizeErrorString(str: string): string {
+  if (!str) return "";
+  let clean = str;
+  const proxyUrl = cleanEnv(process.env.YTDLP_PROXY_URL);
+  if (proxyUrl) {
+    clean = clean.replaceAll(proxyUrl, "[PROXY_URL_HIDDEN]");
+  }
+  const cookiesTxt = cleanEnv(process.env.YTDLP_COOKIES_TXT);
+  if (cookiesTxt) {
+    clean = clean.replaceAll(cookiesTxt, "[COOKIES_CONTENT_HIDDEN]");
+  }
+  const cookiesPath = cleanEnv(process.env.YTDLP_COOKIES_PATH);
+  if (cookiesPath) {
+    clean = clean.replaceAll(cookiesPath, "[COOKIES_PATH_HIDDEN]");
+  }
+  clean = clean.replace(/cookies\.txt/gi, "[COOKIES_FILE_HIDDEN]");
+  if (clean.length > 200) {
+    clean = clean.slice(0, 197) + "...";
+  }
+  return clean.trim();
+}
+
+export async function extractMediaMetadataWithYtDlp(url: string, runner: YtDlpRunner = runYtDlp): Promise<MediaMetadataResult> {
+  if (!isMediaMetadataExtractorEnabled()) {
+    return { metadata: null, error: "Media metadata extractor is disabled" };
+  }
 
   const cookieFile = await createCookieFileFromEnv();
   try {
@@ -68,9 +101,36 @@ export async function extractMediaMetadataWithYtDlp(url: string, runner: YtDlpRu
     args.push(url);
 
     const result = await runner(args, { timeoutMs: ytdlpTimeoutMs });
-    if (result.exitCode !== 0 || !result.stdout.trim()) return null;
+    if (result.exitCode !== 0 || !result.stdout.trim()) {
+      const err = `yt-dlp exited with code ${result.exitCode}`;
+      lastYtDlpError = sanitizeErrorString(result.stderr || err);
+      return {
+        metadata: null,
+        error: err,
+        stderr: result.stderr.trim() || undefined,
+      };
+    }
 
-    return parseYtDlpMetadata(result.stdout);
+    const parsed = parseYtDlpMetadata(result.stdout);
+    if (!parsed) {
+      const err = "Failed to parse yt-dlp JSON output";
+      lastYtDlpError = err;
+      return {
+        metadata: null,
+        error: err,
+        stderr: result.stdout.slice(0, 500),
+      };
+    }
+
+    return { metadata: parsed };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    lastYtDlpError = sanitizeErrorString(msg);
+    return {
+      metadata: null,
+      error: "yt-dlp execution error",
+      stderr: msg,
+    };
   } finally {
     if (cookieFile) await rm(dirname(cookieFile), { force: true, recursive: true }).catch(() => undefined);
   }
@@ -101,6 +161,9 @@ export async function getMediaMetadataHealth(runner: YtDlpRunner = runYtDlp): Pr
     errorCode: error && typeof error === "object" && "code" in error ? String(error.code) : undefined,
   }));
   const ytDlpAvailable = result.exitCode === 0;
+  if (!ytDlpAvailable && result.stderr) {
+    lastYtDlpError = sanitizeErrorString(result.stderr);
+  }
 
   return {
     enabled,
@@ -110,6 +173,7 @@ export async function getMediaMetadataHealth(runner: YtDlpRunner = runYtDlp): Pr
     proxyConfigured,
     status: ytDlpAvailable ? "healthy" : "degraded",
     message: ytDlpAvailable ? "yt-dlp is available for TikTok/Instagram metadata." : "yt-dlp is unavailable; HTML metadata fallback remains active.",
+    lastError: lastYtDlpError,
   };
 }
 

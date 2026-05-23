@@ -182,11 +182,17 @@ function estimateSentiment(score: number) {
   return "positive";
 }
 
-function platformFromUrl(value: string) {
+function platformFromUrl(value: string): "X" | "TikTok" | "Instagram" | "Website" | "Unknown" {
   try {
-    const host = new URL(value).hostname.replace(/^www\./, "");
+    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
     if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
       return "X";
+    }
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+      return "TikTok";
+    }
+    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
+      return "Instagram";
     }
     return "Website";
   } catch {
@@ -249,17 +255,24 @@ function legacyEvidenceUrl(item: ImportedReportItem) {
   return item.evidenceImagePath ?? legacyUrl(item);
 }
 
-function createEvidenceLiteCapture(itemId: string): Capture {
+function createEvidenceLiteCapture(itemId: string, metadataImageUrl?: string, platform?: string): Capture {
   const item = items.find((entry) => entry.id === itemId);
   let screenshotUrl = evidenceCardUrl(itemId);
-  if (item && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+  let kind: CaptureKind = "evidence_lite";
+
+  if (platform === "TikTok" || platform === "Instagram") {
+    if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
+      screenshotUrl = metadataImageUrl;
+      kind = "preview";
+    }
+  } else if (item && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
     screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
   }
 
   const capture: Capture = {
     id: crypto.randomUUID(),
     itemId,
-    kind: "evidence_lite",
+    kind,
     status: "success",
     capturedAt: now(),
     assetUrl: screenshotUrl,
@@ -879,10 +892,21 @@ export const store = {
       dedupeKey,
       hasReportGradeCapture: false,
       discoveryMethod,
+      warning: (input.extraction?.warning as string | undefined) ?? undefined,
+      raw_response: {
+        manual: sourceType === "manual_url",
+        discoveryMethod,
+        platform,
+        publishedDateText: publishedAt,
+        input,
+        warning: input.extraction?.warning,
+        warningDetail: input.extraction?.warningDetail,
+      },
     };
 
     items.unshift(item);
-    const evidence = createEvidenceLiteCapture(item.id);
+    const metadataImageUrl = input.extraction?.imageUrl as string | undefined;
+    const evidence = createEvidenceLiteCapture(item.id, metadataImageUrl, platform);
     audit(sourceType === "x_recent_search" ? "item.auto_discovered" : "item.ingested", item.id, { sourceType, evidenceId: evidence.id });
     return { item, duplicate: false, duplicateType: null, evidence };
   },
@@ -1037,7 +1061,18 @@ export const store = {
     };
 
     let screenshotUrl = evidenceCardUrl(id);
-    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
+    let captureKind = kind;
+    const platform = platformFromUrl(item.originalUrl);
+    if (platform === "TikTok" || platform === "Instagram") {
+      const raw = item.raw_response && typeof item.raw_response === "object"
+        ? (item.raw_response as { input?: { extraction?: { imageUrl?: string } }; extraction?: { imageUrl?: string } })
+        : {};
+      const metadataImageUrl = raw.input?.extraction?.imageUrl || raw.extraction?.imageUrl;
+      if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
+        screenshotUrl = metadataImageUrl;
+        captureKind = "preview";
+      }
+    } else if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
       screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
     }
 
@@ -1045,21 +1080,21 @@ export const store = {
       ? {
           id: crypto.randomUUID(),
           itemId: id,
-          kind,
+          kind: captureKind,
           status: "failed",
           failureReason: "تعذر التقاط الصفحة في البيئة التجريبية.",
         }
       : {
           id: crypto.randomUUID(),
           itemId: id,
-          kind,
+          kind: captureKind,
           status: "success",
           capturedAt: now(),
           assetUrl: screenshotUrl,
         };
 
     captures.unshift(capture);
-    if (capture.status === "success" && kind === "report_grade") {
+    if (capture.status === "success" && (captureKind === "report_grade" || captureKind === "preview")) {
       item.hasReportGradeCapture = true;
       item.state = "report_ready";
       item.warning = undefined;
@@ -1070,7 +1105,7 @@ export const store = {
 
     const event = audit("capture.requested", capture.id, {
       itemId: id,
-      kind,
+      kind: captureKind,
       status: capture.status,
     });
 

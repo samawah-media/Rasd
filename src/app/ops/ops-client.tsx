@@ -260,7 +260,7 @@ function sourceLabel(source?: IntakeResponse["metadata"]) {
 
 function captureAsset(captures: Capture[] | undefined) {
   return captures?.find(
-    (capture) => (capture.kind === "report_grade" || capture.kind === "evidence_lite") && capture.status === "success" && capture.assetUrl,
+    (capture) => (capture.kind === "report_grade" || capture.kind === "evidence_lite" || capture.kind === "preview") && capture.status === "success" && capture.assetUrl,
   )?.assetUrl;
 }
 
@@ -1030,21 +1030,38 @@ export function OpsClient() {
                   />
                 ) : (
                   <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] max-h-48 relative group/img">
-                    {captureAsset(state.capturesByItem[selectedItem.id]) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        alt="صورة المحتوى"
-                        className="w-full h-full object-contain max-h-48 object-top rounded-2xl transition duration-500 group-hover/img:scale-105"
-                        src={captureAsset(state.capturesByItem[selectedItem.id]) ?? ""}
-                        onError={(event) => {
-                          event.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-28 items-center justify-center text-[var(--color-text-muted)]">
-                        <Camera className="h-6 w-6" />
-                      </div>
-                    )}
+                    {(() => {
+                      const itemCaptures = state.capturesByItem[selectedItem.id] || [];
+                      const activeCapture = itemCaptures.find(
+                        (c) => (c.kind === "report_grade" || c.kind === "evidence_lite" || c.kind === "preview") && c.status === "success" && c.assetUrl
+                      );
+                      if (activeCapture) {
+                        return (
+                          <>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              alt="صورة المحتوى"
+                              className="w-full h-full object-contain max-h-48 object-top rounded-2xl transition duration-500 group-hover/img:scale-105"
+                              src={activeCapture.assetUrl ?? ""}
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
+                            />
+                            {activeCapture.kind === "preview" && (
+                              <div className="absolute bottom-2 right-2 rounded-lg bg-black/75 px-2 py-1 text-[9px] font-black text-[#f5c542] tracking-wider flex items-center gap-1 select-none backdrop-blur-sm">
+                                <Sparkles className="h-3 w-3" />
+                                <span>صورة مصغرة مأخوذة من غلاف المنشور (معاينة)</span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      }
+                      return (
+                        <div className="flex h-28 items-center justify-center text-[var(--color-text-muted)]">
+                          <Camera className="h-6 w-6" />
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1075,6 +1092,29 @@ export function OpsClient() {
 
                   {!isValidXUrl(selectedItem.originalUrl) && (
                     <p className="text-xs font-semibold leading-5 text-[var(--color-text-body)] bg-[var(--color-bg-main)] p-3 rounded-xl border border-[var(--color-border)]">{selectedItem.summary}</p>
+                  )}
+
+                  {selectedItem.warning && (
+                    <div className="text-[10px] font-semibold leading-5 text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200 space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span>تحذير: {selectedItem.warning}</span>
+                      </div>
+                      {(() => {
+                        const raw = selectedItem.raw_response && typeof selectedItem.raw_response === "object"
+                          ? (selectedItem.raw_response as { warningDetail?: string; input?: { extraction?: { warningDetail?: string } } })
+                          : {};
+                        const detail = raw.warningDetail || raw.input?.extraction?.warningDetail;
+                        if (detail) {
+                          return (
+                            <div className="mt-1 text-[9px] text-stone-500 font-mono break-all max-h-24 overflow-y-auto bg-stone-100 p-1.5 rounded border border-stone-200" dir="ltr">
+                              {detail}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
                   )}
 
                   <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
@@ -1152,6 +1192,20 @@ export function OpsClient() {
                   <div className="grid gap-2 grid-cols-2 pt-2">
                     <Info label="منصة النشر" value={platformLabel(selectedItem)} />
                     <Info label="التقرير المستهدف" value={state.liveReport?.title ?? "رصد هداية هاكاثون"} />
+                    {(() => {
+                      const itemCaptures = state.capturesByItem[selectedItem.id] || [];
+                      const activeCapture = itemCaptures.find(
+                        (c) => (c.kind === "report_grade" || c.kind === "evidence_lite" || c.kind === "preview") && c.status === "success" && c.assetUrl
+                      );
+                      if (activeCapture?.kind === "preview") {
+                        return (
+                          <div className="col-span-2">
+                            <Info label="نوع الإثبات المرفق" value="غلاف المنشور التلقائي (معاينة وليس لقطة حقيقية كاملة)" tone="warning" />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <div className="col-span-2">
                       <Info label="تاريخ رصد المادة" value={formatDate(selectedItem.publishedAt)} />
                     </div>
