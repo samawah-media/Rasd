@@ -38,6 +38,7 @@ import {
   persistEvidenceAsset,
 } from "@/server/evidence-storage";
 import { isSafePublicHttpUrl, resolveScreenshotUrl } from "@/server/url-metadata";
+import { getApifyHealth } from "@/server/apify-extractor";
 import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import {
   normalizeSourceCreateInput,
@@ -357,6 +358,7 @@ async function buildAutomationHealth(input: {
       latestRun: connectorRuns[0] ?? null,
       latestFailedJob: failedJobs[0] ?? null,
       mediaMetadataExtractor,
+      apify: getApifyHealth(),
       tiktok: {
         status: tiktokHealth.status,
         message: tiktokHealth.message,
@@ -392,6 +394,7 @@ async function buildAutomationHealth(input: {
         status: "degraded" as const,
         message: "Media metadata extractor health is unavailable.",
       })),
+      apify: getApifyHealth(),
       tiktok: {
         status: "not_configured",
         message: "Source-rule health is unavailable until migrations are applied.",
@@ -693,7 +696,7 @@ async function refreshSupabaseManualDuplicate(
   const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
   let screenshotUrl = evidenceCardUrl(row.id);
   const targetUrl = canonicalUrl || row.original_url;
-  const resolution = resolveScreenshotUrl(targetUrl, platform, null);
+  const resolution = resolveScreenshotUrl(targetUrl, platform, input.extraction?.imageUrl as string | undefined);
   if (resolution) {
     screenshotUrl = resolution.url;
   }
@@ -929,6 +932,7 @@ export const persistentStore = {
         x_recent_search: "ready",
         tiktok_research: automation.tiktok.status,
         instagram_public_profile: automation.instagram.status,
+        apify_social_media: automation.apify.status === "healthy" ? "healthy" : "not_configured",
       },
       usage,
       mediaMetadataExtractor: automation.mediaMetadataExtractor,

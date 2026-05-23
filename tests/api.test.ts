@@ -965,9 +965,15 @@ describe("Hono API acceptance workflow", () => {
 
   it("handles TikTok manual URL ingestion and verification workflow smoke test", async () => {
     const originalFetch = globalThis.fetch;
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    const title = "\u062a\u063a\u0637\u064a\u0629 \u0647\u0627\u0643\u0627\u062b\u0648\u0646 \u0647\u062f\u0627\u064a\u0629 \u0639\u0644\u0649 \u062a\u064a\u0643 \u062a\u0648\u0643";
+    const description = "\u0641\u064a\u062f\u064a\u0648 \u0631\u0627\u0626\u0639 \u0639\u0644\u0649 \u062a\u064a\u0643 \u062a\u0648\u0643 \u062d\u0648\u0644 \u0647\u0627\u0643\u0627\u062b\u0648\u0646 \u0647\u062f\u0627\u064a\u0629";
+    process.env.MEDIA_METADATA_EXTRACTOR = "off";
+    delete process.env.APIFY_API_TOKEN;
     globalThis.fetch = async () =>
       new Response(
-        '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك حول هاكاثون هداية"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
+        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>`,
         { status: 200, headers: { "content-type": "text/html" } }
       );
 
@@ -983,7 +989,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(manual.response.status, 201);
       assert.equal(manual.json.metadata.platform, "TikTok");
       assert.equal(manual.json.item.state, "needs_review");
-      assert.equal(manual.json.item.title, "TikTok Video");
+      assert.equal(manual.json.item.title, title);
 
       const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
         method: "POST",
@@ -1032,19 +1038,29 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(clientReport.response.status, 200);
       assert.equal(clientReport.json.report.summary.items, 125);
       assert.equal(clientReportItem.platform, "TikTok");
-      assert.equal(clientReportItem.title, "TikTok Video");
+      assert.equal(clientReportItem.title, title);
       assert.equal(clientReportItem.originalUrl, "https://tiktok.com/@username/video/12345");
       assert.equal(clientReportItem.screenshotStatus, "available");
     } finally {
       globalThis.fetch = originalFetch;
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 
   it("handles Instagram manual URL ingestion and verification workflow smoke test", async () => {
     const originalFetch = globalThis.fetch;
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    const title = "\u062a\u063a\u0637\u064a\u0629 \u0647\u0627\u0643\u0627\u062b\u0648\u0646 \u0647\u062f\u0627\u064a\u0629 \u0639\u0644\u0649 \u0627\u0646\u0633\u062a\u063a\u0631\u0627\u0645";
+    const description = "\u0645\u0646\u0634\u0648\u0631 \u0631\u0627\u0626\u0639 \u0639\u0644\u0649 \u0627\u0646\u0633\u062a\u063a\u0631\u0627\u0645 \u062d\u0648\u0644 \u0631\u0635\u062f \u0647\u062f\u0627\u064a\u0629";
+    process.env.MEDIA_METADATA_EXTRACTOR = "off";
+    delete process.env.APIFY_API_TOKEN;
     globalThis.fetch = async () =>
       new Response(
-        '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور رائع على انستغرام حول رصد هداية"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
+        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>`,
         { status: 200, headers: { "content-type": "text/html" } }
       );
 
@@ -1060,7 +1076,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(manual.response.status, 201);
       assert.equal(manual.json.metadata.platform, "Instagram");
       assert.equal(manual.json.item.state, "needs_review");
-      assert.equal(manual.json.item.title, "Instagram Post");
+      assert.equal(manual.json.item.title, title);
 
       const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
         method: "POST",
@@ -1109,11 +1125,15 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(clientReport.response.status, 200);
       assert.equal(clientReport.json.report.summary.items, 125);
       assert.equal(clientReportItem.platform, "Instagram");
-      assert.equal(clientReportItem.title, "Instagram Post");
+      assert.equal(clientReportItem.title, title);
       assert.equal(clientReportItem.originalUrl, "https://instagram.com/p/ABCDE");
       assert.equal(clientReportItem.screenshotStatus, "available");
     } finally {
       globalThis.fetch = originalFetch;
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 
@@ -1344,6 +1364,8 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(typeof health.json.automation.mediaMetadataExtractor.ytDlpAvailable, "boolean");
     assert.equal(typeof health.json.automation.mediaMetadataExtractor.cookiesConfigured, "boolean");
     assert.equal(typeof health.json.automation.mediaMetadataExtractor.proxyConfigured, "boolean");
+    assert.equal(typeof health.json.automation.apify.configured, "boolean");
+    assert.ok(["healthy", "not_configured"].includes(health.json.automation.apify.status));
   });
 
   it("does not ingest automated TikTok or Instagram items without mocks or credentials", async () => {

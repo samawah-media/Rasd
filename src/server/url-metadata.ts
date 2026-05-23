@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { XProviderManager } from "../lib/x/manager";
 import { parseXUrl } from "../lib/x/parser";
+import { extractWithApify, isApifyConfigured } from "./apify-extractor";
 import { extractMediaMetadataWithYtDlp, type YtDlpRunner } from "./media-metadata-extractor";
 
 export type ExtractionResult = {
@@ -14,7 +15,7 @@ export type ExtractionResult = {
   canonicalUrl?: string;
   imageUrl?: string;
   platform: "X" | "TikTok" | "Instagram" | "Website" | "Unknown";
-  source: "x_oembed" | "yt_dlp_metadata" | "html_metadata" | "url_only";
+  source: "x_oembed" | "yt_dlp_metadata" | "apify_metadata" | "html_metadata" | "url_only";
   readabilityUsed?: boolean;
   warnings?: string[];
   warning?: string;
@@ -27,6 +28,7 @@ type FetchLike = typeof fetch;
 
 type FetchUrlMetadataOptions = {
   ytdlpRunner?: YtDlpRunner;
+  apifyFetcher?: FetchLike;
 };
 
 const metadataTimeoutMs = 6000;
@@ -44,7 +46,9 @@ export function isGenericTitle(title: string | undefined, platform: string): boo
     const denylist = [
       "tiktok - make your day",
       "tiktok",
+      "tiktok video",
       "instagram",
+      "instagram post",
       "instagram photo",
       "instagram video",
       "log in • instagram",
@@ -79,6 +83,15 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, 
         return ytdlpResult.metadata;
       }
 
+      let apifyError: string | undefined;
+      if (process.env.MEDIA_METADATA_EXTRACTOR !== "off" && isApifyConfigured()) {
+        const apifyResult = await extractWithApify(url, platform, options.apifyFetcher ?? fetcher);
+        if (apifyResult.metadata && !isGenericTitle(apifyResult.metadata.title, platform)) {
+          return apifyResult.metadata;
+        }
+        apifyError = apifyResult.error ?? "apify_metadata_unavailable";
+      }
+
       let htmlMetadata: UrlMetadata | null = null;
       let htmlError: string | undefined;
       try {
@@ -98,6 +111,7 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, 
       const warningDetail = [
         `yt-dlp error: ${ytdlpResult.error || "unknown"}`,
         ytdlpResult.stderr ? `stderr: ${ytdlpResult.stderr}` : null,
+        apifyError ? `Apify error: ${apifyError}` : null,
         htmlError ? `HTML backup error: ${htmlError}` : null,
       ].filter(Boolean).join(" | ");
 
@@ -620,6 +634,10 @@ export function resolveScreenshotUrl(
   metadataImageUrl: string | undefined | null,
   defaultKind: "evidence_lite" | "preview" | "report_grade" = "evidence_lite"
 ): { url: string; kind: "evidence_lite" | "preview" | "report_grade" } | null {
+  if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
+    return { url: metadataImageUrl, kind: "preview" };
+  }
+
   if (platform === "TikTok" && url) {
     const videoId = getTikTokVideoId(url);
     if (videoId) {
@@ -636,10 +654,6 @@ export function resolveScreenshotUrl(
       const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(embedUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=3000`;
       return { url: screenshotUrl, kind: "preview" };
     }
-  }
-
-  if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
-    return { url: metadataImageUrl, kind: "preview" };
   }
 
   if (url && isSafePublicHttpUrl(url)) {

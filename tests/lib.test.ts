@@ -18,7 +18,7 @@ import {
   persistEvidenceAsset,
   parseEvidenceStorageReference,
 } from "../src/server/evidence-storage";
-import { fetchUrlMetadata, isSafePublicHttpUrl } from "../src/server/url-metadata";
+import { fetchUrlMetadata, isSafePublicHttpUrl, resolveScreenshotUrl } from "../src/server/url-metadata";
 import type { YtDlpRunner } from "../src/server/media-metadata-extractor";
 
 describe("connector and budget utilities", () => {
@@ -405,7 +405,9 @@ describe("connector and budget utilities", () => {
 
   it("uses yt-dlp metadata first for TikTok manual URL intake", async () => {
     const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
     process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    delete process.env.APIFY_API_TOKEN;
     let htmlFetcherCalled = false;
     const runner: YtDlpRunner = async (args) => {
       assert.equal(args.at(-1), "https://tiktok.com/@rasd/video/12345");
@@ -447,6 +449,8 @@ describe("connector and budget utilities", () => {
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 
@@ -493,7 +497,9 @@ describe("connector and budget utilities", () => {
 
   it("falls back to HTML metadata when yt-dlp extraction fails", async () => {
     const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
     process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    delete process.env.APIFY_API_TOKEN;
     const runner: YtDlpRunner = async () => ({ exitCode: 1, stdout: "", stderr: "login required" });
 
     try {
@@ -515,12 +521,16 @@ describe("connector and budget utilities", () => {
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 
   it("does not break TikTok metadata intake when yt-dlp is unavailable", async () => {
     const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
     process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    delete process.env.APIFY_API_TOKEN;
     const runner: YtDlpRunner = async () => ({ exitCode: null, stdout: "", stderr: "not found", errorCode: "ENOENT" });
 
     try {
@@ -541,7 +551,129 @@ describe("connector and budget utilities", () => {
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
+  });
+
+  it("uses Apify metadata after yt-dlp fails for TikTok manual URL intake", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    const runner: YtDlpRunner = async () => ({ exitCode: 1, stdout: "", stderr: "blocked by platform" });
+    let htmlFetcherCalled = false;
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://tiktok.com/@rasd/video/12345",
+        async () => {
+          htmlFetcherCalled = true;
+          throw new Error("html_fetcher_should_not_run");
+        },
+        {
+          ytdlpRunner: runner,
+          apifyFetcher: async (input, init) => {
+            assert.match(String(input), /clockworks~free-tiktok-scraper/);
+            assert.match(String(init?.body), /postURLs/);
+            return new Response(
+              JSON.stringify([
+                {
+                  text: "Apify TikTok caption for Hidayathon",
+                  authorMeta: { name: "rasd_tiktok", nickName: "RASD TikTok" },
+                  videoMeta: { coverUrl: "https://cdn.example.com/apify-tiktok.jpg" },
+                  createTimeISO: "2026-05-22T10:30:00.000Z",
+                  webVideoUrl: "https://www.tiktok.com/@rasd/video/12345",
+                },
+              ]),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          },
+        },
+      );
+
+      assert.equal(metadata.source, "apify_metadata");
+      assert.equal(metadata.platform, "TikTok");
+      assert.equal(metadata.title, "Apify TikTok caption for Hidayathon");
+      assert.equal(metadata.text, "Apify TikTok caption for Hidayathon");
+      assert.equal(metadata.authorName, "RASD TikTok");
+      assert.equal(metadata.authorHandle, "@rasd_tiktok");
+      assert.equal(metadata.imageUrl, "https://cdn.example.com/apify-tiktok.jpg");
+      assert.equal(metadata.publishedAt, "2026-05-22T10:30:00.000Z");
+      assert.equal(htmlFetcherCalled, false);
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
+  it("uses Apify metadata after yt-dlp fails for Instagram manual URL intake", async () => {
+    const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    process.env.MEDIA_METADATA_EXTRACTOR = "auto";
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    const runner: YtDlpRunner = async () => ({ exitCode: 1, stdout: "", stderr: "login required" });
+
+    try {
+      const metadata = await fetchUrlMetadata(
+        "https://instagram.com/p/ABCDE",
+        async () => {
+          throw new Error("html_fetcher_should_not_run");
+        },
+        {
+          ytdlpRunner: runner,
+          apifyFetcher: async (input, init) => {
+            assert.match(String(input), /apify~instagram-post-scraper/);
+            assert.match(String(init?.body), /directUrls/);
+            return new Response(
+              JSON.stringify([
+                {
+                  caption: "Apify Instagram caption for RASD",
+                  ownerUsername: "rasd_ig",
+                  ownerFullName: "RASD Instagram",
+                  displayUrl: "https://cdn.example.com/apify-instagram.jpg",
+                  timestamp: "2026-05-21T20:30:00.000Z",
+                  url: "https://www.instagram.com/p/ABCDE/",
+                },
+              ]),
+              { status: 200, headers: { "content-type": "application/json" } },
+            );
+          },
+        },
+      );
+
+      assert.equal(metadata.source, "apify_metadata");
+      assert.equal(metadata.platform, "Instagram");
+      assert.equal(metadata.title, "Apify Instagram caption for RASD");
+      assert.equal(metadata.text, "Apify Instagram caption for RASD");
+      assert.equal(metadata.authorName, "RASD Instagram");
+      assert.equal(metadata.authorHandle, "@rasd_ig");
+      assert.equal(metadata.imageUrl, "https://cdn.example.com/apify-instagram.jpg");
+      assert.equal(metadata.canonicalUrl, "https://www.instagram.com/p/ABCDE/");
+    } finally {
+      if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
+      else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
+  it("prioritizes metadata thumbnails over Microlink screenshots for TikTok and Instagram", () => {
+    const tiktok = resolveScreenshotUrl(
+      "https://tiktok.com/@rasd/video/12345",
+      "TikTok",
+      "https://cdn.example.com/tiktok-cover.jpg",
+    );
+    const instagram = resolveScreenshotUrl(
+      "https://instagram.com/p/ABCDE",
+      "Instagram",
+      "https://cdn.example.com/instagram-cover.jpg",
+    );
+
+    assert.deepEqual(tiktok, { url: "https://cdn.example.com/tiktok-cover.jpg", kind: "preview" });
+    assert.deepEqual(instagram, { url: "https://cdn.example.com/instagram-cover.jpg", kind: "preview" });
   });
 
   it("blocks private or credentialed URLs before server-side metadata fetching", () => {
@@ -622,41 +754,51 @@ describe("connector and budget utilities", () => {
 
   it("extracts TikTok and Instagram metadata correctly with platform detection", async () => {
     const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    const tiktokTitle = "\u062a\u063a\u0637\u064a\u0629 \u0647\u0627\u0643\u0627\u062b\u0648\u0646 \u0647\u062f\u0627\u064a\u0629 \u0639\u0644\u0649 \u062a\u064a\u0643 \u062a\u0648\u0643";
+    const tiktokDescription = "\u0641\u064a\u062f\u064a\u0648 \u0631\u0627\u0626\u0639 \u0639\u0644\u0649 \u062a\u064a\u0643 \u062a\u0648\u0643";
+    const instagramTitle = "\u062a\u063a\u0637\u064a\u0629 \u0631\u0635\u062f \u0647\u062f\u0627\u064a\u0629 \u0639\u0644\u0649 \u0627\u0646\u0633\u062a\u063a\u0631\u0627\u0645";
+    const instagramDescription = "\u0645\u0646\u0634\u0648\u0631 \u0639\u0644\u0649 \u0627\u0646\u0633\u062a\u063a\u0631\u0627\u0645";
     process.env.MEDIA_METADATA_EXTRACTOR = "off";
+    delete process.env.APIFY_API_TOKEN;
 
     try {
       const tiktokMeta = await fetchUrlMetadata("https://tiktok.com/@username/video/12345", async () => {
         return new Response(
-          '<html><head><title>TikTok Video</title><meta property="og:description" content="فيديو رائع على تيك توك"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>',
+          `<html><head><title>${tiktokTitle}</title><meta property="og:title" content="${tiktokTitle}"><meta property="og:description" content="${tiktokDescription}"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>`,
           { status: 200, headers: { "content-type": "text/html" } }
         );
       });
 
       const instagramMeta = await fetchUrlMetadata("https://instagram.com/p/ABCDE", async () => {
         return new Response(
-          '<html><head><title>Instagram Post</title><meta property="og:description" content="منشور على انستغرام"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>',
+          `<html><head><title>${instagramTitle}</title><meta property="og:title" content="${instagramTitle}"><meta property="og:description" content="${instagramDescription}"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>`,
           { status: 200, headers: { "content-type": "text/html" } }
         );
       });
 
       assert.equal(tiktokMeta.platform, "TikTok");
-      assert.equal(tiktokMeta.title, "TikTok Video");
-      assert.equal(tiktokMeta.text, "فيديو رائع على تيك توك");
+      assert.equal(tiktokMeta.title, tiktokTitle);
+      assert.equal(tiktokMeta.text, tiktokDescription);
       assert.equal(tiktokMeta.imageUrl, "https://tiktok.com/image.jpg");
 
       assert.equal(instagramMeta.platform, "Instagram");
-      assert.equal(instagramMeta.title, "Instagram Post");
-      assert.equal(instagramMeta.text, "منشور على انستغرام");
+      assert.equal(instagramMeta.title, instagramTitle);
+      assert.equal(instagramMeta.text, instagramDescription);
       assert.equal(instagramMeta.imageUrl, "https://instagram.com/image.jpg");
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 
   it("rejects generic titles and returns structured fallbacks for TikTok and Instagram", async () => {
     const previousExtractor = process.env.MEDIA_METADATA_EXTRACTOR;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
     process.env.MEDIA_METADATA_EXTRACTOR = "yt-dlp";
+    delete process.env.APIFY_API_TOKEN;
 
     const failingRunner = async () => {
       return {
@@ -702,6 +844,8 @@ describe("connector and budget utilities", () => {
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
     }
   });
 });

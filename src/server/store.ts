@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock-data";
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { getApifyHealth } from "@/server/apify-extractor";
 import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import { isSafePublicHttpUrl, resolveScreenshotUrl } from "@/server/url-metadata";
 import {
@@ -358,7 +359,7 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
       let screenshotUrl = evidenceCardUrl(item.id);
       const targetUrl = canonicalUrl || item.originalUrl;
       const platform = targetUrl ? platformFromUrl(targetUrl) : "Unknown";
-      const resolution = resolveScreenshotUrl(targetUrl, platform, null);
+      const resolution = resolveScreenshotUrl(targetUrl, platform, input.extraction?.imageUrl as string | undefined);
       if (resolution) {
         screenshotUrl = resolution.url;
       }
@@ -428,6 +429,7 @@ export const store = {
 
   async health() {
     const mediaMetadataExtractor = await getMediaMetadataHealth();
+    const apify = getApifyHealth();
     const dynamicHealth: HealthMetric[] = [
       ...healthMetrics,
       {
@@ -453,6 +455,7 @@ export const store = {
         x_recent_search: xSearchLastRun ? "healthy" : "ready",
         tiktok_research: process.env.TIKTOK_RESEARCH_ENABLED === "true" || process.env.TIKTOK_CLIENT_KEY ? "healthy" : "not_configured",
         instagram_public_profile: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true" ? "degraded" : "not_configured",
+        apify_social_media: apify.status === "healthy" ? "healthy" : "not_configured",
       },
       usage,
       xSearchLastRun,
@@ -464,6 +467,7 @@ export const store = {
         connectorCronScheduleUtc: "15 5 * * *",
         mocksEnabled: process.env.NODE_ENV !== "production" && (process.env.RASD_CONNECTOR_MOCKS === "true" || process.env.CONNECTOR_MOCK_MODE === "true"),
         mediaMetadataExtractor,
+        apify,
         sourceRulesCount: sourceRulesState.length,
         activeSourceRulesCount: sourceRulesState.filter((rule) => rule.active).length,
         queuedJobsCount: jobsState.filter((job) => job.status === "queued" || job.status === "running").length,
