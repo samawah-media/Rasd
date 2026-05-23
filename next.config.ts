@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/api/[[...route]]": ["./node_modules/yt-dlp-exec/bin/**/*"],
+  },
 };
 
 export default nextConfig;

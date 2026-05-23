@@ -12,18 +12,35 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   const summaryLines = wrapArabic(item.summary || item.summarySourceText || item.originalUrl, 48, 9);
   const titleLines = wrapArabic(title, 42, 2);
   const urlLines = wrapLatin(item.originalUrl, 76, 2);
+  
   const isX = item.originalUrl.includes("x.com/") || item.originalUrl.includes("twitter.com/");
-  const platformIcon = isX ? "X" : "🌐";
+  const isTikTok = item.originalUrl.includes("tiktok.com/");
+  const isInstagram = item.originalUrl.includes("instagram.com/") || item.originalUrl.includes("instagr.am/");
+  const platformIcon = isX ? "X" : isTikTok ? "TikTok" : isInstagram ? "Instagram" : "🌐";
+
+  const isMetadataUnavailable = item.warning === "media_metadata_unavailable";
+  const headerGradient = isMetadataUnavailable
+    ? `<linearGradient id="header" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#b91c1c"/>
+      <stop offset="1" stop-color="#ea580c"/>
+    </linearGradient>`
+    : `<linearGradient id="header" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#0f8f5f"/>
+      <stop offset="1" stop-color="#f5c542"/>
+    </linearGradient>`;
+
+  const subBarColor = isMetadataUnavailable ? "#b91c1c" : "#0f8f5f";
+  const headerText = isMetadataUnavailable ? "تنبيه: تعذر جلب التفاصيل" : "صورة دليل محتوى";
+  const footerText = isMetadataUnavailable ? "تنبيه: لم يتم التقاط لقطة حقيقية للمنشور" : "صورة دليل — ليست لقطة شاشة حقيقية";
+  const footerColor = isMetadataUnavailable ? "#b91c1c" : "#a8a29e";
+  const footerWeight = isMetadataUnavailable ? "bold" : "normal";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="720" viewBox="0 0 900 720" role="img" aria-label="${escapeXml(
     title,
   )}">
   <defs>
-    <linearGradient id="header" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#0f8f5f"/>
-      <stop offset="1" stop-color="#f5c542"/>
-    </linearGradient>
+    ${headerGradient}
     <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#0f172a" flood-opacity="0.14"/>
     </filter>
@@ -31,8 +48,8 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
   <rect width="900" height="720" fill="#f6f7f1"/>
   <rect x="54" y="46" width="792" height="628" rx="22" fill="#ffffff" filter="url(#softShadow)"/>
   <rect x="54" y="46" width="792" height="88" rx="22" fill="url(#header)"/>
-  <rect x="54" y="100" width="792" height="34" fill="#0f8f5f"/>
-  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">صورة دليل محتوى</text>
+  <rect x="54" y="100" width="792" height="34" fill="${subBarColor}"/>
+  <text x="806" y="100" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#ffffff" font-size="28" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(headerText)}</text>
   <text x="806" y="174" direction="rtl" unicode-bidi="plaintext" text-anchor="start" fill="#166534" font-size="24" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(
     source,
   )}</text>
@@ -40,7 +57,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
     date,
   )}</text>
   <circle cx="108" cy="178" r="38" fill="#ecfdf5" stroke="#34d399" stroke-width="3"/>
-  <text x="108" y="190" text-anchor="middle" fill="#047857" font-size="30" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(platformIcon)}</text>
+  <text x="108" y="190" text-anchor="middle" fill="#047857" font-size="${platformIcon.length > 3 ? "18" : "30"}" font-weight="700" font-family="Arial, Tahoma, sans-serif">${escapeXml(platformIcon)}</text>
   <line x1="94" x2="806" y1="238" y2="238" stroke="#e7e5e4" stroke-width="2"/>
   ${titleLines
     .map(
@@ -67,7 +84,7 @@ export function renderEvidenceCardSvg(item: MonitoringItem) {
         )}</text>`,
     )
     .join("\n  ")}
-  <text x="450" y="694" text-anchor="middle" fill="#a8a29e" font-size="13" font-family="Arial, Tahoma, sans-serif">صورة دليل — ليست لقطة شاشة حقيقية</text>
+  <text x="450" y="694" text-anchor="middle" fill="${footerColor}" font-size="14" font-weight="${footerWeight}" font-family="Arial, Tahoma, sans-serif">${escapeXml(footerText)}</text>
 </svg>`;
 }
 

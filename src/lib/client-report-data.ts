@@ -90,6 +90,7 @@ type DbCaptureRow = {
   monitoring_item_id: string;
   asset_url: string | null;
   captured_at: string | null;
+  kind?: string | null;
 };
 
 type DbSourceRow = {
@@ -200,9 +201,9 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
       .in("id", itemIds),
     supabase
       .from("captures")
-      .select("monitoring_item_id, asset_url, captured_at")
+      .select("monitoring_item_id, asset_url, captured_at, kind")
       .in("monitoring_item_id", itemIds)
-      .eq("kind", "report_grade")
+      .in("kind", ["report_grade", "preview"])
       .eq("status", "success")
       .order("captured_at", { ascending: true }),
   ]);
@@ -225,7 +226,14 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
 
   const reportsById = new Map(((reportsResult.data ?? []) as DbReportRow[]).map((row) => [row.id, row]));
   const itemsById = new Map(itemRows.map((row) => [row.id, row]));
-  const captureByItemId = new Map(((capturesResult.data ?? []) as DbCaptureRow[]).map((row) => [row.monitoring_item_id, row]));
+  const captures = (capturesResult.data ?? []) as DbCaptureRow[];
+  const captureByItemId = new Map<string, DbCaptureRow>();
+  for (const capture of captures) {
+    const existing = captureByItemId.get(capture.monitoring_item_id);
+    if (!existing || capture.kind === "report_grade") {
+      captureByItemId.set(capture.monitoring_item_id, capture);
+    }
+  }
   const clientItems = reportItemRows
     .map((link) => {
       const item = itemsById.get(link.monitoring_item_id);
@@ -274,9 +282,8 @@ function getLocalLiveClientReportItems() {
       if (link.itemId.startsWith("legacy-item-")) return;
       const item = itemsById.get(link.itemId);
       if (!item || item.state === "archived") return;
-      const capture = store
-        .listCaptures(item.id)
-        .find((entry) => entry.kind === "report_grade" && entry.status === "success");
+      const captures = store.listCaptures(item.id).filter((entry) => entry.status === "success");
+      const capture = captures.find((entry) => entry.kind === "report_grade") || captures.find((entry) => entry.kind === "preview");
       liveItems.push(toClientReportItemFromWorkflow(item, capture, link.addedAt, index + 1));
     });
   }

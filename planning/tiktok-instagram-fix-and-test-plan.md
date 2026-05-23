@@ -296,6 +296,14 @@ Automated result on 2026-05-22:
 - Local browser check confirmed unauthenticated access to `/ops` and `/client-report` redirects to the Arabic login page without console errors.
 - Local browser check did not execute the authenticated `/ops` clicks because the browser session did not have owner/editor credentials.
 
+Automated result on 2026-05-23:
+
+- Added optional Apify metadata extraction after `yt-dlp` failure and before HTML fallback for TikTok/Instagram manual URLs.
+- Added `apify_metadata` as a first-class extraction source and surfaced Apify configuration in health checks.
+- Evidence capture now prefers metadata thumbnails/covers before Microlink embed screenshots for TikTok/Instagram.
+- Generic TikTok/Instagram HTML titles remain rejected; fallback items preserve the original URL and expose a warning instead of showing generic captions.
+- Added tests for TikTok Apify metadata, Instagram Apify metadata, metadata-thumbnail evidence selection, generic-title fallback, and environment isolation when `yt-dlp`/Apify are disabled.
+
 ## Phase 5 - Watchlist Readiness
 
 Status: completed on 2026-05-22 as a guarded MVP.

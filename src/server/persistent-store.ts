@@ -37,7 +37,8 @@ import {
   parseEvidenceStorageReference,
   persistEvidenceAsset,
 } from "@/server/evidence-storage";
-import { isSafePublicHttpUrl } from "@/server/url-metadata";
+import { isSafePublicHttpUrl, resolveScreenshotUrl } from "@/server/url-metadata";
+import { getApifyHealth } from "@/server/apify-extractor";
 import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import {
   normalizeSourceCreateInput,
@@ -357,6 +358,7 @@ async function buildAutomationHealth(input: {
       latestRun: connectorRuns[0] ?? null,
       latestFailedJob: failedJobs[0] ?? null,
       mediaMetadataExtractor,
+      apify: getApifyHealth(),
       tiktok: {
         status: tiktokHealth.status,
         message: tiktokHealth.message,
@@ -392,6 +394,7 @@ async function buildAutomationHealth(input: {
         status: "degraded" as const,
         message: "Media metadata extractor health is unavailable.",
       })),
+      apify: getApifyHealth(),
       tiktok: {
         status: "not_configured",
         message: "Source-rule health is unavailable until migrations are applied.",
@@ -693,8 +696,9 @@ async function refreshSupabaseManualDuplicate(
   const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
   let screenshotUrl = evidenceCardUrl(row.id);
   const targetUrl = canonicalUrl || row.original_url;
-  if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
-    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+  const resolution = resolveScreenshotUrl(targetUrl, platform, input.extraction?.imageUrl as string | undefined);
+  if (resolution) {
+    screenshotUrl = resolution.url;
   }
 
   if (input.title && (isWeakManualTitle(row) || input.title.length > (row.title ?? "").length)) {
@@ -928,6 +932,7 @@ export const persistentStore = {
         x_recent_search: "ready",
         tiktok_research: automation.tiktok.status,
         instagram_public_profile: automation.instagram.status,
+        apify_social_media: automation.apify.status === "healthy" ? "healthy" : "not_configured",
       },
       usage,
       mediaMetadataExtractor: automation.mediaMetadataExtractor,
@@ -1424,6 +1429,7 @@ export const persistentStore = {
         relevance_score: match.score,
         relevance_reason: match.reason,
         matched_terms: match.matchedTerms,
+        warning: (input.extraction?.warning as string | undefined) ?? null,
         raw_response: {
           manual: sourceType === "manual_url",
           discoveryMethod,
@@ -1432,6 +1438,8 @@ export const persistentStore = {
           publishedDateText: publishedAt,
           extractedUrls: [canonicalUrl],
           input,
+          warning: input.extraction?.warning,
+          warningDetail: input.extraction?.warningDetail,
         },
       })
       .select("*, sources(name)")
@@ -1441,15 +1449,22 @@ export const persistentStore = {
     const insertedRow = row as DbItemRow;
     const initialItem = (await toItems(supabase, [insertedRow]))[0];
     const captureId = crypto.randomUUID();
+
     let screenshotUrl = evidenceCardUrl(insertedRow.id);
-    if (insertedRow.original_url && isSafePublicHttpUrl(insertedRow.original_url)) {
-      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(insertedRow.original_url)}&screenshot=true&embed=screenshot.url`;
+    let captureKind: CaptureKind = "evidence_lite";
+
+    const metadataImageUrl = input.extraction?.imageUrl as string | undefined;
+    const resolution = resolveScreenshotUrl(insertedRow.original_url, platform, metadataImageUrl);
+    if (resolution) {
+      screenshotUrl = resolution.url;
+      captureKind = resolution.kind;
     }
+
     const storedEvidence = await persistEvidenceAsset({
       supabase,
       item: initialItem,
       captureId,
-      kind: "evidence_lite",
+      kind: captureKind,
       sourceUrl: screenshotUrl,
       organizationId: insertedRow.organization_id,
       topicId: insertedRow.topic_id,
@@ -1484,7 +1499,7 @@ export const persistentStore = {
         id: captureId,
         organization_id: DEFAULT_ORGANIZATION_ID,
         monitoring_item_id: item.id,
-        kind: "evidence_lite",
+        kind: captureKind,
         status: "success",
         captured_at: now(),
         asset_url: storedEvidence.assetUrl,
@@ -1807,9 +1822,23 @@ export const persistentStore = {
     await supabase.from("monitoring_items").update({ state: "capture_pending" }).eq("id", id);
     let screenshotUrl = evidenceCardUrl(id);
     const item = await getItemOrThrow(supabase, id);
-    if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
-      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+    
+    let captureKind: CaptureKind = kind;
+    const platform = platformFromUrl(item.originalUrl);
+    
+    const raw = item.raw_response && typeof item.raw_response === "object"
+      ? (item.raw_response as { input?: { extraction?: { imageUrl?: string } }; extraction?: { imageUrl?: string } })
+      : {};
+    const metadataImageUrl = raw.input?.extraction?.imageUrl || raw.extraction?.imageUrl;
+    
+    if (!shouldFail) {
+      const resolution = resolveScreenshotUrl(item.originalUrl, platform, metadataImageUrl, kind);
+      if (resolution) {
+        screenshotUrl = resolution.url;
+        captureKind = resolution.kind;
+      }
     }
+
     const captureId = crypto.randomUUID();
     const storedEvidence = shouldFail
       ? null
@@ -1817,7 +1846,7 @@ export const persistentStore = {
           supabase,
           item,
           captureId,
-          kind,
+          kind: captureKind,
           sourceUrl: screenshotUrl,
           organizationId: item.organizationId,
           topicId: item.topicId,
@@ -1828,7 +1857,7 @@ export const persistentStore = {
           id: captureId,
           organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
-          kind,
+          kind: captureKind,
           status: "failed",
           failure_reason: "تعذر التقاط الصفحة في البيئة التجريبية.",
           captured_at: null,
@@ -1838,7 +1867,7 @@ export const persistentStore = {
           id: captureId,
           organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
           monitoring_item_id: id,
-          kind,
+          kind: captureKind,
           status: "success",
           captured_at: now(),
           asset_url: storedEvidence?.assetUrl ?? screenshotUrl,
@@ -1853,7 +1882,7 @@ export const persistentStore = {
 
     const capture = toCapture(captureRow as DbCaptureRow);
     const nextPatch =
-      capture.status === "success" && kind === "report_grade"
+      capture.status === "success" && (captureKind === "report_grade" || captureKind === "preview")
         ? { state: "report_ready", warning: null, evidence_image_path: capture.assetUrl ?? screenshotUrl }
         : capture.status === "failed"
           ? { state: "capture_failed", warning: "فشل الالتقاط. يمكن إعادة المحاولة أو رفع لقطة يدويًا." }
@@ -1872,7 +1901,7 @@ export const persistentStore = {
         topic_id: item.topicId ?? DEFAULT_TOPIC_ID,
         event_type: "screenshot",
         units: 1,
-        metadata: { itemId: id, captureId: capture.id, kind },
+        metadata: { itemId: id, captureId: capture.id, kind: captureKind },
       },
       {
         organization_id: item.organizationId ?? DEFAULT_ORGANIZATION_ID,
@@ -1882,7 +1911,7 @@ export const persistentStore = {
         metadata: {
           itemId: id,
           captureId: capture.id,
-          kind,
+          kind: captureKind,
           persisted: storedEvidence?.persisted ?? false,
           bucket: storedEvidence?.bucket,
           path: storedEvidence?.storagePath,
@@ -2401,15 +2430,20 @@ export const persistentStore = {
         const initialItem = (await toItems(supabase, [insertedItemData as DbItemRow]))[0];
         const captureId = crypto.randomUUID();
         let screenshotUrl = evidenceCardUrl(newItemId);
-        if (rawItem.url && isSafePublicHttpUrl(rawItem.url)) {
-          screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(rawItem.url)}&screenshot=true&embed=screenshot.url`;
+        let captureKind: CaptureKind = "evidence_lite";
+        const platform = platformFromUrl(rawItem.url ?? "");
+
+        const resolution = resolveScreenshotUrl(rawItem.url, platform, null);
+        if (resolution) {
+          screenshotUrl = resolution.url;
+          captureKind = resolution.kind;
         }
 
         const storedEvidence = await persistEvidenceAsset({
           supabase,
           item: initialItem,
           captureId,
-          kind: "evidence_lite",
+          kind: captureKind,
           sourceUrl: screenshotUrl,
           organizationId: rule.organizationId,
           topicId: rule.topicId,

@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import { XProviderManager } from "../lib/x/manager";
 import { parseXUrl } from "../lib/x/parser";
+import { extractWithApify, isApifyConfigured } from "./apify-extractor";
 import { extractMediaMetadataWithYtDlp, type YtDlpRunner } from "./media-metadata-extractor";
 
 export type ExtractionResult = {
@@ -14,10 +15,11 @@ export type ExtractionResult = {
   canonicalUrl?: string;
   imageUrl?: string;
   platform: "X" | "TikTok" | "Instagram" | "Website" | "Unknown";
-  source: "x_oembed" | "yt_dlp_metadata" | "html_metadata" | "url_only";
+  source: "x_oembed" | "yt_dlp_metadata" | "apify_metadata" | "html_metadata" | "url_only";
   readabilityUsed?: boolean;
   warnings?: string[];
   warning?: string;
+  warningDetail?: string;
 };
 
 export type UrlMetadata = ExtractionResult;
@@ -26,6 +28,7 @@ type FetchLike = typeof fetch;
 
 type FetchUrlMetadataOptions = {
   ytdlpRunner?: YtDlpRunner;
+  apifyFetcher?: FetchLike;
 };
 
 const metadataTimeoutMs = 6000;
@@ -33,6 +36,29 @@ const maxHtmlExtractionChars = 1_000_000;
 const maxReadabilityChars = 500_000;
 const readabilityTimeoutMs = 2500;
 const minReadableTextLength = 80;
+
+export function isGenericTitle(title: string | undefined, platform: string): boolean {
+  if (!title) return true;
+  const t = title.trim();
+  const lower = t.toLowerCase();
+
+  if (platform === "TikTok" || platform === "Instagram" || platform === "X") {
+    const denylist = [
+      "tiktok - make your day",
+      "tiktok",
+      "tiktok video",
+      "instagram",
+      "instagram post",
+      "instagram photo",
+      "instagram video",
+      "log in • instagram",
+      "login • instagram",
+    ];
+    if (denylist.includes(lower)) return true;
+    if (lower.includes("login") || lower.includes("make your day")) return true;
+  }
+  return false;
+}
 
 export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, options: FetchUrlMetadataOptions = {}): Promise<UrlMetadata> {
   const platform = platformFromUrl(url);
@@ -52,8 +78,56 @@ export async function fetchUrlMetadata(url: string, fetcher: FetchLike = fetch, 
     }
 
     if (platform === "TikTok" || platform === "Instagram") {
-      const mediaMetadata = await fetchYtDlpMetadata(url, platform, options.ytdlpRunner);
-      if (mediaMetadata) return mediaMetadata;
+      const ytdlpResult = await fetchYtDlpMetadata(url, platform, options.ytdlpRunner);
+      if (ytdlpResult.metadata) {
+        return ytdlpResult.metadata;
+      }
+
+      let apifyError: string | undefined;
+      if (process.env.MEDIA_METADATA_EXTRACTOR !== "off" && isApifyConfigured()) {
+        const apifyResult = await extractWithApify(url, platform, options.apifyFetcher ?? fetcher);
+        if (apifyResult.metadata && !isGenericTitle(apifyResult.metadata.title, platform)) {
+          return apifyResult.metadata;
+        }
+        apifyError = apifyResult.error ?? "apify_metadata_unavailable";
+      }
+
+      let htmlMetadata: UrlMetadata | null = null;
+      let htmlError: string | undefined;
+      try {
+        htmlMetadata = await fetchHtmlMetadata(url, fetcher);
+        if (htmlMetadata && isGenericTitle(htmlMetadata.title, platform)) {
+          htmlError = `HTML scraping returned a generic/denylisted title: "${htmlMetadata.title}"`;
+          htmlMetadata = null;
+        }
+      } catch (err) {
+        htmlError = err instanceof Error ? err.message : String(err);
+      }
+
+      if (htmlMetadata) {
+        return htmlMetadata;
+      }
+
+      const warningDetail = [
+        `yt-dlp error: ${ytdlpResult.error || "unknown"}`,
+        ytdlpResult.stderr ? `stderr: ${ytdlpResult.stderr}` : null,
+        apifyError ? `Apify error: ${apifyError}` : null,
+        htmlError ? `HTML backup error: ${htmlError}` : null,
+      ].filter(Boolean).join(" | ");
+
+      const arTitle = platform === "TikTok"
+        ? "تعذر جلب تفاصيل فيديو تيك توك"
+        : "تعذر جلب تفاصيل منشور إنستغرام";
+
+      return {
+        title: arTitle,
+        text: `تعذر جلب تفاصيل الرابط بشكل كامل من ${platform}. الرابط: ${url}`,
+        platform,
+        source: "url_only",
+        warning: "media_metadata_unavailable",
+        warnings: ["media_metadata_unavailable"],
+        warningDetail: warningDetail.slice(0, 2000),
+      };
     }
 
     return await fetchHtmlMetadata(url, fetcher);
@@ -71,28 +145,52 @@ async function fetchYtDlpMetadata(
   url: string,
   platform: Extract<UrlMetadata["platform"], "TikTok" | "Instagram">,
   runner?: YtDlpRunner,
-): Promise<UrlMetadata | null> {
-  const metadata = await extractMediaMetadataWithYtDlp(url, runner).catch(() => null);
-  if (!metadata) return null;
+): Promise<{ metadata: UrlMetadata | null; error?: string; stderr?: string }> {
+  try {
+    const result = await extractMediaMetadataWithYtDlp(url, runner);
+    if (!result.metadata) {
+      return {
+        metadata: null,
+        error: result.error || "yt-dlp failed",
+        stderr: result.stderr,
+      };
+    }
+    const media = result.metadata;
+    if (isGenericTitle(media.title, platform)) {
+      return {
+        metadata: null,
+        error: "yt_dlp_returned_generic_title",
+        stderr: `Title: "${media.title}" matches denylist. Description: ${media.description || "none"}`,
+      };
+    }
 
-  const canonicalUrl = firstSafePublicUrl(metadata.webpageUrl, url);
-  const imageUrl = firstSafePublicUrl(metadata.thumbnail, url);
-  const text = cleanText(metadata.description) ?? cleanText(metadata.title);
-  const publishedAt = metadata.timestamp
-    ? new Date(metadata.timestamp * 1000).toISOString()
-    : isoUploadDate(metadata.uploadDate);
+    const canonicalUrl = firstSafePublicUrl(media.webpageUrl, url);
+    const imageUrl = firstSafePublicUrl(media.thumbnail, url);
+    const text = cleanText(media.description) ?? cleanText(media.title);
+    const publishedAt = media.timestamp
+      ? new Date(media.timestamp * 1000).toISOString()
+      : isoUploadDate(media.uploadDate);
 
-  return {
-    title: cleanText(metadata.title) ?? text ?? "Media item",
-    text,
-    authorName: cleanText(metadata.uploader),
-    authorHandle: normalizeHandle(metadata.uploaderId),
-    publishedAt,
-    canonicalUrl,
-    imageUrl,
-    platform: canonicalUrl ? platformFromUrl(canonicalUrl) : platform,
-    source: "yt_dlp_metadata",
-  };
+    return {
+      metadata: {
+        title: cleanText(media.title) ?? text ?? "Media item",
+        text,
+        authorName: cleanText(media.uploader),
+        authorHandle: normalizeHandle(media.uploaderId),
+        publishedAt: publishedAt ?? new Date().toISOString(),
+        canonicalUrl,
+        imageUrl,
+        platform: canonicalUrl ? platformFromUrl(canonicalUrl) : platform,
+        source: "yt_dlp_metadata",
+      }
+    };
+  } catch (err) {
+    return {
+      metadata: null,
+      error: "yt_dlp_extraction_exception",
+      stderr: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export function platformFromUrl(value: string): UrlMetadata["platform"] {
@@ -501,3 +599,68 @@ function firstPresent(...values: Array<string | null | undefined>) {
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
+
+export function getInstagramPostId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes("instagram.com") && host !== "instagr.am") {
+      return null;
+    }
+    const match = parsed.pathname.match(/\/(?:p|reel|reels)\/([\w-]+)/i);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getTikTokVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes("tiktok.com")) {
+      return null;
+    }
+    const match = parsed.pathname.match(/\/video\/(\d+)/i);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveScreenshotUrl(
+  url: string | undefined | null,
+  platform: string,
+  metadataImageUrl: string | undefined | null,
+  defaultKind: "evidence_lite" | "preview" | "report_grade" = "evidence_lite"
+): { url: string; kind: "evidence_lite" | "preview" | "report_grade" } | null {
+  if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
+    return { url: metadataImageUrl, kind: "preview" };
+  }
+
+  if (platform === "TikTok" && url) {
+    const videoId = getTikTokVideoId(url);
+    if (videoId) {
+      const embedUrl = `https://www.tiktok.com/embed/${videoId}`;
+      const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(embedUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=3000`;
+      return { url: screenshotUrl, kind: "preview" };
+    }
+  }
+
+  if (platform === "Instagram" && url) {
+    const postId = getInstagramPostId(url);
+    if (postId) {
+      const embedUrl = `https://www.instagram.com/p/${postId}/embed/captioned/`;
+      const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(embedUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=3000`;
+      return { url: screenshotUrl, kind: "preview" };
+    }
+  }
+
+  if (url && isSafePublicHttpUrl(url)) {
+    const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`;
+    return { url: screenshotUrl, kind: defaultKind };
+  }
+
+  return null;
+}
+
