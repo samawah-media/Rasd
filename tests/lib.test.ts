@@ -9,6 +9,7 @@ import {
 import { canonicalizeUrl, detectPlatformFromUrl, explainKeywordMatch, makeDedupeKey } from "../src/lib/connectors";
 import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
+import { getLegacySourceIntelligence } from "../src/lib/legacy-source-intelligence";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
 import { buildClientReportExportHtml, clientReportExportLimit } from "../src/server/client-report-export";
 import {
@@ -93,6 +94,18 @@ describe("connector and budget utilities", () => {
 
     assert.equal(result.allowed, false);
     assert.equal(result.violations.length, 1);
+  });
+
+  it("extracts source intelligence from original Hidayathon reports", () => {
+    const intelligence = getLegacySourceIntelligence();
+
+    assert.ok(intelligence.summary.items > 0);
+    assert.ok(intelligence.keywords.requiredTerms.includes("هداية"));
+    assert.ok(intelligence.newsSources.some((source) => source.url === "https://prh.gov.sa"));
+    assert.ok(intelligence.xAccounts.some((source) => source.url === "https://x.com/UOfjeddah"));
+    assert.ok(intelligence.instagramProfiles.length > 0);
+    assert.ok(intelligence.tiktokProfiles.length > 0);
+    assert.ok(intelligence.tiktokQueries.some((query) => query.query === "هداية"));
   });
 
   it("builds stable protected evidence storage references", () => {

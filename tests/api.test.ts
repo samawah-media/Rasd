@@ -251,6 +251,70 @@ describe("Hono API acceptance workflow", () => {
     assert.deepEqual(updated.json.keyword_rule.excludeTerms, ["وظائف", "إعلان ممول"]);
   });
 
+  it("returns legacy source intelligence for the sources page", async () => {
+    const result = await requestJson("/api/source-intelligence");
+
+    assert.equal(result.response.status, 200);
+    assert.ok(result.json.intelligence.summary.items > 0);
+    assert.ok(result.json.intelligence.keywords.requiredTerms.includes("هداية"));
+    assert.ok(result.json.intelligence.newsSources.some((source: { url: string }) => source.url === "https://prh.gov.sa"));
+    assert.ok(result.json.intelligence.xAccounts.some((source: { url: string }) => source.url === "https://x.com/UOfjeddah"));
+  });
+
+  it("applies legacy keywords into the active keyword rule", async () => {
+    const result = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_keywords" }),
+    });
+
+    assert.equal(result.response.status, 200);
+    assert.equal(result.json.ok, true);
+    assert.ok(result.json.keyword_rule.requiredTerms.includes("هداية"));
+    assert.ok(result.json.keyword_rule.optionalTerms.includes("رئاسة الشؤون الدينية"));
+  });
+
+  it("applies legacy social watchlists without duplicating reruns", async () => {
+    const first = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_social_watchlists", limit: 2 }),
+    });
+    const second = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_social_watchlists", limit: 2 }),
+    });
+    const listed = await requestJson("/api/source-rules");
+
+    assert.equal(first.response.status, 200);
+    assert.equal(second.response.status, 200);
+    assert.equal(first.json.created.length, 6);
+    assert.equal(second.json.created.length, 0);
+    assert.equal(second.json.skipped.length, 6);
+    assert.equal(listed.json.source_rules.length, 6);
+    assert.ok(listed.json.source_rules.some((rule: { type: string; query: string | null }) => rule.type === "tiktok_research" && rule.query === "هداية"));
+    assert.ok(listed.json.source_rules.some((rule: { type: string; url: string | null }) => rule.type === "instagram_public_profile" && rule.url));
+  });
+
+  it("saves legacy news and X sources as editable reference sources", async () => {
+    const first = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_reference_sources", limit: 2 }),
+    });
+    const second = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_reference_sources", limit: 2 }),
+    });
+    const listed = await requestJson("/api/sources");
+    const referenceSources = listed.json.sources.filter((source: { type: string }) => source.type !== "rss");
+
+    assert.equal(first.response.status, 200);
+    assert.equal(first.json.created.length, 4);
+    assert.equal(second.json.created.length, 0);
+    assert.equal(second.json.skipped.length, 4);
+    assert.ok(referenceSources.length >= 4);
+    assert.ok(referenceSources.some((source: { type: string; url: string }) => source.type === "web_page" && source.url === "https://prh.gov.sa"));
+    assert.ok(referenceSources.some((source: { type: string; url: string }) => source.type === "x_recent_search" && source.url === "https://x.com/UOfjeddah"));
+  });
+
   it("polls one RSS source into review items and deduplicates reruns", async () => {
     const source = store.createSource({
       name: "Hidayathon RSS API",
