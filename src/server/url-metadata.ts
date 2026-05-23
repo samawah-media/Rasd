@@ -585,3 +585,68 @@ function firstPresent(...values: Array<string | null | undefined>) {
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
+
+export function getInstagramPostId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes("instagram.com") && host !== "instagr.am") {
+      return null;
+    }
+    const match = parsed.pathname.match(/\/(?:p|reel|reels)\/([\w-]+)/i);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getTikTokVideoId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (!host.includes("tiktok.com")) {
+      return null;
+    }
+    const match = parsed.pathname.match(/\/video\/(\d+)/i);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveScreenshotUrl(
+  url: string | undefined | null,
+  platform: string,
+  metadataImageUrl: string | undefined | null,
+  defaultKind: "evidence_lite" | "preview" | "report_grade" = "evidence_lite"
+): { url: string; kind: "evidence_lite" | "preview" | "report_grade" } | null {
+  if (platform === "TikTok" && url) {
+    const videoId = getTikTokVideoId(url);
+    if (videoId) {
+      const embedUrl = `https://www.tiktok.com/embed/${videoId}`;
+      const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(embedUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=3000`;
+      return { url: screenshotUrl, kind: "preview" };
+    }
+  }
+
+  if (platform === "Instagram" && url) {
+    const postId = getInstagramPostId(url);
+    if (postId) {
+      const embedUrl = `https://www.instagram.com/p/${postId}/embed/captioned/`;
+      const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(embedUrl)}&screenshot=true&embed=screenshot.url&waitForTimeout=3000`;
+      return { url: screenshotUrl, kind: "preview" };
+    }
+  }
+
+  if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
+    return { url: metadataImageUrl, kind: "preview" };
+  }
+
+  if (url && isSafePublicHttpUrl(url)) {
+    const screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&embed=screenshot.url`;
+    return { url: screenshotUrl, kind: defaultKind };
+  }
+
+  return null;
+}
+

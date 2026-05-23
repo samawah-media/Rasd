@@ -13,7 +13,7 @@ import {
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
 import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
-import { isSafePublicHttpUrl } from "@/server/url-metadata";
+import { isSafePublicHttpUrl, resolveScreenshotUrl } from "@/server/url-metadata";
 import {
   normalizeSourceCreateInput,
   SourceValidationError,
@@ -260,13 +260,12 @@ function createEvidenceLiteCapture(itemId: string, metadataImageUrl?: string, pl
   let screenshotUrl = evidenceCardUrl(itemId);
   let kind: CaptureKind = "evidence_lite";
 
-  if (platform === "TikTok" || platform === "Instagram") {
-    if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
-      screenshotUrl = metadataImageUrl;
-      kind = "preview";
-    }
-  } else if (item && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
-    screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
+  const targetUrl = item?.originalUrl;
+  const p = platform || (targetUrl ? platformFromUrl(targetUrl) : "Unknown");
+  const resolution = resolveScreenshotUrl(targetUrl, p, metadataImageUrl);
+  if (resolution) {
+    screenshotUrl = resolution.url;
+    kind = resolution.kind;
   }
 
   const capture: Capture = {
@@ -358,8 +357,10 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
     if (capture.itemId === item.id && capture.status === "success" && (!capture.assetUrl || capture.assetUrl === "/window.svg" || capture.assetUrl.includes("evidence-card.svg"))) {
       let screenshotUrl = evidenceCardUrl(item.id);
       const targetUrl = canonicalUrl || item.originalUrl;
-      if (targetUrl && isSafePublicHttpUrl(targetUrl)) {
-        screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+      const platform = targetUrl ? platformFromUrl(targetUrl) : "Unknown";
+      const resolution = resolveScreenshotUrl(targetUrl, platform, null);
+      if (resolution) {
+        screenshotUrl = resolution.url;
       }
       capture.assetUrl = screenshotUrl;
       changed = true;
@@ -1061,19 +1062,20 @@ export const store = {
     };
 
     let screenshotUrl = evidenceCardUrl(id);
-    let captureKind = kind;
+    let captureKind: CaptureKind = kind;
     const platform = platformFromUrl(item.originalUrl);
-    if (platform === "TikTok" || platform === "Instagram") {
-      const raw = item.raw_response && typeof item.raw_response === "object"
-        ? (item.raw_response as { input?: { extraction?: { imageUrl?: string } }; extraction?: { imageUrl?: string } })
-        : {};
-      const metadataImageUrl = raw.input?.extraction?.imageUrl || raw.extraction?.imageUrl;
-      if (metadataImageUrl && isSafePublicHttpUrl(metadataImageUrl)) {
-        screenshotUrl = metadataImageUrl;
-        captureKind = "preview";
+    
+    const raw = item.raw_response && typeof item.raw_response === "object"
+      ? (item.raw_response as { input?: { extraction?: { imageUrl?: string } }; extraction?: { imageUrl?: string } })
+      : {};
+    const metadataImageUrl = raw.input?.extraction?.imageUrl || raw.extraction?.imageUrl;
+    
+    if (!shouldFail) {
+      const resolution = resolveScreenshotUrl(item.originalUrl, platform, metadataImageUrl, kind);
+      if (resolution) {
+        screenshotUrl = resolution.url;
+        captureKind = resolution.kind;
       }
-    } else if (!shouldFail && item.originalUrl && isSafePublicHttpUrl(item.originalUrl)) {
-      screenshotUrl = `https://api.microlink.io/?url=${encodeURIComponent(item.originalUrl)}&screenshot=true&embed=screenshot.url`;
     }
 
     const capture: Capture = shouldFail
