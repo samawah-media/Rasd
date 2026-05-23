@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { XSearchManager } from "@/lib/x/search-manager";
-import { keywordRules } from "@/lib/mock-data";
 import { canonicalizeXUrl } from "@/lib/x/parser";
 import type { MonitoringItem } from "@/lib/types";
 import type { XSearchRunResult } from "@/lib/x/types";
@@ -53,9 +52,21 @@ export async function POST(request: Request) {
     };
 
     const manager = getSearchManager();
+    const health = await manager.checkHealth();
+    if (health.status !== "healthy") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: health.message ?? "x_search_provider_not_ready",
+          provider: manager.getActiveProviderName(),
+          health,
+        },
+        { status: 503 },
+      );
+    }
 
     // Get keyword rule (use first active rule)
-    const rule = keywordRules[0];
+    const rule = (await persistentStore.listKeywordRules())[0];
     if (!rule) {
       return NextResponse.json(
         { ok: false, error: "no_keyword_rules_configured" },

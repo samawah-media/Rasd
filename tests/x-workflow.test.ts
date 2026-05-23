@@ -317,4 +317,31 @@ describe("X Search Provider and Manager", () => {
       else delete process.env.X_SEARCH_PROVIDER_TYPE;
     }
   });
+
+  it("X search API returns a clear provider error when Grok is not configured", async () => {
+    const previousProvider = process.env.X_SEARCH_PROVIDER_TYPE;
+    const previousXaiKey = process.env.XAI_API_KEY;
+    process.env.X_SEARCH_PROVIDER_TYPE = "grok_search";
+    delete process.env.XAI_API_KEY;
+    store.resetForTest();
+
+    try {
+      const req = new Request("https://localhost/api/x-search", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      const res = await POST_X_SEARCH(req);
+      const body = await res.json();
+      assert.equal(res.status, 503);
+      assert.equal(body.ok, false);
+      assert.equal(body.error, "xai_api_key_missing");
+      assert.equal(body.provider, "grok_search");
+    } finally {
+      if (previousProvider) process.env.X_SEARCH_PROVIDER_TYPE = previousProvider;
+      else delete process.env.X_SEARCH_PROVIDER_TYPE;
+      if (previousXaiKey) process.env.XAI_API_KEY = previousXaiKey;
+      else delete process.env.XAI_API_KEY;
+    }
+  });
 });
