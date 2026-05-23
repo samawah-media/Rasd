@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -34,6 +35,7 @@ type YtDlpRunResult = {
 };
 
 const ytdlpTimeoutMs = 8000;
+const require = createRequire(import.meta.url);
 
 export function mediaMetadataExtractorMode(): "auto" | "yt-dlp" {
   return process.env.MEDIA_METADATA_EXTRACTOR === "yt-dlp" ? "yt-dlp" : "auto";
@@ -132,9 +134,22 @@ function parseYtDlpMetadata(stdout: string) {
   return Object.values(metadata).some(Boolean) ? metadata : null;
 }
 
-function runYtDlp(args: string[], options: { timeoutMs: number }): Promise<YtDlpRunResult> {
+async function runYtDlp(args: string[], options: { timeoutMs: number }): Promise<YtDlpRunResult> {
+  let lastResult: YtDlpRunResult | null = null;
+
+  for (const command of ytDlpCandidates()) {
+    const result = await runYtDlpCommand(command, args, options);
+    lastResult = result;
+    if (result.errorCode === "ENOENT") continue;
+    return result;
+  }
+
+  return lastResult ?? { exitCode: null, stdout: "", stderr: "yt-dlp not found", errorCode: "ENOENT" };
+}
+
+function runYtDlpCommand(command: string, args: string[], options: { timeoutMs: number }): Promise<YtDlpRunResult> {
   return new Promise((resolve) => {
-    const child = spawn("yt-dlp", args, {
+    const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -169,6 +184,18 @@ function runYtDlp(args: string[], options: { timeoutMs: number }): Promise<YtDlp
       resolve({ exitCode, stdout, stderr });
     });
   });
+}
+
+function ytDlpCandidates() {
+  return Array.from(new Set(["yt-dlp", bundledYtDlpPath()].filter(Boolean) as string[]));
+}
+
+function bundledYtDlpPath() {
+  try {
+    return (require("yt-dlp-exec/src/constants") as { YOUTUBE_DL_PATH?: string }).YOUTUBE_DL_PATH;
+  } catch {
+    return undefined;
+  }
 }
 
 async function createCookieFileFromEnv() {
