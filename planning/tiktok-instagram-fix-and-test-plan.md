@@ -2,6 +2,42 @@
 
 Last updated: 2026-05-22
 
+## 2026-05-23 Follow-up: Internal Manual URL Media Metadata
+
+Decision:
+
+- TikTok/Instagram manual URL hydration should not require Nazl or any external downloader service.
+- RASD now owns an internal media metadata extractor path and uses `yt-dlp` only when the runtime provides it.
+
+Implemented:
+
+- Added `src/server/media-metadata-extractor.ts` with `yt-dlp` execution through `child_process`.
+- Added `MEDIA_METADATA_EXTRACTOR=auto|yt-dlp`.
+- Added optional `YTDLP_COOKIES_TXT`, `YTDLP_COOKIES_PATH`, and `YTDLP_PROXY_URL` support.
+- Updated TikTok/Instagram manual URL metadata to try `yt-dlp` first, then fallback to the existing HTML metadata extractor.
+- Mapped `title`, `description`, `uploader`, `thumbnail`, and `webpage_url` into the existing manual intake metadata shape.
+- Added `/api/admin/health` metadata extractor checks for:
+  - extractor enabled
+  - `yt-dlp` availability
+  - cookies configured
+  - proxy configured
+- Added `/health` visibility for the `yt-dlp` readiness signal.
+
+Focused validation:
+
+| Check | Result |
+| --- | --- |
+| `npx tsx --test tests/lib.test.ts tests/api.test.ts` | Passed: 71/71 |
+| `npm run typecheck` | Passed |
+
+New test coverage:
+
+- TikTok manual URL uses `yt-dlp` metadata before HTML.
+- Instagram manual URL uses `yt-dlp` metadata before HTML.
+- `yt-dlp` failure falls back to HTML metadata.
+- Missing `yt-dlp` does not break manual URL intake.
+- Admin health reports extractor availability, cookies, and proxy readiness.
+
 ## 2026-05-22 Follow-up: Operator Controls And Health
 
 Decision from product owner:

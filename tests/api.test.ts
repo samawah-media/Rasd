@@ -1340,6 +1340,10 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(typeof health.json.automation.cronSecretConfigured, "boolean");
     assert.equal(health.json.automation.connectorCronPath, "/api/cron/run-connectors");
     assert.equal(health.json.automation.tiktok.activeRulesCount, 1);
+    assert.equal(typeof health.json.automation.mediaMetadataExtractor.enabled, "boolean");
+    assert.equal(typeof health.json.automation.mediaMetadataExtractor.ytDlpAvailable, "boolean");
+    assert.equal(typeof health.json.automation.mediaMetadataExtractor.cookiesConfigured, "boolean");
+    assert.equal(typeof health.json.automation.mediaMetadataExtractor.proxyConfigured, "boolean");
   });
 
   it("does not ingest automated TikTok or Instagram items without mocks or credentials", async () => {

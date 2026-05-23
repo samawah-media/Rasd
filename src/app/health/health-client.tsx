@@ -53,6 +53,15 @@ interface HealthClientProps {
       connectorCronPath: string;
       connectorCronScheduleUtc: string;
       mocksEnabled: boolean;
+      mediaMetadataExtractor?: {
+        enabled: boolean;
+        mode: "auto" | "yt-dlp";
+        ytDlpAvailable: boolean;
+        cookiesConfigured: boolean;
+        proxyConfigured: boolean;
+        status: "healthy" | "degraded" | "disabled";
+        message: string;
+      };
       sourceRulesCount: number;
       activeSourceRulesCount: number;
       queuedJobsCount: number;
@@ -426,11 +435,12 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                   </Link>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-4">
                   {[
                     { label: "Migration source_rules", ok: health.automation.schemaReady, detail: health.automation.schemaReady ? "الجداول والأعمدة جاهزة" : (health.automation.schemaError ?? "تحتاج migration") },
                     { label: "CRON_SECRET", ok: health.automation.cronSecretConfigured, detail: health.automation.cronSecretConfigured ? "محمي ومفعّل" : "أضف CRON_SECRET في Vercel" },
                     { label: "Mock mode", ok: !health.automation.mocksEnabled, detail: health.automation.mocksEnabled ? "مفعّل خارج الإنتاج فقط" : "غير مفعّل" },
+                    { label: "yt-dlp", ok: Boolean(health.automation.mediaMetadataExtractor?.enabled && health.automation.mediaMetadataExtractor?.ytDlpAvailable), detail: health.automation.mediaMetadataExtractor ? `${health.automation.mediaMetadataExtractor.mode} / cookies:${health.automation.mediaMetadataExtractor.cookiesConfigured ? "yes" : "no"} / proxy:${health.automation.mediaMetadataExtractor.proxyConfigured ? "yes" : "no"}` : "not checked" },
                   ].map((item) => (
                     <div key={item.label} className="rounded-2xl border border-[var(--color-border)] bg-stone-50 p-4">
                       <div className="flex items-center justify-between gap-2">

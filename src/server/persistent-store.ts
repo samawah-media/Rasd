@@ -38,6 +38,7 @@ import {
   persistEvidenceAsset,
 } from "@/server/evidence-storage";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
+import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import {
   normalizeSourceCreateInput,
   SourceValidationError,
@@ -337,12 +338,13 @@ async function buildAutomationHealth(input: {
   };
 
   try {
-    const [sourceRules, connectorRuns, jobs, tiktokHealth, instagramHealth] = await Promise.all([
+    const [sourceRules, connectorRuns, jobs, tiktokHealth, instagramHealth, mediaMetadataExtractor] = await Promise.all([
       input.listSourceRules(),
       input.listConnectorRuns(),
       input.listJobs(),
       new TikTokResearchConnector().testConnection(),
       new InstagramPublicProfileConnector().testConnection(),
+      getMediaMetadataHealth(),
     ]);
     const failedJobs = jobs.filter((job) => job.status === "failed" || job.status === "dead_letter");
     const activeRules = sourceRules.filter((rule) => rule.active);
@@ -354,6 +356,7 @@ async function buildAutomationHealth(input: {
       failedJobsCount: failedJobs.length,
       latestRun: connectorRuns[0] ?? null,
       latestFailedJob: failedJobs[0] ?? null,
+      mediaMetadataExtractor,
       tiktok: {
         status: tiktokHealth.status,
         message: tiktokHealth.message,
@@ -380,6 +383,15 @@ async function buildAutomationHealth(input: {
       failedJobsCount: 0,
       latestRun: null,
       latestFailedJob: null,
+      mediaMetadataExtractor: await getMediaMetadataHealth().catch(() => ({
+        enabled: false,
+        mode: "auto" as const,
+        ytDlpAvailable: false,
+        cookiesConfigured: Boolean(process.env.YTDLP_COOKIES_TXT || process.env.YTDLP_COOKIES_PATH),
+        proxyConfigured: Boolean(process.env.YTDLP_PROXY_URL),
+        status: "degraded" as const,
+        message: "Media metadata extractor health is unavailable.",
+      })),
       tiktok: {
         status: "not_configured",
         message: "Source-rule health is unavailable until migrations are applied.",
@@ -918,6 +930,7 @@ export const persistentStore = {
         instagram_public_profile: automation.instagram.status,
       },
       usage,
+      mediaMetadataExtractor: automation.mediaMetadataExtractor,
       automation,
     };
   },
