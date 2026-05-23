@@ -15,9 +15,9 @@ export type ApifyHealth = {
 type SocialPlatform = Extract<ExtractionResult["platform"], "TikTok" | "Instagram">;
 type FetchLike = typeof fetch;
 
-const apifyTimeoutMs = 30_000;
-const tiktokActorId = "clockworks/free-tiktok-scraper";
-const instagramActorId = "apify/instagram-post-scraper";
+export const apifyTimeoutMs = 30_000;
+export const tiktokActorId = "clockworks/free-tiktok-scraper";
+export const instagramActorId = "apify/instagram-post-scraper";
 
 export function isApifyConfigured() {
   return Boolean(cleanEnv(process.env.APIFY_API_TOKEN));
@@ -70,6 +70,16 @@ async function runActor(
   }
 }
 
+export async function runApifyActorDatasetItems(
+  actorId: string,
+  payload: Record<string, unknown>,
+  fetcher: FetchLike = fetch,
+) {
+  const token = cleanEnv(process.env.APIFY_API_TOKEN);
+  if (!token) return { items: [], error: "apify_not_configured" };
+  return runActor(actorId, payload, token, fetcher);
+}
+
 export async function extractWithApify(
   url: string,
   platform: SocialPlatform,
@@ -83,7 +93,7 @@ export async function extractWithApify(
     const { items, error } = await runActor(actorId, { directUrls: [url] }, token, fetcher);
     const firstItem = firstObject(items);
     if (!firstItem) return { metadata: null, error: error ?? "apify_empty_dataset" };
-    const metadata = mapInstagramItem(firstItem, url);
+    const metadata = mapApifyInstagramItem(firstItem, url);
     return {
       metadata,
       rawResponse: firstItem,
@@ -96,8 +106,6 @@ export async function extractWithApify(
   const fallbackActor = process.env.APIFY_TIKTOK_FALLBACK_ACTOR || "OtzYfK1ndEGdwWFKQ/tiktok-scraper";
   const useFallback = process.env.APIFY_TIKTOK_USE_FALLBACK !== "false";
 
-  console.log(`[Apify:TikTok] Running primary actor: ${primaryActor}`);
-
   const payload = {
     postURLs: [url],
     resultsPerPage: 1,
@@ -107,7 +115,7 @@ export async function extractWithApify(
 
   const primaryResult = await runActor(primaryActor, payload, token, fetcher);
   const primaryItem = firstObject(primaryResult.items);
-  const primaryMetadata = primaryItem ? mapTikTokItem(primaryItem, url) : null;
+  const primaryMetadata = primaryItem ? mapApifyTikTokItem(primaryItem, url) : null;
 
   // We consider it a "complete" metadata if we retrieved an actual caption/text and it's not a generic fallback
   const isPrimaryComplete = primaryMetadata && primaryMetadata.text && !primaryMetadata.text.startsWith("فيديو تيك توك");
@@ -127,15 +135,12 @@ export async function extractWithApify(
     }
   }
 
-  // Fallback mode if primary actor yielded empty or textless metadata
-  console.log(`[Apify:TikTok] Primary actor returned incomplete result. Running fallback actor: ${fallbackActor}`);
-
+  // Fallback mode if primary actor yielded empty or textless metadata.
   const fallbackResult = await runActor(fallbackActor, payload, token, fetcher);
   const fallbackItem = firstObject(fallbackResult.items);
-  const fallbackMetadata = fallbackItem ? mapTikTokItem(fallbackItem, url) : null;
+  const fallbackMetadata = fallbackItem ? mapApifyTikTokItem(fallbackItem, url) : null;
 
   if (fallbackMetadata) {
-    console.log(`[Apify:TikTok] Fallback actor succeeded.`);
     return {
       metadata: fallbackMetadata,
       rawResponse: fallbackItem,
@@ -143,7 +148,6 @@ export async function extractWithApify(
   }
 
   if (primaryMetadata) {
-    console.log(`[Apify:TikTok] Fallback actor also failed. Returning primary partial metadata.`);
     return {
       metadata: primaryMetadata,
       rawResponse: primaryItem,
@@ -156,27 +160,11 @@ export async function extractWithApify(
   };
 }
 
-function mapTikTokItem(item: Record<string, unknown>, inputUrl: string): ExtractionResult | null {
+export function mapApifyTikTokItem(item: Record<string, unknown>, inputUrl: string): ExtractionResult | null {
   const authorMeta = objectValue(item.authorMeta);
   const videoMeta = objectValue(item.videoMeta);
   const shareMeta = objectValue(item.shareMeta);
   const author = objectValue(item.author);
-
-  // Log top-level response keys for diagnostics
-  console.log(`[Apify:TikTok] Response keys: ${Object.keys(item).join(", ")}`);
-
-  // Log availability of text fields to check where captions are placed
-  const textCheck = {
-    text: !!item.text,
-    desc: !!item.desc,
-    description: !!item.description,
-    content_desc: !!item.content_desc,
-    caption: !!item.caption,
-    shareMetaDesc: !!shareMeta?.desc,
-    shareMetaTitle: !!shareMeta?.title,
-    title: !!item.title,
-  };
-  console.log(`[Apify:TikTok] Text fields check:`, textCheck);
 
   const text =
     stringValue(item.text) ??
@@ -239,8 +227,8 @@ function mapTikTokItem(item: Record<string, unknown>, inputUrl: string): Extract
   };
 }
 
-function mapInstagramItem(item: Record<string, unknown>, inputUrl: string): ExtractionResult | null {
-  const caption = stringValue(item.caption) ?? stringValue(item.alt) ?? stringValue(item.description);
+export function mapApifyInstagramItem(item: Record<string, unknown>, inputUrl: string): ExtractionResult | null {
+  const caption = stringValue(item.caption) ?? stringValue(item.alt) ?? stringValue(item.description) ?? stringValue(item.accessibility);
   const title = clipped(caption ?? stringValue(item.title) ?? "Instagram post", 110);
   const imageUrl =
     stringValue(item.displayUrl) ??

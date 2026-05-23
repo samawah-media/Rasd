@@ -1374,12 +1374,14 @@ describe("Hono API acceptance workflow", () => {
     const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
     const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
     const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
 
     process.env.CRON_SECRET = "cron_no_mock_secret";
     delete process.env.TIKTOK_RESEARCH_ENABLED;
     delete process.env.TIKTOK_CLIENT_KEY;
     delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
     delete process.env.RASD_CONNECTOR_MOCKS;
+    delete process.env.APIFY_API_TOKEN;
 
     try {
       await requestJson("/api/source-rules", {
@@ -1412,6 +1414,116 @@ describe("Hono API acceptance workflow", () => {
     } finally {
       if (previousSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = previousSecret;
+      if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
+      else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
+      if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;
+      else process.env.TIKTOK_CLIENT_KEY = previousTikTokKey;
+      if (previousInstagramEnabled === undefined) delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+      else process.env.INSTAGRAM_WATCHLIST_ENABLED = previousInstagramEnabled;
+      if (previousMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousMocks;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
+  it("uses Apify for automated TikTok and Instagram watchlist ingestion", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    const previousTikTokEnabled = process.env.TIKTOK_RESEARCH_ENABLED;
+    const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+    const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+    const originalFetch = globalThis.fetch;
+
+    process.env.CRON_SECRET = "cron_apify_watchlist_secret";
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    delete process.env.TIKTOK_RESEARCH_ENABLED;
+    delete process.env.TIKTOK_CLIENT_KEY;
+    delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    delete process.env.RASD_CONNECTOR_MOCKS;
+
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const body = typeof init?.body === "string" ? init.body : "";
+
+      if (url.includes("clockworks~free-tiktok-scraper")) {
+        assert.match(body, /"search":\["هداية"\]/);
+        return new Response(
+          JSON.stringify([
+            {
+              id: "7620000000000000001",
+              text: "تغطية تلقائية عن هاكاثون هداية من تيك توك",
+              authorMeta: { name: "hidayathon_tiktok", nickName: "Hidayathon TikTok" },
+              videoMeta: { coverUrl: "https://cdn.example.com/tiktok-auto.jpg" },
+              createTimeISO: "2026-05-23T10:00:00.000Z",
+              webVideoUrl: "https://www.tiktok.com/@hidayathon_tiktok/video/7620000000000000001",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.includes("apify~instagram-post-scraper")) {
+        assert.match(body, /"directUrls":\["https:\/\/instagram.com\/hidayathon"\]/);
+        return new Response(
+          JSON.stringify([
+            {
+              id: "ig-auto-1",
+              shortCode: "IGAUTO1",
+              caption: "منشور تلقائي عن هاكاثون هداية من انستغرام",
+              ownerUsername: "hidayathon",
+              ownerFullName: "Hidayathon Instagram",
+              displayUrl: "https://cdn.example.com/instagram-auto.jpg",
+              timestamp: "2026-05-23T09:30:00.000Z",
+              url: "https://www.instagram.com/p/IGAUTO1/",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      throw new Error(`unexpected_fetch:${url}`);
+    };
+
+    try {
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({ type: "tiktok_research", query: "هداية" }),
+      });
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "instagram_public_profile",
+          url: "https://instagram.com/hidayathon",
+          query: "هداية",
+        }),
+      });
+
+      const result = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_apify_watchlist_secret" },
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 2);
+      assert.equal(result.json.executedCount, 2);
+      assert.equal(result.json.failedCount, 0);
+
+      const items = store
+        .listItems()
+        .filter((item) => item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile");
+      assert.equal(items.length, 2);
+      assert.ok(items.some((item) => item.title.includes("تيك توك") && item.raw_response && JSON.stringify(item.raw_response).includes("apify")));
+      assert.ok(items.some((item) => item.title.includes("انستغرام") && item.raw_response && JSON.stringify(item.raw_response).includes("instagram-auto.jpg")));
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
       if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
       else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
       if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;

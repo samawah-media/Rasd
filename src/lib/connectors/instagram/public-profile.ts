@@ -1,6 +1,7 @@
 import type { Connector, Cursor, IngestedItem } from "../../connectors";
 import type { ConnectorHealth, SourceRule } from "../../types";
 import { shouldUseConnectorMocks } from "../mock-mode";
+import { fetchInstagramWatchlistWithApify, hasApifyToken } from "../apify-social";
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -8,6 +9,14 @@ const execAsync = promisify(exec);
 
 export class InstagramPublicProfileConnector implements Connector {
   async testConnection(): Promise<ConnectorHealth> {
+    if (hasApifyToken()) {
+      return {
+        connector: "instagram_public_profile",
+        status: "healthy",
+        message: "Instagram Public Profile monitoring is configured through Apify.",
+      };
+    }
+
     const enabled = process.env.INSTAGRAM_WATCHLIST_ENABLED === "true";
     if (!enabled) {
       return {
@@ -35,6 +44,9 @@ export class InstagramPublicProfileConnector implements Connector {
 
   async fetch(rule: SourceRule, _cursor?: Cursor | null): Promise<IngestedItem[]> {
     void _cursor;
+    const apifyItems = await fetchInstagramWatchlistWithApify(rule);
+    if (apifyItems.length > 0) return apifyItems;
+
     const enabled = process.env.INSTAGRAM_WATCHLIST_ENABLED === "true";
     if (!enabled) {
       return shouldUseConnectorMocks() ? this.getMockItems(rule) : [];

@@ -2433,7 +2433,7 @@ export const persistentStore = {
         let captureKind: CaptureKind = "evidence_lite";
         const platform = platformFromUrl(rawItem.url ?? "");
 
-        const resolution = resolveScreenshotUrl(rawItem.url, platform, null);
+        const resolution = resolveScreenshotUrl(rawItem.url, platform, rawItem.imageUrl);
         if (resolution) {
           screenshotUrl = resolution.url;
           captureKind = resolution.kind;
@@ -2498,9 +2498,9 @@ export const persistentStore = {
         const sorted = [...fetched].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
         const latest = sorted[0];
         if (rule.type === "tiktok_research") {
-          nextCursor = { search_id: latest.sourceItemId };
+          nextCursor = { search_id: latest.sourceItemId, lastPublishedAt: latest.publishedAt };
         } else if (rule.type === "instagram_public_profile") {
-          nextCursor = { lastPublishedAt: latest.publishedAt };
+          nextCursor = { latestSourceItemId: latest.sourceItemId, lastPublishedAt: latest.publishedAt };
         }
       }
 
