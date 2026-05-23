@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { SourceCredibility, SourceType } from "@/lib/types";
 import { getPreferredHidayathonClientReportData } from "@/lib/client-report-data";
 import { getLegacyBackfillDataset } from "@/lib/legacy-backfill";
+import { getLegacySourceIntelligence, type LegacySourceRecommendation } from "@/lib/legacy-source-intelligence";
 import type { LegacyLinkOverrideStatus } from "@/lib/legacy-link-overrides";
 import {
   buildPersistentLegacySupabaseUpsertPlan,
@@ -211,6 +212,27 @@ function stringArray(value: unknown) {
     return Array.from(new Set(value.split(/\r?\n|,/u).map((entry) => entry.trim()).filter(Boolean)));
   }
   return undefined;
+}
+
+function mergeTerms(...groups: (string[] | undefined)[]) {
+  return Array.from(new Set(groups.flatMap((group) => group ?? []).map((term) => term.trim()).filter(Boolean)));
+}
+
+function requestedApplyLimit(value: unknown, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(20, Math.trunc(value)));
+}
+
+function sourceRuleDuplicateKey(input: { type: SourceType; query?: string | null; url?: string | null }) {
+  return `${input.type}:${(input.query ?? "").trim().toLowerCase()}:${(input.url ?? "").trim().toLowerCase()}`;
+}
+
+function sourceDuplicateKey(input: { type: SourceType; url?: string | null; feedUrl?: string | null }) {
+  return `${input.type}:${(input.feedUrl ?? input.url ?? "").trim().toLowerCase()}`;
+}
+
+function recommendationSampleUrl(recommendation: LegacySourceRecommendation) {
+  return recommendation.sampleUrls[0] ?? recommendation.url ?? recommendation.query ?? "";
 }
 
 function positiveInteger(value: unknown, fallback: number, max: number) {
@@ -662,6 +684,160 @@ api.get("/source-rules", async (c) => {
     const mapped = sourceRuleErrorStatus(error);
     return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
   }
+});
+
+api.get("/source-intelligence", async (c) => {
+  const organizationId = optionalString(c.req.query("organization_id"), c.req.query("organizationId")) ?? DEFAULT_ORGANIZATION_ID;
+  const intelligence = getLegacySourceIntelligence();
+  const [sources, sourceRules, keywordRules] = await Promise.all([
+    persistentStore.listSources(),
+    persistentStore.listSourceRules(organizationId),
+    persistentStore.listKeywordRules(),
+  ]);
+  const existingSourceKeys = new Set(sources.map((source) => sourceDuplicateKey(source)));
+  const existingRuleKeys = new Set(sourceRules.map((rule) => sourceRuleDuplicateKey(rule)));
+
+  return c.json(
+    withRequestId(c, {
+      intelligence,
+      existing: {
+        keywordRuleId: keywordRules[0]?.id ?? null,
+        referenceSources: sources.filter((source) => source.type !== "rss").length,
+        sourceRules: sourceRules.length,
+        newsSources: intelligence.newsSources.filter((source) =>
+          source.url ? existingSourceKeys.has(sourceDuplicateKey({ type: "web_page", url: source.url })) : false,
+        ).length,
+        xAccounts: intelligence.xAccounts.filter((source) =>
+          source.url ? existingSourceKeys.has(sourceDuplicateKey({ type: "x_recent_search", url: source.url })) : false,
+        ).length,
+        instagramProfiles: intelligence.instagramProfiles.filter((source) =>
+          source.url ? existingRuleKeys.has(sourceRuleDuplicateKey({ type: "instagram_public_profile", url: source.url })) : false,
+        ).length,
+        tiktokProfiles: intelligence.tiktokProfiles.filter((source) =>
+          source.url ? existingRuleKeys.has(sourceRuleDuplicateKey({ type: "tiktok_research", url: source.url })) : false,
+        ).length,
+        tiktokQueries: intelligence.tiktokQueries.filter((source) =>
+          source.query ? existingRuleKeys.has(sourceRuleDuplicateKey({ type: "tiktok_research", query: source.query })) : false,
+        ).length,
+      },
+    }),
+  );
+});
+
+api.post("/source-intelligence/apply", async (c) => {
+  const body = await readJson(c);
+  const action = optionalString(body.action);
+  const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
+  const topicId = optionalString(body.topic_id, body.topicId) ?? DEFAULT_TOPIC_ID;
+  const limit = requestedApplyLimit(body.limit, 8);
+  const intelligence = getLegacySourceIntelligence();
+
+  if (action === "apply_keywords") {
+    const currentRule = (await persistentStore.listKeywordRules())[0];
+    const keywordRule = await persistentStore.upsertKeywordRule({
+      id: currentRule?.id,
+      requiredTerms: mergeTerms(currentRule?.requiredTerms, intelligence.keywords.requiredTerms),
+      optionalTerms: mergeTerms(currentRule?.optionalTerms, intelligence.keywords.optionalTerms),
+      excludeTerms: mergeTerms(currentRule?.excludeTerms, intelligence.keywords.excludeTerms),
+      language: currentRule?.language ?? "mixed",
+      priority: currentRule?.priority ?? 100,
+    });
+    return c.json(withRequestId(c, { ok: true, action, keyword_rule: keywordRule }));
+  }
+
+  if (action === "apply_social_watchlists") {
+    const existingRules = await persistentStore.listSourceRules(organizationId);
+    const existingKeys = new Set(existingRules.map((rule) => sourceRuleDuplicateKey(rule)));
+    const candidates = [
+      ...intelligence.tiktokQueries.slice(0, limit).map((recommendation) => ({
+        type: "tiktok_research" as const,
+        query: recommendation.query ?? recommendation.label,
+        url: null,
+        label: recommendation.label,
+      })),
+      ...intelligence.tiktokProfiles.slice(0, limit).map((recommendation) => ({
+        type: "tiktok_research" as const,
+        query: null,
+        url: recommendation.url ?? null,
+        label: recommendation.label,
+      })),
+      ...intelligence.instagramProfiles.slice(0, limit).map((recommendation) => ({
+        type: "instagram_public_profile" as const,
+        query: null,
+        url: recommendation.url ?? null,
+        label: recommendation.label,
+      })),
+    ];
+
+    const created = [];
+    const skipped = [];
+    for (const candidate of candidates) {
+      const key = sourceRuleDuplicateKey(candidate);
+      if (existingKeys.has(key)) {
+        skipped.push(candidate.label);
+        continue;
+      }
+      const sourceRule = await persistentStore.upsertSourceRule({
+        organizationId,
+        topicId,
+        sourceId: null,
+        type: candidate.type,
+        query: candidate.query,
+        url: candidate.url,
+        active: true,
+        pollIntervalMinutes: 1440,
+      });
+      existingKeys.add(key);
+      created.push(sourceRule);
+    }
+
+    return c.json(withRequestId(c, { ok: true, action, created, skipped }));
+  }
+
+  if (action === "apply_reference_sources") {
+    const existingSources = await persistentStore.listSources();
+    const existingKeys = new Set(existingSources.map((source) => sourceDuplicateKey(source)));
+    const candidates = [
+      ...intelligence.newsSources.slice(0, limit).map((recommendation) => ({
+        name: recommendation.label,
+        type: "web_page" as const,
+        url: recommendation.url,
+        credibility: "media" as const,
+        sample: recommendationSampleUrl(recommendation),
+      })),
+      ...intelligence.xAccounts.slice(0, limit).map((recommendation) => ({
+        name: recommendation.label,
+        type: "x_recent_search" as const,
+        url: recommendation.url,
+        credibility: "influencer" as const,
+        sample: recommendationSampleUrl(recommendation),
+      })),
+    ].filter((candidate): candidate is typeof candidate & { url: string } => Boolean(candidate.url));
+
+    const created = [];
+    const skipped = [];
+    for (const candidate of candidates) {
+      const key = sourceDuplicateKey(candidate);
+      if (existingKeys.has(key)) {
+        skipped.push(candidate.name);
+        continue;
+      }
+      const source = await persistentStore.createSource({
+        name: candidate.name,
+        type: candidate.type,
+        url: candidate.url,
+        credibility: candidate.credibility,
+        isActive: false,
+        pollIntervalMinutes: 1440,
+      });
+      existingKeys.add(key);
+      created.push({ ...source, sampleUrl: candidate.sample });
+    }
+
+    return c.json(withRequestId(c, { ok: true, action, created, skipped }));
+  }
+
+  return c.json(withRequestId(c, { error: "source_intelligence_action_unsupported" }), 400);
 });
 
 api.post("/source-rules", async (c) => {

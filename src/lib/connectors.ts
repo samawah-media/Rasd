@@ -19,6 +19,7 @@ export type IngestedItem = {
   authorName?: string;
   authorHandle?: string;
   publishedAt: string;
+  imageUrl?: string;
   raw: unknown;
 };
 

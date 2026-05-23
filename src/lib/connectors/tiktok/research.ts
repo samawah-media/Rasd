@@ -1,10 +1,18 @@
 import type { Connector, IngestedItem } from "../../connectors";
 import type { ConnectorHealth, SourceRule } from "../../types";
 import { shouldUseConnectorMocks } from "../mock-mode";
+import { fetchTikTokWatchlistWithApify, hasApifyToken } from "../apify-social";
 
 export class TikTokResearchConnector implements Connector {
   async testConnection(): Promise<ConnectorHealth> {
     const enabled = process.env.TIKTOK_RESEARCH_ENABLED === "true" || !!process.env.TIKTOK_CLIENT_KEY;
+    if (!enabled && hasApifyToken()) {
+      return {
+        connector: "tiktok_research",
+        status: "healthy",
+        message: "TikTok watchlist monitoring is configured through Apify.",
+      };
+    }
     if (!enabled) {
       return {
         connector: "tiktok_research",
@@ -22,6 +30,8 @@ export class TikTokResearchConnector implements Connector {
   async fetch(rule: SourceRule, cursor?: Record<string, unknown> | null): Promise<IngestedItem[]> {
     const enabled = process.env.TIKTOK_RESEARCH_ENABLED === "true" || !!process.env.TIKTOK_CLIENT_KEY;
     if (!enabled) {
+      const apifyItems = await fetchTikTokWatchlistWithApify(rule);
+      if (apifyItems.length > 0) return apifyItems;
       return shouldUseConnectorMocks() ? this.getMockItems(rule) : [];
     }
 

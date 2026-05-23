@@ -303,6 +303,7 @@ Automated result on 2026-05-23:
 - Evidence capture now prefers metadata thumbnails/covers before Microlink embed screenshots for TikTok/Instagram.
 - Generic TikTok/Instagram HTML titles remain rejected; fallback items preserve the original URL and expose a warning instead of showing generic captions.
 - Added tests for TikTok Apify metadata, Instagram Apify metadata, metadata-thumbnail evidence selection, generic-title fallback, and environment isolation when `yt-dlp`/Apify are disabled.
+- Added Apify-backed automated watchlist ingestion for TikTok search/profile/video rules and Instagram profile rules. The scheduler keeps mock data gated, filters by keyword relevance, deduplicates by source item/URL, stores metadata thumbnails for evidence, and advances cursors by latest publish time.
 
 ## Phase 5 - Watchlist Readiness
 

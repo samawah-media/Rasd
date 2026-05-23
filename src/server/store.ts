@@ -453,8 +453,8 @@ export const store = {
         web_page: "degraded",
         x_oembed: "not_configured",
         x_recent_search: xSearchLastRun ? "healthy" : "ready",
-        tiktok_research: process.env.TIKTOK_RESEARCH_ENABLED === "true" || process.env.TIKTOK_CLIENT_KEY ? "healthy" : "not_configured",
-        instagram_public_profile: process.env.INSTAGRAM_WATCHLIST_ENABLED === "true" ? "degraded" : "not_configured",
+        tiktok_research: apify.status === "healthy" || process.env.TIKTOK_RESEARCH_ENABLED === "true" || process.env.TIKTOK_CLIENT_KEY ? "healthy" : "not_configured",
+        instagram_public_profile: apify.status === "healthy" || process.env.INSTAGRAM_WATCHLIST_ENABLED === "true" ? "healthy" : "not_configured",
         apify_social_media: apify.status === "healthy" ? "healthy" : "not_configured",
       },
       usage,
@@ -1560,9 +1560,9 @@ export const store = {
         const sorted = [...fetched].sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
         const latest = sorted[0];
         if (rule.type === "tiktok_research") {
-          nextCursor = { search_id: latest.sourceItemId };
+          nextCursor = { search_id: latest.sourceItemId, lastPublishedAt: latest.publishedAt };
         } else if (rule.type === "instagram_public_profile") {
-          nextCursor = { lastPublishedAt: latest.publishedAt };
+          nextCursor = { latestSourceItemId: latest.sourceItemId, lastPublishedAt: latest.publishedAt };
         }
       }
 

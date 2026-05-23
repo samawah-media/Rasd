@@ -14,9 +14,11 @@ import {
   Power,
   RefreshCw,
   Settings,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import type { ConnectorRun, KeywordRule, MonitoringItem, Source, SourceRule } from "@/lib/types";
+import type { LegacySourceIntelligence } from "@/lib/legacy-source-intelligence";
 import AppShell from "@/components/AppShell";
 import { BentoCard, BentoGrid } from "@/components/BentoGrid";
 
@@ -27,6 +29,21 @@ type SourcesState = {
   keywordRules: KeywordRule[];
   sourceRules: SourceRule[];
   connectorRuns: ConnectorRun[];
+  sourceIntelligence: SourceIntelligencePayload | null;
+};
+
+type SourceIntelligencePayload = {
+  intelligence: LegacySourceIntelligence;
+  existing: {
+    keywordRuleId: string | null;
+    referenceSources: number;
+    sourceRules: number;
+    newsSources: number;
+    xAccounts: number;
+    instagramProfiles: number;
+    tiktokProfiles: number;
+    tiktokQueries: number;
+  };
 };
 
 type SourcePollResponse = {
@@ -66,11 +83,20 @@ type RunDueResponse = {
   failedCount: number;
 };
 
+type SourceIntelligenceApplyResponse = {
+  ok: boolean;
+  action: string;
+  created?: unknown[];
+  skipped?: string[];
+  keyword_rule?: KeywordRule;
+};
+
 const emptyState: SourcesState = {
   sources: [],
   keywordRules: [],
   sourceRules: [],
   connectorRuns: [],
+  sourceIntelligence: null,
 };
 
 const arabicApiErrors: Record<string, string> = {
@@ -235,13 +261,19 @@ export function SourcesClient() {
     [rssSources],
   );
 
+  const referenceSources = useMemo(
+    () => state.sources.filter((source) => source.type !== "rss"),
+    [state.sources],
+  );
+
   const activeKeywordRule = state.keywordRules[0] ?? null;
 
   async function fetchSnapshot(): Promise<SourcesState> {
-    const [sourcesData, keywordRulesData, sourceRulesData] = await Promise.all([
+    const [sourcesData, keywordRulesData, sourceRulesData, sourceIntelligenceData] = await Promise.all([
       apiJson<{ sources: Source[] }>("/api/sources"),
       apiJson<{ keyword_rules: KeywordRule[] }>("/api/keyword-rules"),
       apiJson<SourceRulesResponse>("/api/source-rules"),
+      apiJson<SourceIntelligencePayload>("/api/source-intelligence"),
     ]);
 
     return {
@@ -249,6 +281,7 @@ export function SourcesClient() {
       keywordRules: keywordRulesData.keyword_rules,
       sourceRules: sourceRulesData.source_rules,
       connectorRuns: sourceRulesData.connector_runs,
+      sourceIntelligence: sourceIntelligenceData,
     };
   }
 
@@ -434,6 +467,37 @@ export function SourcesClient() {
     }
   }
 
+  async function applySourceIntelligence(action: "apply_keywords" | "apply_social_watchlists" | "apply_reference_sources") {
+    setPending(`source-intelligence-${action}`);
+    setMessage("جاري تطبيق اقتراحات التقارير الأصلية...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<SourceIntelligenceApplyResponse>("/api/source-intelligence/apply", {
+        method: "POST",
+        body: JSON.stringify({ action, limit: 8 }),
+      });
+      await refreshSilently();
+      if (result.keyword_rule) hydrateKeywordInputs(result.keyword_rule);
+
+      const created = result.created?.length ?? 0;
+      const skipped = result.skipped?.length ?? 0;
+      if (action === "apply_keywords") {
+        setMessage("تم دمج كلمات التقارير الأصلية مع كلمات الرصد الحالية.");
+      } else if (action === "apply_social_watchlists") {
+        setMessage(`تمت إضافة ${created.toLocaleString("ar-SA")} قاعدة رصد اجتماعي، وتجاوز ${skipped.toLocaleString("ar-SA")} مكرر.`);
+      } else {
+        setMessage(`تم حفظ ${created.toLocaleString("ar-SA")} مصدر مرجعي، وتجاوز ${skipped.toLocaleString("ar-SA")} مكرر.`);
+      }
+      setMessageType(created === 0 && action !== "apply_keywords" ? "info" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر تطبيق اقتراحات التقارير الأصلية.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function submitWatchlistRule(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending("watchlist-rule");
@@ -596,6 +660,78 @@ export function SourcesClient() {
               إغلاق
             </button>
           </div>
+        )}
+
+        {state.sourceIntelligence && (
+          <section className="mb-6 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-extrabold text-[var(--color-text-muted)]">
+                  <Sparkles className="h-3.5 w-3.5 text-[#2383E2]" />
+                  <span>اقتراحات من التقارير الأصلية</span>
+                  <span className="rounded-full bg-[#f1f6ff] px-2 py-0.5 text-[#315f9b]">
+                    {state.sourceIntelligence.intelligence.summary.items.toLocaleString("ar-SA")} مادة مرجعية
+                  </span>
+                </div>
+                <h2 className="mt-2 text-lg font-black text-[var(--color-text-title)]">تحويل الأرشيف إلى مصادر رصد قابلة للتعديل</h2>
+                <p className="mt-1 max-w-3xl text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
+                  تم استخراج كلمات دالة، حسابات اجتماعية، ومواقع إخبارية من التقارير القديمة. طبّق ما تحتاجه ثم عدّل القوائم من نفس الصفحة.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => applySourceIntelligence("apply_keywords")}
+                  disabled={pending !== null}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#111111] px-3 text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
+                >
+                  {pending === "source-intelligence-apply_keywords" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  تطبيق الكلمات
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySourceIntelligence("apply_social_watchlists")}
+                  disabled={pending !== null}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] px-3 text-xs font-extrabold text-[#0f6b57] transition hover:bg-[#d4f2e4] disabled:opacity-50"
+                >
+                  {pending === "source-intelligence-apply_social_watchlists" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+                  إضافة رصد TikTok/Instagram
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applySourceIntelligence("apply_reference_sources")}
+                  disabled={pending !== null}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 disabled:opacity-50"
+                >
+                  {pending === "source-intelligence-apply_reference_sources" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+                  حفظ الأخبار وX
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <SourceIntelPreview
+                title="كلمات الرصد"
+                items={[...state.sourceIntelligence.intelligence.keywords.requiredTerms, ...state.sourceIntelligence.intelligence.keywords.hashtags].slice(0, 8)}
+              />
+              <SourceIntelPreview
+                title="مصادر الأخبار"
+                items={state.sourceIntelligence.intelligence.newsSources.slice(0, 8).map((source) => `${source.label} (${source.count})`)}
+              />
+              <SourceIntelPreview
+                title="حسابات X"
+                items={state.sourceIntelligence.intelligence.xAccounts.slice(0, 8).map((source) => `${source.label} (${source.count})`)}
+              />
+              <SourceIntelPreview
+                title="TikTok/Instagram"
+                items={[
+                  ...state.sourceIntelligence.intelligence.tiktokProfiles.slice(0, 4),
+                  ...state.sourceIntelligence.intelligence.instagramProfiles.slice(0, 4),
+                ].map((source) => `${source.label} (${source.count})`)}
+              />
+            </div>
+          </section>
         )}
 
         <BentoGrid>
@@ -839,6 +975,45 @@ export function SourcesClient() {
             </form>
           </BentoCard>
 
+          <BentoCard colSpan="col-span-12 xl:col-span-7" title="مصادر مرجعية من الأرشيف" icon={Globe} subtitle="مواقع وحسابات X مستخرجة من التقارير الأصلية، محفوظة للتنظيم والتحويل لاحقًا إلى رصد نشط">
+            {referenceSources.length ? (
+              <div className="space-y-2">
+                {referenceSources.map((source) => (
+                  <div key={source.id} className="grid gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${source.isActive ? "bg-[#00C853]" : "bg-stone-300"}`} />
+                        <p className="truncate text-sm font-extrabold text-[var(--color-text-title)]">{source.name}</p>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
+                          {source.type === "x_recent_search" ? "X" : "Web"}
+                        </span>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
+                          {source.isActive ? "نشط" : "مرجعي"}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
+                        {source.url}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                      disabled={pending !== null}
+                      className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--color-border)] bg-white px-3 text-[11px] font-bold transition hover:bg-stone-50 disabled:opacity-50"
+                    >
+                      {source.isActive ? "إيقاف" : "تفعيل مرجعي"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-main)] p-6 text-center text-xs font-bold text-[var(--color-text-muted)]">
+                لم تحفظ بعد مصادر مرجعية من الأرشيف. استخدم زر &quot;حفظ الأخبار وX&quot; أعلى الصفحة.
+              </div>
+            )}
+          </BentoCard>
+
           <BentoCard colSpan="col-span-12" title="أدوات الأرشيف القديم" icon={FileInput} subtitle="خيارات متقدمة، لا تظهر داخل لوحة التشغيل اليومية">
             <div className="grid gap-3 md:grid-cols-2">
               <AdvancedLink
@@ -880,6 +1055,25 @@ function KeywordBox({
         placeholder={placeholder}
       />
     </label>
+  );
+}
+
+function SourceIntelPreview({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
+      <h3 className="text-xs font-extrabold text-[var(--color-text-title)]">{title}</h3>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {items.length ? (
+          items.map((item) => (
+            <span key={item} className="max-w-full truncate rounded-full bg-white px-2 py-1 text-[10px] font-bold text-[var(--color-text-muted)]">
+              {item}
+            </span>
+          ))
+        ) : (
+          <span className="text-[10px] font-bold text-[var(--color-text-muted)]">لا توجد اقتراحات كافية</span>
+        )}
+      </div>
+    </div>
   );
 }
 

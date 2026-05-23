@@ -251,6 +251,70 @@ describe("Hono API acceptance workflow", () => {
     assert.deepEqual(updated.json.keyword_rule.excludeTerms, ["وظائف", "إعلان ممول"]);
   });
 
+  it("returns legacy source intelligence for the sources page", async () => {
+    const result = await requestJson("/api/source-intelligence");
+
+    assert.equal(result.response.status, 200);
+    assert.ok(result.json.intelligence.summary.items > 0);
+    assert.ok(result.json.intelligence.keywords.requiredTerms.includes("هداية"));
+    assert.ok(result.json.intelligence.newsSources.some((source: { url: string }) => source.url === "https://prh.gov.sa"));
+    assert.ok(result.json.intelligence.xAccounts.some((source: { url: string }) => source.url === "https://x.com/UOfjeddah"));
+  });
+
+  it("applies legacy keywords into the active keyword rule", async () => {
+    const result = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_keywords" }),
+    });
+
+    assert.equal(result.response.status, 200);
+    assert.equal(result.json.ok, true);
+    assert.ok(result.json.keyword_rule.requiredTerms.includes("هداية"));
+    assert.ok(result.json.keyword_rule.optionalTerms.includes("رئاسة الشؤون الدينية"));
+  });
+
+  it("applies legacy social watchlists without duplicating reruns", async () => {
+    const first = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_social_watchlists", limit: 2 }),
+    });
+    const second = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_social_watchlists", limit: 2 }),
+    });
+    const listed = await requestJson("/api/source-rules");
+
+    assert.equal(first.response.status, 200);
+    assert.equal(second.response.status, 200);
+    assert.equal(first.json.created.length, 6);
+    assert.equal(second.json.created.length, 0);
+    assert.equal(second.json.skipped.length, 6);
+    assert.equal(listed.json.source_rules.length, 6);
+    assert.ok(listed.json.source_rules.some((rule: { type: string; query: string | null }) => rule.type === "tiktok_research" && rule.query === "هداية"));
+    assert.ok(listed.json.source_rules.some((rule: { type: string; url: string | null }) => rule.type === "instagram_public_profile" && rule.url));
+  });
+
+  it("saves legacy news and X sources as editable reference sources", async () => {
+    const first = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_reference_sources", limit: 2 }),
+    });
+    const second = await requestJson("/api/source-intelligence/apply", {
+      method: "POST",
+      body: JSON.stringify({ action: "apply_reference_sources", limit: 2 }),
+    });
+    const listed = await requestJson("/api/sources");
+    const referenceSources = listed.json.sources.filter((source: { type: string }) => source.type !== "rss");
+
+    assert.equal(first.response.status, 200);
+    assert.equal(first.json.created.length, 4);
+    assert.equal(second.json.created.length, 0);
+    assert.equal(second.json.skipped.length, 4);
+    assert.ok(referenceSources.length >= 4);
+    assert.ok(referenceSources.some((source: { type: string; url: string }) => source.type === "web_page" && source.url === "https://prh.gov.sa"));
+    assert.ok(referenceSources.some((source: { type: string; url: string }) => source.type === "x_recent_search" && source.url === "https://x.com/UOfjeddah"));
+  });
+
   it("polls one RSS source into review items and deduplicates reruns", async () => {
     const source = store.createSource({
       name: "Hidayathon RSS API",
@@ -1374,12 +1438,14 @@ describe("Hono API acceptance workflow", () => {
     const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
     const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
     const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
 
     process.env.CRON_SECRET = "cron_no_mock_secret";
     delete process.env.TIKTOK_RESEARCH_ENABLED;
     delete process.env.TIKTOK_CLIENT_KEY;
     delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
     delete process.env.RASD_CONNECTOR_MOCKS;
+    delete process.env.APIFY_API_TOKEN;
 
     try {
       await requestJson("/api/source-rules", {
@@ -1412,6 +1478,116 @@ describe("Hono API acceptance workflow", () => {
     } finally {
       if (previousSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = previousSecret;
+      if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
+      else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
+      if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;
+      else process.env.TIKTOK_CLIENT_KEY = previousTikTokKey;
+      if (previousInstagramEnabled === undefined) delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+      else process.env.INSTAGRAM_WATCHLIST_ENABLED = previousInstagramEnabled;
+      if (previousMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousMocks;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
+  it("uses Apify for automated TikTok and Instagram watchlist ingestion", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    const previousTikTokEnabled = process.env.TIKTOK_RESEARCH_ENABLED;
+    const previousTikTokKey = process.env.TIKTOK_CLIENT_KEY;
+    const previousInstagramEnabled = process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    const previousMocks = process.env.RASD_CONNECTOR_MOCKS;
+    const originalFetch = globalThis.fetch;
+
+    process.env.CRON_SECRET = "cron_apify_watchlist_secret";
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    delete process.env.TIKTOK_RESEARCH_ENABLED;
+    delete process.env.TIKTOK_CLIENT_KEY;
+    delete process.env.INSTAGRAM_WATCHLIST_ENABLED;
+    delete process.env.RASD_CONNECTOR_MOCKS;
+
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      const body = typeof init?.body === "string" ? init.body : "";
+
+      if (url.includes("clockworks~free-tiktok-scraper")) {
+        assert.match(body, /"search":\["هداية"\]/);
+        return new Response(
+          JSON.stringify([
+            {
+              id: "7620000000000000001",
+              text: "تغطية تلقائية عن هاكاثون هداية من تيك توك",
+              authorMeta: { name: "hidayathon_tiktok", nickName: "Hidayathon TikTok" },
+              videoMeta: { coverUrl: "https://cdn.example.com/tiktok-auto.jpg" },
+              createTimeISO: "2026-05-23T10:00:00.000Z",
+              webVideoUrl: "https://www.tiktok.com/@hidayathon_tiktok/video/7620000000000000001",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.includes("apify~instagram-post-scraper")) {
+        assert.match(body, /"directUrls":\["https:\/\/instagram.com\/hidayathon"\]/);
+        return new Response(
+          JSON.stringify([
+            {
+              id: "ig-auto-1",
+              shortCode: "IGAUTO1",
+              caption: "منشور تلقائي عن هاكاثون هداية من انستغرام",
+              ownerUsername: "hidayathon",
+              ownerFullName: "Hidayathon Instagram",
+              displayUrl: "https://cdn.example.com/instagram-auto.jpg",
+              timestamp: "2026-05-23T09:30:00.000Z",
+              url: "https://www.instagram.com/p/IGAUTO1/",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      throw new Error(`unexpected_fetch:${url}`);
+    };
+
+    try {
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({ type: "tiktok_research", query: "هداية" }),
+      });
+      await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "instagram_public_profile",
+          url: "https://instagram.com/hidayathon",
+          query: "هداية",
+        }),
+      });
+
+      const result = await requestJson("/api/connectors/run-due", {
+        method: "POST",
+        headers: { authorization: "Bearer cron_apify_watchlist_secret" },
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.ok, true);
+      assert.equal(result.json.dueRulesCount, 2);
+      assert.equal(result.json.executedCount, 2);
+      assert.equal(result.json.failedCount, 0);
+
+      const items = store
+        .listItems()
+        .filter((item) => item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile");
+      assert.equal(items.length, 2);
+      assert.ok(items.some((item) => item.title.includes("تيك توك") && item.raw_response && JSON.stringify(item.raw_response).includes("apify")));
+      assert.ok(items.some((item) => item.title.includes("انستغرام") && item.raw_response && JSON.stringify(item.raw_response).includes("instagram-auto.jpg")));
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
       if (previousTikTokEnabled === undefined) delete process.env.TIKTOK_RESEARCH_ENABLED;
       else process.env.TIKTOK_RESEARCH_ENABLED = previousTikTokEnabled;
       if (previousTikTokKey === undefined) delete process.env.TIKTOK_CLIENT_KEY;
