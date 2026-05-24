@@ -154,6 +154,27 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(privateUrl.json.error, "url must be a public http or https URL");
   });
 
+  it("uses a temporary keyword to admit a direct news URL without saving the keyword", async () => {
+    const result = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://www.okaz.com.sa/local/na/2250043",
+        title: "السعودية و14 دولة: سفارة «أرض الصومال» بالقدس غير قانونية ومرفوضة",
+        text: "دان وزراء خارجية المملكة العربية السعودية و14 دولة افتتاح سفارة مزعومة في القدس.",
+        author_name: "عكاظ",
+        test_term: "سفارة «أرض الصومال»",
+      }),
+    });
+    const keywords = await requestJson("/api/keyword-rules");
+
+    assert.equal(result.response.status, 201);
+    assert.equal(result.json.item.state, "needs_review");
+    assert.deepEqual(result.json.item.matchedTerms, ["سفارة «أرض الصومال»"]);
+    assert.equal(result.json.testTerm, "سفارة «أرض الصومال»");
+    assert.equal(result.json.next_step, "review");
+    assert.equal(keywords.json.keyword_rules[0].requiredTerms.includes("سفارة «أرض الصومال»"), false);
+  });
+
   it("creates RSS sources with public feed validation", async () => {
     const created = await requestJson("/api/sources", {
       method: "POST",
