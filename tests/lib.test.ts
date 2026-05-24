@@ -11,6 +11,7 @@ import { checkBudget } from "../src/lib/guardrails";
 import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/legacy-backfill";
 import { getLegacySourceIntelligence } from "../src/lib/legacy-source-intelligence";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
+import { isWorkflowItem, latestWorkflowItems } from "../src/lib/ops-workflow";
 import { buildClientReportExportHtml, clientReportExportLimit } from "../src/server/client-report-export";
 import { errorMessage } from "../src/server/error-message";
 import {
@@ -22,8 +23,53 @@ import {
 } from "../src/server/evidence-storage";
 import { fetchUrlMetadata, isSafePublicHttpUrl, resolveScreenshotUrl } from "../src/server/url-metadata";
 import type { YtDlpRunner } from "../src/server/media-metadata-extractor";
+import type { MonitoringItem, SourceType } from "../src/lib/types";
+
+function workflowItem(id: string, sourceType: SourceType, publishedAt: string, state: MonitoringItem["state"] = "needs_review"): MonitoringItem {
+  return {
+    id,
+    sourceId: `source-${id}`,
+    sourceName: sourceType,
+    sourceType,
+    state,
+    title: `Item ${id}`,
+    originalUrl:
+      sourceType === "tiktok_research"
+        ? `https://www.tiktok.com/@hidayathon/video/${id}`
+        : sourceType === "instagram_public_profile"
+          ? `https://www.instagram.com/p/${id}/`
+          : sourceType === "x_recent_search"
+            ? `https://x.com/hidayathon/status/${id}`
+            : `https://example.com/${id}`,
+    publishedAt,
+    summary: `Summary ${id}`,
+    summarySourceText: `Summary ${id}`,
+    sentiment: "neutral",
+    sentimentConfidence: 70,
+    relevanceScore: 80,
+    relevanceReason: "matched",
+    matchedTerms: ["هداية"],
+    dedupeKey: `${sourceType}:${id}`,
+    hasReportGradeCapture: false,
+  };
+}
 
 describe("connector and budget utilities", () => {
+  it("keeps automated TikTok and Instagram items visible in the ops workflow", () => {
+    const items = [
+      workflowItem("old-news", "rss", "2026-05-20T10:00:00.000Z"),
+      workflowItem("tiktok-new", "tiktok_research", "2026-05-24T10:00:00.000Z"),
+      workflowItem("instagram-new", "instagram_public_profile", "2026-05-24T09:00:00.000Z"),
+      workflowItem("archived-x", "x_recent_search", "2026-05-24T11:00:00.000Z", "archived"),
+    ];
+
+    const visible = latestWorkflowItems(items, 10);
+
+    assert.equal(isWorkflowItem(items[1]), true);
+    assert.equal(isWorkflowItem(items[2]), true);
+    assert.deepEqual(visible.map((item) => item.id), ["tiktok-new", "instagram-new", "old-news"]);
+  });
+
   it("canonicalizes URLs for dedupe without dropping meaningful query params", () => {
     const canonical = canonicalizeUrl("https://example.com/news/story/?utm_source=x&utm_medium=social&id=42#comments");
 
