@@ -1529,7 +1529,8 @@ describe("Hono API acceptance workflow", () => {
       }
 
       if (url.includes("apify~instagram-post-scraper")) {
-        assert.match(body, /"directUrls":\["https:\/\/instagram.com\/hidayathon"\]/);
+        assert.match(body, /"username":\["hidayathon"\]/);
+        assert.match(body, /"resultsLimit":5/);
         return new Response(
           JSON.stringify([
             {
