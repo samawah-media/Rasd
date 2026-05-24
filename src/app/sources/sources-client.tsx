@@ -7,6 +7,7 @@ import {
   Check,
   ChevronLeft,
   Database,
+  ExternalLink,
   Globe,
   Loader2,
   Pause,
@@ -1496,6 +1497,7 @@ function SourceListRow({
   schedule: string;
   actions: ReactNode;
 }) {
+  const targetIsLink = isHttpUrl(target);
   const statusClass =
     status === "active"
       ? "bg-[#ecf7f2] text-[#0f6b57]"
@@ -1517,9 +1519,23 @@ function SourceListRow({
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusClass}`}>{statusText}</span>
             </div>
             <p className="mt-1 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{detail}</p>
-            <p className="mt-2 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
-              {target}
-            </p>
+            {targetIsLink ? (
+              <a
+                href={target}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#dbeafe] bg-[#f8fbff] px-2 py-1 text-left text-[10px] font-bold text-[#1f6feb] hover:border-[#1f6feb]/50"
+                title={target}
+                dir="ltr"
+              >
+                <ExternalLink className="h-3 w-3 shrink-0" />
+                <span className="truncate">{target}</span>
+              </a>
+            ) : (
+              <p className="mt-2 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
+                {target}
+              </p>
+            )}
             <p className="mt-2 text-[10px] font-extrabold text-[#0f6b57]">جدولة الفحص: {schedule}</p>
           </div>
         </div>
@@ -1531,6 +1547,15 @@ function SourceListRow({
 
 function SourceLogo({ label }: { label: string }) {
   return <BrandIcon brand={brandFromLabel(label)} size="lg" />;
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function EmptySources({ label }: { label: string }) {
