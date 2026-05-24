@@ -354,6 +354,46 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("tests RSS matching with a temporary keyword without saving it", async () => {
+    const source = store.createSource({
+      name: "Temporary Keyword RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/temp-keyword.xml",
+      credibility: "media",
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        rssFeed({
+          guid: "temp-keyword-story-1",
+          link: "https://news.example.com/local/temp-keyword-story-1",
+          title: "AcmeSolarLaunch announces a city pilot",
+          description: "A general technology story used to verify RSS ingestion.",
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+
+    try {
+      const withoutTerm = await requestJson(`/api/sources/${source.id}/poll`, { method: "POST" });
+      const withTerm = await requestJson(`/api/sources/${source.id}/poll`, {
+        method: "POST",
+        body: JSON.stringify({ test_term: "AcmeSolarLaunch" }),
+      });
+      const keywords = await requestJson("/api/keyword-rules");
+
+      assert.equal(withoutTerm.response.status, 200);
+      assert.equal(withoutTerm.json.poll.created, 0);
+      assert.equal(withoutTerm.json.poll.skipped, 1);
+      assert.equal(withTerm.response.status, 200);
+      assert.equal(withTerm.json.poll.created, 1);
+      assert.equal(withTerm.json.poll.skipped, 0);
+      assert.equal(withTerm.json.poll.testTerm, "AcmeSolarLaunch");
+      assert.equal(keywords.json.keyword_rules[0].requiredTerms.includes("AcmeSolarLaunch"), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("polls active RSS sources with a small batch limit", async () => {
     const active = store.createSource({
       name: "Active RSS",
@@ -1366,6 +1406,49 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(result.json.ok, true);
       assert.equal(result.json.dueRulesCount, 1);
       assert.equal(result.json.executedCount, 1);
+    } finally {
+      if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
+      else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;
+    }
+  });
+
+  it("lets admins force a social source rule scan even when it is not due", async () => {
+    const previousConnectorMocks = process.env.RASD_CONNECTOR_MOCKS;
+    process.env.RASD_CONNECTOR_MOCKS = "true";
+
+    try {
+      const created = await requestJson("/api/source-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "tiktok_research",
+          query: "hidayathon force scan",
+        }),
+      });
+      const first = await requestJson("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+      const secondDueOnly = await requestJson("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({ organization_id: DEFAULT_ORGANIZATION_ID }),
+      });
+      const forced = await requestJson("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: DEFAULT_ORGANIZATION_ID,
+          force: true,
+          source_rule_id: created.json.source_rule.id,
+        }),
+      });
+
+      assert.equal(first.response.status, 200);
+      assert.equal(first.json.dueRulesCount, 1);
+      assert.equal(secondDueOnly.response.status, 200);
+      assert.equal(secondDueOnly.json.dueRulesCount, 0);
+      assert.equal(secondDueOnly.json.executedCount, 0);
+      assert.equal(forced.response.status, 200);
+      assert.equal(forced.json.dueRulesCount, 1);
+      assert.equal(forced.json.executedCount, 1);
     } finally {
       if (previousConnectorMocks === undefined) delete process.env.RASD_CONNECTOR_MOCKS;
       else process.env.RASD_CONNECTOR_MOCKS = previousConnectorMocks;

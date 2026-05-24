@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { SourceCredibility, SourceType } from "@/lib/types";
+import type { KeywordRule, SourceCredibility, SourceType } from "@/lib/types";
 import { getPreferredHidayathonClientReportData } from "@/lib/client-report-data";
 import { getLegacyBackfillDataset } from "@/lib/legacy-backfill";
 import { getLegacySourceIntelligence, type LegacySourceRecommendation } from "@/lib/legacy-source-intelligence";
@@ -176,6 +176,9 @@ function sourceRuleErrorStatus(error: unknown) {
   if (rawMessage === "source_rule_not_found") {
     return { status: 404 as const, error: "source_rule_not_found", detail: undefined };
   }
+  if (rawMessage === "source_rule_inactive") {
+    return { status: 400 as const, error: "source_rule_inactive", detail: "Activate the source rule before running it manually." };
+  }
   return {
     status: 500 as const,
     error: "source_rule_request_failed",
@@ -282,7 +285,37 @@ function isSourceDue(source: { isActive: boolean; feedUrl?: string; lastCheckedA
   return nowMs - lastCheckedMs >= source.pollIntervalMinutes * 60 * 1000;
 }
 
-async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore.listSources>>) {
+function temporaryKeywordRuleFromTerm(term: unknown, currentRule?: KeywordRule | null): KeywordRule | undefined {
+  if (typeof term !== "string") return undefined;
+  const cleanTerm = term.trim();
+  if (cleanTerm.length < 2 || cleanTerm.length > 80) return undefined;
+  return {
+    ...(currentRule ?? {
+      id: "temporary-rss-test",
+      requiredTerms: [],
+      optionalTerms: [],
+      excludeTerms: [],
+      language: "mixed" as const,
+      priority: 100,
+      activeFrom: new Date().toISOString().slice(0, 10),
+      version: 1,
+    }),
+    id: currentRule?.id ?? "temporary-rss-test",
+    requiredTerms: [cleanTerm],
+    optionalTerms: [],
+  };
+}
+
+async function rssPollOptionsFromBody(body: Record<string, unknown>) {
+  const currentRule = (await persistentStore.listKeywordRules())[0] ?? null;
+  const keywordRule = temporaryKeywordRuleFromTerm(body.test_term ?? body.testTerm, currentRule);
+  return {
+    keywordRule,
+    testTerm: keywordRule?.requiredTerms[0],
+  };
+}
+
+async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore.listSources>>, options: { keywordRule?: KeywordRule; testTerm?: string } = {}) {
   const runs: Array<Record<string, unknown>> = [];
   let fetched = 0;
   let created = 0;
@@ -292,7 +325,7 @@ async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore
 
   for (const source of sources) {
     try {
-      const result = sourcePollPayload(await persistentStore.ingestRssSource(source.id));
+      const result = sourcePollPayload(await persistentStore.ingestRssSource(source.id, { keywordRule: options.keywordRule }));
       fetched += result.fetched;
       created += result.created;
       duplicates += result.duplicates;
@@ -314,16 +347,28 @@ async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore
     skipped,
     failed,
     runs,
+    testTerm: options.testTerm,
   };
 }
 
-async function runDueConnectors(organizationId?: string) {
+async function runDueConnectors(organizationId?: string, options: { force?: boolean; sourceRuleId?: string } = {}) {
   const beforeItems = await persistentStore.listItems();
   const beforeItemIds = new Set(beforeItems.map((item) => item.id));
-  const dueRules = await persistentStore.findDueSourceRules(organizationId);
+  const dueRules =
+    options.force || options.sourceRuleId
+      ? (await persistentStore.listSourceRules(organizationId ?? DEFAULT_ORGANIZATION_ID)).filter((rule) => {
+          if (options.sourceRuleId && rule.id !== options.sourceRuleId) return false;
+          if (!rule.active) return false;
+          return true;
+        })
+      : await persistentStore.findDueSourceRules(organizationId);
+  if (options.sourceRuleId && dueRules.length === 0) {
+    const existing = (await persistentStore.listSourceRules(organizationId ?? DEFAULT_ORGANIZATION_ID)).find((rule) => rule.id === options.sourceRuleId);
+    throw new Error(existing ? "source_rule_inactive" : "source_rule_not_found");
+  }
   const jobs = [];
   for (const rule of dueRules) {
-    const job = await persistentStore.enqueueConnectorJob(rule);
+    const job = await persistentStore.enqueueConnectorJob(rule, undefined, { force: Boolean(options.force || options.sourceRuleId) });
     jobs.push(job);
   }
 
@@ -622,10 +667,11 @@ api.post("/sources/poll-active", async (c) => {
   const sources = (await persistentStore.listSources())
     .filter((source) => source.type === "rss" && source.isActive && source.feedUrl)
     .slice(0, limit);
+  const options = await rssPollOptionsFromBody(body);
 
   return c.json(
     withRequestId(c, {
-      poll: await pollRssSources(sources),
+      poll: await pollRssSources(sources, options),
     }),
   );
 });
@@ -678,8 +724,10 @@ api.get("/cron/run-connectors", async (c) => {
 
 api.post("/sources/:id/poll", async (c) => {
   try {
-    const result = sourcePollPayload(await persistentStore.ingestRssSource(c.req.param("id")));
-    return c.json(withRequestId(c, { poll: result }));
+    const body = await readJson(c);
+    const options = await rssPollOptionsFromBody(body);
+    const result = sourcePollPayload(await persistentStore.ingestRssSource(c.req.param("id"), { keywordRule: options.keywordRule }));
+    return c.json(withRequestId(c, { poll: { ...result, testTerm: options.testTerm } }));
   } catch (error) {
     const mapped = sourcePollErrorStatus(error);
     return c.json(withRequestId(c, { error: mapped.error }), mapped.status);
@@ -872,7 +920,9 @@ api.post("/source-rules/run-due", async (c) => {
   try {
     const body = await readJson(c);
     const organizationId = optionalString(body.organization_id, body.organizationId) ?? DEFAULT_ORGANIZATION_ID;
-    return c.json(withRequestId(c, await runDueConnectors(organizationId)));
+    const force = body.force === true || body.run_now === true || body.runNow === true;
+    const sourceRuleId = optionalString(body.source_rule_id, body.sourceRuleId);
+    return c.json(withRequestId(c, await runDueConnectors(organizationId, { force, sourceRuleId })));
   } catch (error) {
     const mapped = sourceRuleErrorStatus(error);
     return c.json(withRequestId(c, { error: mapped.error, detail: mapped.detail }), mapped.status);
