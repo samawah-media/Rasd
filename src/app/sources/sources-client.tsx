@@ -65,6 +65,7 @@ type SourceCreateResponse = {
 };
 
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
+type SourceSection = "overview" | "keywords" | "news" | "social" | "archive";
 
 type SourceRuleResponse = {
   source_rule: SourceRule;
@@ -140,6 +141,14 @@ const watchlistScheduleOptions = [
   { label: "كل يومين", value: 2880 },
   { label: "أسبوعيًا", value: 10080 },
 ] as const;
+
+const sourceSections: Array<{ id: SourceSection; label: string; description: string }> = [
+  { id: "overview", label: "نظرة عامة", description: "الأهم في مكان واحد" },
+  { id: "keywords", label: "كلمات الرصد", description: "ما يدخل وما يستبعد" },
+  { id: "news", label: "مصادر الأخبار", description: "RSS والفحص اليدوي" },
+  { id: "social", label: "TikTok / Instagram", description: "حسابات وقواعد آلية" },
+  { id: "archive", label: "الأرشيف", description: "مصادر مستخرجة سابقًا" },
+];
 
 function arabicError(key: string): string {
   if (key.startsWith("rss_fetch_failed")) return arabicApiErrors.rss_fetch_failed;
@@ -230,9 +239,9 @@ function latestRunForRule(rule: SourceRule, runs: ConnectorRun[]) {
 }
 
 function connectorRunLabel(run?: ConnectorRun) {
-  if (!run) return "لم يعمل بعد";
-  if (run.status === "success") return `نجح · ${run.fetchedCount.toLocaleString("ar-SA")} مواد`;
-  if (run.status === "failed") return `فشل · ${run.failureReason ?? "سبب غير معروف"}`;
+  if (!run) return "لم يتم فحصه بعد";
+  if (run.status === "success") return `آخر فحص ناجح · ${run.fetchedCount.toLocaleString("ar-SA")} مادة جديدة`;
+  if (run.status === "failed") return `يحتاج انتباه · ${run.failureReason ?? "سبب غير معروف"}`;
   return run.status;
 }
 
@@ -250,6 +259,7 @@ export function SourcesClient() {
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
+  const [section, setSection] = useState<SourceSection>("overview");
 
   const rssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
@@ -571,7 +581,7 @@ export function SourcesClient() {
 
   async function runDueWatchlists() {
     setPending("watchlist-run-due");
-    setMessage("جاري تشغيل قواعد TikTok/Instagram المستحقة...");
+    setMessage("جاري فحص مصادر TikTok/Instagram الجاهزة...");
     setMessageType("info");
 
     try {
@@ -580,8 +590,13 @@ export function SourcesClient() {
         body: JSON.stringify({}),
       });
       await refreshSilently();
+      const checked = result.dueRulesCount.toLocaleString("ar-SA");
+      const executed = result.executedCount.toLocaleString("ar-SA");
+      const failed = result.failedCount.toLocaleString("ar-SA");
       setMessage(
-        `تم فحص ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة مستحقة، وتشغيل ${result.executedCount.toLocaleString("ar-SA")} job${result.failedCount ? `، وفشل ${result.failedCount.toLocaleString("ar-SA")}` : ""}.`,
+        result.failedCount
+          ? `فحصنا ${checked} مصدر جاهز، اكتملت ${executed} عملية، وتعثر ${failed}.`
+          : `فحصنا ${checked} مصدر جاهز، واكتملت ${executed} عملية فحص.`,
       );
       setMessageType(result.failedCount ? "warning" : "success");
     } catch (error) {
@@ -624,9 +639,9 @@ export function SourcesClient() {
                 {activeRssSources.length.toLocaleString("ar-SA")} نشط
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-[var(--color-text-title)]">المصادر والكلمات الدالة</h1>
+            <h1 className="mt-2 text-2xl font-black tracking-tight text-[var(--color-text-title)]">مركز المصادر</h1>
             <p className="mt-2 max-w-2xl text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
-              هنا نضبط مصادر الأخبار وجدولة الفحص وكلمات الرصد. لوحة التشغيل تبقى مخصصة لإضافة ومراجعة المحتوى فقط.
+              نظّم كلمات الرصد، الأخبار، وحسابات TikTok/Instagram من شاشة واحدة بدون ازدحام.
             </p>
           </div>
 
@@ -662,7 +677,25 @@ export function SourcesClient() {
           </div>
         )}
 
-        {state.sourceIntelligence && (
+        <div className="mb-5 grid gap-2 md:grid-cols-5">
+          {sourceSections.map((sourceSection) => (
+            <button
+              key={sourceSection.id}
+              type="button"
+              onClick={() => setSection(sourceSection.id)}
+              className={`rounded-lg border p-3 text-right transition ${
+                section === sourceSection.id
+                  ? "border-[#2383E2] bg-[#f5faff] text-[#1d4f8f]"
+                  : "border-[var(--color-border)] bg-white text-[var(--color-text-title)] hover:border-[#2383E2]/40"
+              }`}
+            >
+              <span className="block text-xs font-extrabold">{sourceSection.label}</span>
+              <span className="mt-0.5 block text-[10px] font-semibold text-[var(--color-text-muted)]">{sourceSection.description}</span>
+            </button>
+          ))}
+        </div>
+
+        {state.sourceIntelligence && section === "overview" && (
           <section className="mb-6 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="min-w-0">
@@ -735,6 +768,7 @@ export function SourcesClient() {
         )}
 
         <BentoGrid>
+          {(section === "overview" || section === "news") && (
           <BentoCard colSpan="col-span-12 xl:col-span-7" title="مصادر الأخبار" icon={Globe} subtitle="إضافة RSS، تشغيل يدوي، وجدولة دورية">
             <div className="space-y-4">
               <form onSubmit={submitRssSource} className="grid gap-2 md:grid-cols-[minmax(160px,220px)_1fr_auto]">
@@ -834,8 +868,10 @@ export function SourcesClient() {
               </button>
             </div>
           </BentoCard>
+          )}
 
-          <BentoCard colSpan="col-span-12 xl:col-span-5" title="رصد TikTok/Instagram الآلي" icon={Power} subtitle="Watchlists لحسابات محددة أو بحث TikTok Research">
+          {(section === "overview" || section === "social") && (
+          <BentoCard colSpan="col-span-12 xl:col-span-5" title="رصد TikTok/Instagram الآلي" icon={Power} subtitle="حسابات وروابط اجتماعية تفحص تلقائيًا">
             <div className="space-y-4">
               <form onSubmit={submitWatchlistRule} className="space-y-3">
                 <select
@@ -888,7 +924,7 @@ export function SourcesClient() {
                 className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
               >
                 {pending === "watchlist-run-due" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                تشغيل القواعد المستحقة الآن
+                افحص المصادر الجاهزة الآن
               </button>
 
               {state.sourceRules.length ? (
@@ -958,7 +994,9 @@ export function SourcesClient() {
               )}
             </div>
           </BentoCard>
+          )}
 
+          {(section === "overview" || section === "keywords") && (
           <BentoCard colSpan="col-span-12 xl:col-span-5" title="كلمات الرصد" icon={Settings} subtitle="هذه الكلمات تحدد ما يدخل من الأخبار">
             <form onSubmit={submitKeywordRule} className="space-y-3">
               <KeywordBox label="إشارات رئيسية" value={requiredTerms} onChange={setRequiredTerms} placeholder={"هداية\nهاكاثون هداية"} />
@@ -974,7 +1012,9 @@ export function SourcesClient() {
               </button>
             </form>
           </BentoCard>
+          )}
 
+          {(section === "overview" || section === "archive") && (
           <BentoCard colSpan="col-span-12 xl:col-span-7" title="مصادر مرجعية من الأرشيف" icon={Globe} subtitle="مواقع وحسابات X مستخرجة من التقارير الأصلية، محفوظة للتنظيم والتحويل لاحقًا إلى رصد نشط">
             {referenceSources.length ? (
               <div className="space-y-2">
@@ -1013,7 +1053,9 @@ export function SourcesClient() {
               </div>
             )}
           </BentoCard>
+          )}
 
+          {(section === "overview" || section === "archive") && (
           <BentoCard colSpan="col-span-12" title="أدوات الأرشيف القديم" icon={FileInput} subtitle="خيارات متقدمة، لا تظهر داخل لوحة التشغيل اليومية">
             <div className="grid gap-3 md:grid-cols-2">
               <AdvancedLink
@@ -1028,6 +1070,7 @@ export function SourcesClient() {
               />
             </div>
           </BentoCard>
+          )}
         </BentoGrid>
       </div>
     </AppShell>

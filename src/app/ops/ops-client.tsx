@@ -804,13 +804,16 @@ export function OpsClient() {
           <div>
             <div className="flex items-center gap-2 text-[10px] font-extrabold text-[var(--color-text-muted)] tracking-wider uppercase">
               <Cpu className="h-3.5 w-3.5 text-[#2383E2]" />
-              <span>غرفة الرصد والتشغيل الرقمي</span>
+              <span>مركز تشغيل رصد</span>
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-border)]" />
               <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${systemTone(state.metrics)}`}>
                 {systemText(state.metrics)}
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">إضافة ومراجعة المحتوى</h1>
+            <h1 className="mt-2 text-2xl font-black text-[var(--color-text-title)] tracking-tight">الرصد اليومي</h1>
+            <p className="mt-1 max-w-xl text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
+              أدخل رابطًا يدويًا، شغّل البحث، ثم راجع المواد واعتمدها للتقرير من نفس الشاشة.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <a
@@ -845,17 +848,40 @@ export function OpsClient() {
           </div>
         )}
 
+        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg border border-[var(--color-border)] bg-white p-3">
+            <span className="text-[10px] font-extrabold text-[var(--color-text-muted)]">كل المواد</span>
+            <strong className="mt-1 block text-xl font-black text-[var(--color-text-title)]">{tabCounts.active.toLocaleString("ar-SA")}</strong>
+          </div>
+          <div className="rounded-lg border border-[#cfe2ff] bg-[#f5faff] p-3">
+            <span className="text-[10px] font-extrabold text-[#315f9b]">بحاجة لمراجعة</span>
+            <strong className="mt-1 block text-xl font-black text-[#1d4f8f]">{tabCounts.review.toLocaleString("ar-SA")}</strong>
+          </div>
+          <div className="rounded-lg border border-[#fde4b6] bg-[#fff9e8] p-3">
+            <span className="text-[10px] font-extrabold text-[#8a5b08]">بانتظار اللقطة</span>
+            <strong className="mt-1 block text-xl font-black text-[#8a5b08]">{tabCounts.capture.toLocaleString("ar-SA")}</strong>
+          </div>
+          <div className="rounded-lg border border-[#d7efdf] bg-[#f1fbf4] p-3">
+            <span className="text-[10px] font-extrabold text-[#0f6b57]">جاهزة للتقرير</span>
+            <strong className="mt-1 block text-xl font-black text-[#0f6b57]">{tabCounts.report.toLocaleString("ar-SA")}</strong>
+          </div>
+        </div>
+
         {/* Bento Control Center Grid */}
         <BentoGrid className="mb-6">
           {/* Card 1: Add Single URL */}
-          <BentoCard colSpan="col-span-12 xl:col-span-6" title="رصد مادة فردية" icon={LinkIcon} subtitle="ألصق رابط X أو TikTok أو Instagram أو خبر/صفحة ويب واحدة">
+          <BentoCard colSpan="col-span-12 xl:col-span-6" title="رصد رابط سريع" icon={LinkIcon} subtitle="المدخل اليدوي هنا: الصق رابطًا واحدًا ثم اسحب تفاصيله للمراجعة">
             <form onSubmit={submitUrl} className="space-y-3 mt-1">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-[#cfe2ff] bg-[#f5faff] px-2.5 py-1 text-[10px] font-extrabold text-[#1d4f8f]">
+                <LinkIcon className="h-3 w-3" />
+                مدخل الرابط اليدوي
+              </div>
               <div className="relative">
                 <input
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   onFocus={() => setIntakeMode("manual")}
-                  placeholder="ألصق رابط X أو TikTok أو Instagram أو خبر هنا..."
+                  placeholder="ألصق الرابط هنا: TikTok أو Instagram أو X أو خبر..."
                   className={`h-10 w-full rounded-xl border bg-[var(--color-bg-main)] text-left text-xs outline-none transition-all duration-300 focus:outline focus:outline-2 focus:outline-[#2383E2]/50 ${
                     isXUrl
                       ? "border-[#1DA1F2] pr-16 pl-3 shadow-[0_0_10px_rgba(29,161,242,0.15)] bg-blue-50/5 focus:border-[#1DA1F2]"
@@ -881,7 +907,7 @@ export function OpsClient() {
 
               <details className="group border border-[var(--color-border)] rounded-xl bg-stone-50 p-2.5 transition-all">
                 <summary className="cursor-pointer text-[10px] font-extrabold text-[var(--color-text-muted)] hover:text-[#2383E2] select-none">
-                  تبي تعدل التفاصيل يدوي؟ اضغط هنا
+                  تعديل التفاصيل يدويًا عند الحاجة
                 </summary>
                 <div className="mt-2.5 space-y-2">
                   <input
@@ -919,12 +945,12 @@ export function OpsClient() {
                 className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white hover:bg-[#2383E2] transition active:scale-[0.97] transition-transform disabled:opacity-50 cursor-pointer"
               >
                 {pending === "manual" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                اضغط هنا ونسحبها لك فوراً
+                سحب التفاصيل وإضافتها للمراجعة
               </button>
             </form>
           </BentoCard>
 
-          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="بحث X" icon={Search} subtitle="يشغل البحث بالكلمات الحالية ويحفظ النتائج كمواد">
+          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="اكتشاف X" icon={Search} subtitle="يبحث بالكلمات الحالية ويحفظ النتائج المطابقة">
             <div className="mt-1 flex h-full flex-col justify-between gap-4">
               <div className="space-y-3">
                 <button
@@ -937,7 +963,7 @@ export function OpsClient() {
                   }`}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
-                  وضع بحث X
+                  وضع اكتشاف X
                 </button>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
@@ -957,12 +983,12 @@ export function OpsClient() {
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-[#2383E2] active:scale-[0.97] disabled:opacity-50"
               >
                 {searchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                تشغيل بحث X
+                اكتشف من X الآن
               </button>
             </div>
           </BentoCard>
 
-          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="بحث المصادر" icon={Database} subtitle="يفحص مصادر RSS النشطة ويضيف الأخبار المطابقة">
+          <BentoCard colSpan="col-span-12 md:col-span-6 xl:col-span-3" title="فحص الأخبار" icon={Database} subtitle="يفحص مصادر RSS النشطة ويضيف الأخبار المطابقة">
             <div className="mt-1 flex h-full flex-col justify-between gap-4">
               <div className="space-y-3">
                 <button
@@ -975,7 +1001,7 @@ export function OpsClient() {
                   }`}
                 >
                   <Server className="h-3.5 w-3.5" />
-                  وضع المصادر
+                  وضع الأخبار
                 </button>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
@@ -995,7 +1021,7 @@ export function OpsClient() {
                 className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-[#2383E2] active:scale-[0.97] disabled:opacity-50"
               >
                 {pending === "source-search" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                تشغيل المصادر
+                افحص المصادر الآن
               </button>
             </div>
           </BentoCard>

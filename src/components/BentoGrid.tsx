@@ -2,7 +2,7 @@ import React from "react";
 
 export function BentoGrid({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`grid grid-cols-12 gap-5 ${className}`}>
+    <div className={`grid grid-cols-12 gap-4 ${className}`}>
       {children}
     </div>
   );
@@ -28,21 +28,18 @@ export function BentoCard({
   action?: React.ReactNode;
 }) {
   return (
-    <div className={`bg-white rounded-3xl border border-[var(--color-border)] p-6 shadow-sm hover:shadow-premium transition-all duration-300 flex flex-col justify-between overflow-hidden relative group hover:border-[#2383E2]/35 ${colSpan} ${rowSpan} ${className}`}>
-      {/* Subtle hover gradient */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-[#2383E2]/[0.01] to-[#00C853]/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-      
+    <div className={`bg-white rounded-lg border border-[var(--color-border)] p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 flex flex-col justify-between overflow-hidden relative hover:border-[#2383E2]/35 hover:shadow-[0_10px_30px_rgba(15,23,42,0.06)] ${colSpan} ${rowSpan} ${className}`}>
       {(title || Icon || action) && (
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-4 mb-4 select-none">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3 mb-4 select-none">
           <div className="flex items-center gap-2.5">
             {Icon && (
-              <div className="w-9 h-9 rounded-xl bg-[#2383E2]/10 flex items-center justify-center text-[#2383E2]">
+              <div className="w-8 h-8 rounded-lg bg-[#eef6ff] flex items-center justify-center text-[#2383E2]">
                 <Icon size={16} />
               </div>
             )}
             <div>
-              {title && <h3 className="text-sm font-bold text-[var(--color-text-title)]">{title}</h3>}
-              {subtitle && <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{subtitle}</p>}
+              {title && <h3 className="text-sm font-extrabold text-[var(--color-text-title)]">{title}</h3>}
+              {subtitle && <p className="text-[10px] font-semibold text-[var(--color-text-muted)] mt-0.5">{subtitle}</p>}
             </div>
           </div>
           {action && <div className="shrink-0">{action}</div>}
