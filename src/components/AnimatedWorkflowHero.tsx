@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { BellRing, Check, X } from "lucide-react";
+import { AtSign, Music2, Newspaper, Play } from "lucide-react";
 
-type FeedStatus = "approved" | "rejected";
+type SocialPlatform = "x" | "tiktok" | "youtube" | "web";
 
-type FeedPoint = {
-  source: string;
-  city: string;
-  status: FeedStatus;
+type SocialNotification = {
+  platform: SocialPlatform;
+  account: string;
+  text: string;
   card: {
     top: string;
     left: string;
@@ -19,74 +19,101 @@ type FeedPoint = {
   };
 };
 
-const feedPoints: FeedPoint[] = [
+const notifications: SocialNotification[] = [
   {
-    source: "إكس",
-    city: "الرياض",
-    status: "approved",
-    card: { top: "13%", left: "7%" },
+    platform: "x",
+    account: "PRAGOVSA",
+    text: "إطلاق هاكاثون هداية ثون",
+    card: { top: "12%", left: "7%" },
     marker: { x: 346, y: 195 },
   },
   {
-    source: "خبر",
-    city: "جدة",
-    status: "rejected",
-    card: { top: "12%", left: "67%" },
+    platform: "x",
+    account: "KNews2030_KSA",
+    text: "تحالف تقني لخدمة الحرمين",
+    card: { top: "14%", left: "65%" },
+    marker: { x: 306, y: 176 },
+  },
+  {
+    platform: "tiktok",
+    account: "a27mkh",
+    text: "تغطية فيديو من التدشين",
+    card: { top: "58%", left: "70%" },
     marker: { x: 226, y: 236 },
   },
   {
-    source: "إكس",
-    city: "الدمام",
-    status: "approved",
-    card: { top: "61%", left: "69%" },
-    marker: { x: 404, y: 176 },
+    platform: "youtube",
+    account: "ISLAMICVOICE-am",
+    text: "مقطع من حفل هداية",
+    card: { top: "66%", left: "11%" },
+    marker: { x: 253, y: 196 },
   },
   {
-    source: "ويب",
-    city: "المدينة",
-    status: "rejected",
-    card: { top: "64%", left: "10%" },
-    marker: { x: 253, y: 196 },
+    platform: "web",
+    account: "cpcomsa",
+    text: "خبر عن الابتكار الرقمي",
+    card: { top: "38%", left: "4%" },
+    marker: { x: 269, y: 311 },
   },
 ];
 
 const saudiOutline =
   "M203 78 248 53 292 68 332 62 383 91 430 112 470 155 468 201 506 236 484 280 498 327 457 351 405 387 347 383 308 364 261 380 228 350 188 339 163 297 126 269 130 226 114 182 135 151 136 116 165 98 177 81Z";
 
-function statusTone(status: FeedStatus, active: boolean) {
-  if (status === "approved") {
-    return {
-      label: "معتمد",
-      icon: Check,
-      card: active
-        ? "border-emerald-300 bg-emerald-50 text-emerald-900 shadow-[0_14px_34px_rgba(16,185,129,0.18)]"
-        : "border-emerald-200 bg-white/92 text-emerald-900",
-      dot: "#4ade80",
-      pulse: "rgba(16,185,129,0.18)",
-    };
+const platformMeta: Record<
+  SocialPlatform,
+  {
+    label: string;
+    Icon: typeof AtSign;
+    badge: string;
+    dot: string;
+    pulse: string;
   }
-
-  return {
-    label: "مرفوض",
-    icon: X,
-    card: active
-      ? "border-rose-300 bg-rose-50 text-rose-900 shadow-[0_14px_34px_rgba(244,63,94,0.16)]"
-      : "border-rose-200 bg-white/92 text-rose-900",
-    dot: "#fb7185",
-    pulse: "rgba(244,63,94,0.16)",
-  };
-}
+> = {
+  x: {
+    label: "X",
+    Icon: AtSign,
+    badge: "bg-black text-white",
+    dot: "#f8fafc",
+    pulse: "rgba(248,250,252,0.18)",
+  },
+  tiktok: {
+    label: "TikTok",
+    Icon: Music2,
+    badge: "bg-[#111827] text-[#67e8f9]",
+    dot: "#67e8f9",
+    pulse: "rgba(103,232,249,0.2)",
+  },
+  youtube: {
+    label: "YouTube",
+    Icon: Play,
+    badge: "bg-[#ef4444] text-white",
+    dot: "#f87171",
+    pulse: "rgba(248,113,113,0.2)",
+  },
+  web: {
+    label: "Web",
+    Icon: Newspaper,
+    badge: "bg-[#1f7a5d] text-white",
+    dot: "#86efac",
+    pulse: "rgba(134,239,172,0.2)",
+  },
+};
 
 export default function AnimatedWorkflowHero() {
-  const [activePoint, setActivePoint] = useState(0);
+  const [activeNotice, setActiveNotice] = useState(0);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setActivePoint((current) => (current + 1) % feedPoints.length);
-    }, 2100);
+      setActiveNotice((current) => (current + 1) % notifications.length);
+    }, 1900);
 
     return () => window.clearInterval(interval);
   }, []);
+
+  const activeNotification = notifications[activeNotice];
+  const activeMeta = platformMeta[activeNotification.platform];
+  const ActiveIcon = activeMeta.Icon;
 
   return (
     <section className="relative min-h-[430px] overflow-hidden rounded-lg border border-[#d8e4db] bg-[#101d19] p-4 shadow-sm">
@@ -122,25 +149,26 @@ export default function AnimatedWorkflowHero() {
             strokeWidth="18"
           />
 
-          {feedPoints.map((point, index) => {
-            const active = activePoint === index;
-            const tone = statusTone(point.status, active);
+          {notifications.map((notice, index) => {
+            const active = activeNotice === index;
+            const meta = platformMeta[notice.platform];
 
             return (
-              <g key={`${point.source}-${point.city}`}>
+              <g key={`${notice.platform}-${notice.account}`}>
                 <circle
-                  cx={point.marker.x}
-                  cy={point.marker.y}
-                  r={active ? 22 : 12}
-                  fill={tone.pulse}
+                  cx={notice.marker.x}
+                  cy={notice.marker.y}
+                  r={active ? 24 : 9}
+                  fill={meta.pulse}
                   className={active ? "rasd-map-marker-pulse" : undefined}
                   style={{ animation: active ? "markerPulse 1.8s ease-out infinite" : undefined }}
                 />
                 <circle
-                  cx={point.marker.x}
-                  cy={point.marker.y}
-                  r={6}
-                  fill={tone.dot}
+                  cx={notice.marker.x}
+                  cy={notice.marker.y}
+                  r={active ? 6 : 4}
+                  fill={meta.dot}
+                  opacity={active ? 1 : 0.38}
                   stroke="white"
                   strokeWidth="2"
                 />
@@ -150,74 +178,66 @@ export default function AnimatedWorkflowHero() {
         </svg>
 
         <div className="absolute inset-0 hidden md:block">
-          {feedPoints.map((point, index) => {
-            const active = activePoint === index;
-            const tone = statusTone(point.status, active);
-            const StatusIcon = tone.icon;
+          {notifications.map((notice, index) => {
+            const active = activeNotice === index;
+            const meta = platformMeta[notice.platform];
+            const Icon = meta.Icon;
 
             return (
               <article
-                key={`${point.city}-card`}
-                className={`absolute w-[164px] rounded-lg border px-3 py-2 text-right transition-all duration-500 ${
-                  tone.card
-                } ${active ? "scale-[1.03]" : "opacity-86"}`}
+                key={`${notice.account}-notification`}
+                className={`absolute w-[236px] rounded-lg border border-white/70 bg-white/95 px-3 py-3 text-right text-[#17231f] shadow-[0_14px_34px_rgba(15,23,32,0.16)] backdrop-blur transition-all duration-500 ${
+                  active
+                    ? "translate-y-0 scale-100 opacity-100"
+                    : "pointer-events-none translate-y-3 scale-[0.96] opacity-0"
+                }`}
                 style={{
-                  top: point.card.top,
-                  left: point.card.left,
-                  animation: `floatAlert 7s ease-in-out ${index * 0.45}s infinite`,
+                  top: notice.card.top,
+                  left: notice.card.left,
                 }}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1 text-xs font-bold">
-                    <StatusIcon size={13} />
-                    {tone.label}
-                  </span>
-                  <BellRing size={15} />
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.badge}`}
+                    aria-label={meta.label}
+                  >
+                    <Icon size={17} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-bold">@{notice.account}</p>
+                      <span className="shrink-0 text-[10px] font-semibold text-[#6a7b73]">الآن</span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-[#53665d]">{notice.text}</p>
+                  </div>
                 </div>
-                <p className="mt-1 text-sm font-semibold">
-                  {point.source} · {point.city}
-                </p>
               </article>
             );
           })}
         </div>
 
-        <div className="absolute bottom-3 left-3 right-3 grid grid-cols-2 gap-2 md:hidden">
-          {feedPoints.map((point, index) => {
-            const tone = statusTone(point.status, activePoint === index);
-            const StatusIcon = tone.icon;
+        <article className="absolute bottom-3 left-3 right-3 rounded-lg border border-white/70 bg-white/95 px-3 py-3 text-right text-[#17231f] shadow-[0_14px_34px_rgba(15,23,32,0.16)] md:hidden">
+          <div className="flex items-start gap-3">
+            <div
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${activeMeta.badge}`}
+              aria-label={activeMeta.label}
+            >
+              <ActiveIcon size={17} />
+            </div>
 
-            return (
-              <div
-                key={`${point.city}-mobile`}
-                className={`rounded-lg border px-3 py-2 text-sm ${tone.card}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span>
-                    {point.source} · {point.city}
-                  </span>
-                  <span className="inline-flex items-center gap-1 font-bold">
-                    <StatusIcon size={13} />
-                    {tone.label}
-                  </span>
-                </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-bold">@{activeNotification.account}</p>
+                <span className="shrink-0 text-[10px] font-semibold text-[#6a7b73]">الآن</span>
               </div>
-            );
-          })}
-        </div>
+              <p className="mt-1 truncate text-sm text-[#53665d]">{activeNotification.text}</p>
+            </div>
+          </div>
+        </article>
       </div>
 
       <style jsx global>{`
-        @keyframes floatAlert {
-          0%,
-          100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-8px);
-          }
-        }
-
         @keyframes markerPulse {
           0% {
             transform: scale(0.85);
