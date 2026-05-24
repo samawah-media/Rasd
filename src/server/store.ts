@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock-data";
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { errorMessage } from "@/server/error-message";
 import { getApifyHealth } from "@/server/apify-extractor";
 import { getMediaMetadataHealth } from "@/server/media-metadata-extractor";
 import { isSafePublicHttpUrl, resolveScreenshotUrl } from "@/server/url-metadata";
@@ -1576,7 +1577,7 @@ export const store = {
       run.finishedAt = nowStr || now();
       return job;
     } catch (e: unknown) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
+      const errorMsg = errorMessage(e);
       job.status = "failed";
       job.failureReason = errorMsg;
 

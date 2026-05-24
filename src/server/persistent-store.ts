@@ -32,6 +32,7 @@ import {
 import { getSupabaseAdmin, isSupabaseAdminConfigured } from "@/server/supabase-admin";
 import { store } from "@/server/store";
 import { evidenceCardUrl } from "@/server/evidence-card";
+import { errorMessage } from "@/server/error-message";
 import {
   evidenceStorageReference,
   parseEvidenceStorageReference,
@@ -2377,16 +2378,29 @@ export const persistentStore = {
         const dedupeKey = makeDedupeKey(rawItem, rule.type);
         const canonicalHash = `${rule.type}:${await sha256(dedupeKey)}`;
 
-        const { data: duplicateItem, error: duplicateCheckError } = await supabase
+        const { data: duplicateByHash, error: duplicateHashError } = await supabase
           .from("monitoring_items")
           .select("id")
           .eq("organization_id", rule.organizationId)
-          .or(`canonical_url_hash.eq.${canonicalHash},original_url.eq.${rawItem.url}`)
+          .eq("canonical_url_hash", canonicalHash)
           .limit(1)
           .maybeSingle();
 
-        if (duplicateCheckError) throw duplicateCheckError;
-        if (duplicateItem) {
+        if (duplicateHashError) throw duplicateHashError;
+        if (duplicateByHash) {
+          continue;
+        }
+
+        const { data: duplicateByUrl, error: duplicateUrlError } = await supabase
+          .from("monitoring_items")
+          .select("id")
+          .eq("organization_id", rule.organizationId)
+          .eq("original_url", rawItem.url)
+          .limit(1)
+          .maybeSingle();
+
+        if (duplicateUrlError) throw duplicateUrlError;
+        if (duplicateByUrl) {
           continue;
         }
 
@@ -2529,7 +2543,7 @@ export const persistentStore = {
       return { ...toJob(claimedJobRow), status: "succeeded" as const, failureReason: null };
 
     } catch (e: unknown) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
+      const errorMsg = errorMessage(e);
       await supabase
         .from("jobs")
         .update({

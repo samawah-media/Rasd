@@ -12,6 +12,7 @@ import { buildLegacySearchQuery, getLegacyBackfillDataset } from "../src/lib/leg
 import { getLegacySourceIntelligence } from "../src/lib/legacy-source-intelligence";
 import { keywordRules, usageLimit } from "../src/lib/mock-data";
 import { buildClientReportExportHtml, clientReportExportLimit } from "../src/server/client-report-export";
+import { errorMessage } from "../src/server/error-message";
 import {
   evidenceAssetProxyUrl,
   evidenceStoragePath,
@@ -77,6 +78,10 @@ describe("connector and budget utilities", () => {
 
     assert.equal(result.allowed, true);
     assert.equal(result.violations.length, 2);
+  });
+
+  it("serializes non-Error failures for connector run logs", () => {
+    assert.equal(errorMessage({ code: "PGRST100", message: "Bad filter" }), '{"code":"PGRST100","message":"Bad filter"}');
   });
 
   it("blocks AI token work before monthly limits are exceeded", () => {
