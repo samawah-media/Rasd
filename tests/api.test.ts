@@ -1420,6 +1420,7 @@ describe("Hono API acceptance workflow", () => {
     const health = await requestJson("/api/admin/health");
 
     assert.equal(health.response.status, 200);
+    assert.equal(health.json.status, "ok");
     assert.equal(health.json.automation.schemaReady, true);
     assert.equal(typeof health.json.automation.cronSecretConfigured, "boolean");
     assert.equal(health.json.automation.connectorCronPath, "/api/cron/run-connectors");
@@ -1529,7 +1530,7 @@ describe("Hono API acceptance workflow", () => {
       }
 
       if (url.includes("apify~instagram-post-scraper")) {
-        assert.match(body, /"username":\["hidayathon"\]/);
+        assert.match(body, /"username":"hidayathon"/);
         assert.match(body, /"resultsLimit":5/);
         return new Response(
           JSON.stringify([
@@ -1576,6 +1577,10 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(result.json.dueRulesCount, 2);
       assert.equal(result.json.executedCount, 2);
       assert.equal(result.json.failedCount, 0);
+      assert.equal(result.json.createdCount, 2);
+      assert.equal(result.json.createdBySourceType.tiktok_research, 1);
+      assert.equal(result.json.createdBySourceType.instagram_public_profile, 1);
+      assert.equal(result.json.newItemIds.length, 2);
 
       const items = store
         .listItems()

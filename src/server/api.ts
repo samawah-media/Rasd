@@ -318,6 +318,8 @@ async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore
 }
 
 async function runDueConnectors(organizationId?: string) {
+  const beforeItems = await persistentStore.listItems();
+  const beforeItemIds = new Set(beforeItems.map((item) => item.id));
   const dueRules = await persistentStore.findDueSourceRules(organizationId);
   const jobs = [];
   for (const rule of dueRules) {
@@ -346,12 +348,24 @@ async function runDueConnectors(organizationId?: string) {
     }
   }
 
+  const createdItems = (await persistentStore.listItems()).filter(
+    (item) =>
+      !beforeItemIds.has(item.id) &&
+      (item.sourceType === "tiktok_research" || item.sourceType === "instagram_public_profile"),
+  );
+
   return {
     ok: true,
     dueRulesCount: dueRules.length,
     enqueuedCount: jobs.length,
     executedCount: executed.length,
     failedCount: failed.length,
+    createdCount: createdItems.length,
+    createdBySourceType: {
+      tiktok_research: createdItems.filter((item) => item.sourceType === "tiktok_research").length,
+      instagram_public_profile: createdItems.filter((item) => item.sourceType === "instagram_public_profile").length,
+    },
+    newItemIds: createdItems.map((item) => item.id),
     executedJobs: executed,
     failedJobs: failed,
   };

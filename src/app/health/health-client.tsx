@@ -133,7 +133,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
         title: "تخزين المواد والصلاحيات",
         logo: "S",
         state: normalizeState(health.status),
-        message: health.status === "good" || health.status === "healthy" ? "الاتصال بقاعدة البيانات مستقر." : "راجع اتصال قاعدة البيانات.",
+        message: health.status === "good" || health.status === "healthy" || health.status === "ok" ? "الاتصال بقاعدة البيانات مستقر." : "راجع اتصال قاعدة البيانات.",
         last: "منذ دقيقة",
         next: "مراقبة مستمرة",
       },
@@ -264,7 +264,7 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
 
             {health.automation?.latestFailedJob && (
               <div className="mt-4 rounded-lg border border-[#f1b6aa] bg-[#fff1ed] p-3 text-xs font-bold leading-6 text-[#8f321d]">
-                آخر فشل: {health.automation.latestFailedJob.failureReason ?? health.automation.latestFailedJob.status} ·{" "}
+                آخر فشل: {formatFailureReason(health.automation.latestFailedJob.failureReason ?? health.automation.latestFailedJob.status)} ·{" "}
                 {latestRunText(health.automation.latestFailedJob.createdAt)}
               </div>
             )}
@@ -292,8 +292,16 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
             <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[#fbfbfc] p-3">
               <h3 className="text-sm font-black text-[var(--color-text-title)]">الرصد الاجتماعي</h3>
               <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-                <SocialPulse label="TikTok" value={health.automation?.tiktok.activeRulesCount ?? 0} ok={Boolean(health.automation?.tiktok.enabled)} />
-                <SocialPulse label="Instagram" value={health.automation?.instagram.activeRulesCount ?? 0} ok={Boolean(health.automation?.instagram.enabled)} />
+                <SocialPulse
+                  label="TikTok"
+                  value={health.automation?.tiktok.activeRulesCount ?? 0}
+                  ok={health.automation?.tiktok.status === "healthy" || Boolean(health.automation?.apify?.configured)}
+                />
+                <SocialPulse
+                  label="Instagram"
+                  value={health.automation?.instagram.activeRulesCount ?? 0}
+                  ok={health.automation?.instagram.status === "healthy" || Boolean(health.automation?.apify?.configured)}
+                />
               </div>
               <Link
                 href="/sources"
@@ -457,8 +465,8 @@ function serviceTone(state: ServiceState) {
 }
 
 function normalizeState(status?: string): ServiceState {
-  if (status === "healthy" || status === "good") return "healthy";
-  if (status === "degraded" || status === "warning" || status === "not_configured") return "warning";
+  if (status === "healthy" || status === "good" || status === "ok") return "healthy";
+  if (status === "degraded" || status === "warning" || status === "not_configured" || status === "ready") return "warning";
   return "down";
 }
 
@@ -471,9 +479,20 @@ function mediaExtractorState(extractor?: NonNullable<HealthClientProps["initialH
 
 function connectorMessage(status?: string) {
   if (status === "healthy") return "بحث X يعمل وجاهز للرصد الآلي.";
+  if (status === "ready") return "بحث X مهيأ في المنصة، لكن لم يتم تأكيد تشغيل المزود بعد. جرّب بحث X أو راجع XAI_API_KEY والرصيد.";
   if (status === "degraded") return "بحث X يعمل مع تحذيرات. راجع الرصيد أو الإعدادات.";
   if (status === "not_configured") return "أضف مفاتيح مزود بحث X حتى يعمل الرصد الآلي.";
   return "تعذر تأكيد حالة بحث X.";
+}
+
+function formatFailureReason(reason: unknown) {
+  if (!reason) return "فشل غير محدد";
+  const text = typeof reason === "string" ? reason : JSON.stringify(reason);
+  if (text === "[object Object]") return "فشل مزود بيانات. افتح صفحة المصادر لمعرفة الحساب أو المصدر المتأثر.";
+  if (text.includes("input.username is required")) return "حساب Instagram يحتاج اسم مستخدم واضح.";
+  if (text.includes("apify_http_400")) return "Apify رفض مدخلات أحد حسابات Instagram.";
+  if (text.includes("This operation was aborted")) return "انتهت مهلة مزود البيانات قبل اكتمال الفحص.";
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
 }
 
 function latestRunText(value?: string | null) {

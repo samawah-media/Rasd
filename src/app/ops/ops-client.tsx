@@ -22,6 +22,7 @@ import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } fro
 import AppShell from "@/components/AppShell";
 import { BrandIcon, brandFromLabel } from "@/components/BrandIcon";
 import { isValidXUrl } from "@/lib/x/parser";
+import { isRssWorkflowItem, isSocialWorkflowItem, isWorkflowItem, isXWorkflowItem, latestWorkflowItems } from "@/lib/ops-workflow";
 
 type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
@@ -33,7 +34,7 @@ type LastScan = {
   finishedAt: string;
   totalNewItems: number;
   rss: { status: ScanStepStatus; sources: number; fetched: number; created: number; duplicates: number; skipped: number; failed: number };
-  social: { status: ScanStepStatus; checked: number; executed: number; failed: number };
+  social: { status: ScanStepStatus; checked: number; executed: number; created: number; failed: number };
   x: { status: ScanStepStatus; discovered: number; created: number; duplicates: number; failed: number };
 };
 
@@ -112,7 +113,7 @@ type SourcePollActiveResponse = {
     duplicates: number;
     skipped: number;
     failed: number;
-    runs: Array<Record<string, unknown>>;
+    runs: Array<{ ok?: boolean; sourceName?: string; sourceId?: string; error?: string; fetched?: number; created?: number; skipped?: number; failed?: number }>;
   };
 };
 
@@ -122,13 +123,20 @@ type RunDueResponse = {
   enqueuedCount: number;
   executedCount: number;
   failedCount: number;
+  createdCount?: number;
+  createdBySourceType?: {
+    tiktok_research?: number;
+    instagram_public_profile?: number;
+  };
+  newItemIds?: string[];
+  failedJobs?: Array<{ jobId: string; error: string }>;
 };
 
 const emptyLastScan: LastScan = {
   finishedAt: "",
   totalNewItems: 0,
   rss: { status: "idle", sources: 0, fetched: 0, created: 0, duplicates: 0, skipped: 0, failed: 0 },
-  social: { status: "idle", checked: 0, executed: 0, failed: 0 },
+  social: { status: "idle", checked: 0, executed: 0, created: 0, failed: 0 },
   x: { status: "idle", discovered: 0, created: 0, duplicates: 0, failed: 0 },
 };
 
@@ -286,9 +294,9 @@ function captureAsset(captures: Capture[] | undefined) {
 
 function platformLabel(item: MonitoringItem) {
   const url = item.originalUrl || "";
-  if (url.includes("x.com") || url.includes("twitter.com")) return "X";
-  if (url.includes("tiktok.com")) return "TikTok";
-  if (url.includes("instagram.com") || url.includes("instagr.am")) return "Instagram";
+  if (item.sourceType === "x_recent_search" || url.includes("x.com") || url.includes("twitter.com")) return "X";
+  if (item.sourceType === "tiktok_research" || url.includes("tiktok.com")) return "TikTok";
+  if (item.sourceType === "instagram_public_profile" || url.includes("instagram.com") || url.includes("instagr.am")) return "Instagram";
   if (item.sourceName.includes("خبر") || item.sourceType === "rss") return "خبر";
   return "موقع";
 }
@@ -300,15 +308,31 @@ function messageClass(type: MessageType) {
   return "border-[#c7d8f3] bg-[#f1f6ff] text-[#315f9b]";
 }
 
-function latestWorkflowItems(items: MonitoringItem[], limit = 48, pinnedId?: string | null) {
-  const candidates = items
-    .filter((item) => item.sourceType === "manual_url" || item.sourceType === "rss" || item.sourceType === "x_recent_search")
-    .filter((item) => item.state !== "archived")
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-  const limited = candidates.slice(0, limit);
-  const pinned = pinnedId ? candidates.find((item) => item.id === pinnedId) : undefined;
-  if (!pinned || limited.some((item) => item.id === pinned.id)) return limited;
-  return [pinned, ...limited.slice(0, Math.max(0, limit - 1))];
+function newItemsSince(items: MonitoringItem[], beforeIds: Set<string>) {
+  return items.filter((item) => !beforeIds.has(item.id));
+}
+
+function firstFailedRssRun(poll: SourcePollActiveResponse["poll"]) {
+  return poll.runs.find((run) => run.ok === false || run.error);
+}
+
+function formatRssPollMessage(prefix: string, poll: SourcePollActiveResponse["poll"]) {
+  const base = `${prefix}: جلبنا ${poll.fetched.toLocaleString("ar-SA")} مادة من ${poll.sources.toLocaleString("ar-SA")} مصدر. الجديد ${poll.created.toLocaleString("ar-SA")}، المكرر ${poll.duplicates.toLocaleString("ar-SA")}، غير مطابق ${poll.skipped.toLocaleString("ar-SA")}، والفاشل ${poll.failed.toLocaleString("ar-SA")}.`;
+  const details: string[] = [];
+  if (poll.skipped > 0) {
+    details.push("غير مطابق يعني أن الخبر لا يحتوي كلمات الرصد الحالية، لذلك لم يظهر في قائمة المواد.");
+  }
+  const failedRun = firstFailedRssRun(poll);
+  if (failedRun) {
+    details.push(`مصدر يحتاج مراجعة: ${failedRun.sourceName || failedRun.sourceId || "مصدر أخبار"} (${arabicError(failedRun.error || "source_poll_failed")}).`);
+  }
+  return details.length ? `${base} ${details.join(" ")}` : base;
+}
+
+function formatRunDueWarnings(result: RunDueResponse) {
+  const failed = result.failedJobs?.[0];
+  if (!failed) return "";
+  return ` أول فشل: ${failed.error.length > 120 ? `${failed.error.slice(0, 120)}...` : failed.error}`;
 }
 
 export function OpsClient() {
@@ -393,7 +417,9 @@ export function OpsClient() {
     setMessageType("info");
 
     try {
-      const beforeIds = new Set(state.items.map((item) => item.id));
+      const beforeSnapshot = await fetchSnapshot();
+      setState(beforeSnapshot);
+      const beforeIds = new Set(beforeSnapshot.items.map((item) => item.id));
       const result = await apiJson<RunDueResponse>("/api/source-rules/run-due", {
         method: "POST",
         body: JSON.stringify({}),
@@ -401,7 +427,7 @@ export function OpsClient() {
       const snapshot = await fetchSnapshot();
       setState(snapshot);
       setTab("active");
-      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
+      const newItems = newItemsSince(snapshot.items, beforeIds).filter(isSocialWorkflowItem);
       if (newItems[0]) {
         setSelectedId(newItems[0].id);
         setPinnedItemId(newItems[0].id);
@@ -414,13 +440,14 @@ export function OpsClient() {
           status: result.failedCount ? "warning" : "success",
           checked: result.dueRulesCount,
           executed: result.executedCount,
+          created: result.createdCount ?? newItems.length,
           failed: result.failedCount,
         },
       });
       setMessage(
         result.failedCount
-          ? `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، اكتملت ${result.executedCount.toLocaleString("ar-SA")} وتعثر ${result.failedCount.toLocaleString("ar-SA")}.`
-          : `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، وظهرت ${newItems.length.toLocaleString("ar-SA")} مادة جديدة.`,
+          ? `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، ظهرت ${(result.createdCount ?? newItems.length).toLocaleString("ar-SA")} مادة جديدة، وتعثر ${result.failedCount.toLocaleString("ar-SA")}.${formatRunDueWarnings(result)}`
+          : `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، وظهرت ${(result.createdCount ?? newItems.length).toLocaleString("ar-SA")} مادة جديدة في قائمة التشغيل.`,
       );
       setMessageType(result.failedCount ? "warning" : "success");
     } catch (error) {
@@ -598,7 +625,9 @@ export function OpsClient() {
     setMessageType("info");
 
     try {
-      const beforeIds = new Set(state.items.map((item) => item.id));
+      const beforeSnapshot = await fetchSnapshot();
+      setState(beforeSnapshot);
+      const beforeIds = new Set(beforeSnapshot.items.map((item) => item.id));
       const result = await apiJson<SourcePollActiveResponse>("/api/sources/poll-active", {
         method: "POST",
         body: JSON.stringify({ limit: 5 }),
@@ -607,7 +636,7 @@ export function OpsClient() {
       const snapshot = await fetchSnapshot();
       setState(snapshot);
       setTab("active");
-      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
+      const newItems = newItemsSince(snapshot.items, beforeIds).filter(isRssWorkflowItem);
       if (newItems[0]) {
         setSelectedId(newItems[0].id);
         setPinnedItemId(newItems[0].id);
@@ -626,9 +655,7 @@ export function OpsClient() {
           failed: result.poll.failed,
         },
       });
-      setMessage(
-        `فحصنا ${result.poll.sources} مصدر أخبار، وجلبنا ${result.poll.fetched} مادة. الجديد ${result.poll.created}، المكرر ${result.poll.duplicates}، غير مطابق ${result.poll.skipped}${result.poll.failed ? `، والفاشل ${result.poll.failed}` : ""}.`,
-      );
+      setMessage(formatRssPollMessage("فحص الأخبار", result.poll));
       setMessageType(result.poll.failed ? "warning" : "success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر فحص مصادر الأخبار.");
@@ -645,7 +672,6 @@ export function OpsClient() {
     setMessage("جاري فحص كل المصادر: الأخبار ثم TikTok / Instagram ثم X...");
     setMessageType("info");
 
-    const beforeIds = new Set(state.items.map((item) => item.id));
     const nextScan: LastScan = {
       ...emptyLastScan,
       finishedAt: new Date().toISOString(),
@@ -656,6 +682,10 @@ export function OpsClient() {
     setLastScan(nextScan);
 
     try {
+      const beforeSnapshot = await fetchSnapshot();
+      setState(beforeSnapshot);
+      const beforeIds = new Set(beforeSnapshot.items.map((item) => item.id));
+
       try {
         const rssResult = await apiJson<SourcePollActiveResponse>("/api/sources/poll-active", {
           method: "POST",
@@ -684,6 +714,7 @@ export function OpsClient() {
           status: socialResult.failedCount ? "warning" : "success",
           checked: socialResult.dueRulesCount,
           executed: socialResult.executedCount,
+          created: socialResult.createdCount ?? 0,
           failed: socialResult.failedCount,
         };
       } catch {
@@ -710,20 +741,27 @@ export function OpsClient() {
       const snapshot = await fetchSnapshot();
       setState(snapshot);
       setTab("active");
-      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
-      if (newItems[0]) {
-        setSelectedId(newItems[0].id);
-        setPinnedItemId(newItems[0].id);
+      const newItems = newItemsSince(snapshot.items, beforeIds);
+      const workflowNewItems = newItems.filter(isWorkflowItem);
+      const socialNewItems = workflowNewItems.filter(isSocialWorkflowItem);
+      const xNewItems = workflowNewItems.filter(isXWorkflowItem);
+      const rssNewItems = workflowNewItems.filter(isRssWorkflowItem);
+      if (workflowNewItems[0]) {
+        setSelectedId(workflowNewItems[0].id);
+        setPinnedItemId(workflowNewItems[0].id);
       }
       nextScan.finishedAt = new Date().toISOString();
-      nextScan.totalNewItems = newItems.length;
+      nextScan.totalNewItems = workflowNewItems.length;
+      nextScan.rss.created = Math.max(nextScan.rss.created, rssNewItems.length);
+      nextScan.social.created = Math.max(nextScan.social.created, socialNewItems.length);
+      nextScan.x.created = Math.max(nextScan.x.created, xNewItems.length);
       setLastScan({ ...nextScan });
 
       const failedTotal = nextScan.rss.failed + nextScan.social.failed + nextScan.x.failed;
       setMessage(
         failedTotal
-          ? `اكتمل الفحص مع تنبيهات: ${newItems.length.toLocaleString("ar-SA")} مواد جديدة، و${failedTotal.toLocaleString("ar-SA")} فشل يحتاج مراجعة.`
-          : `اكتمل فحص كل المصادر: ${newItems.length.toLocaleString("ar-SA")} مواد جديدة ظهرت في القائمة.`,
+          ? `اكتمل الفحص مع تنبيهات: ${workflowNewItems.length.toLocaleString("ar-SA")} مواد جديدة ظهرت في القائمة، و${failedTotal.toLocaleString("ar-SA")} فشل يحتاج مراجعة.`
+          : `اكتمل فحص كل المصادر: ${workflowNewItems.length.toLocaleString("ar-SA")} مواد جديدة ظهرت في القائمة.`,
       );
       setMessageType(failedTotal ? "warning" : "success");
     } finally {
@@ -1103,7 +1141,7 @@ function ScanSummary({ scan, active }: { scan: LastScan | null; active: boolean 
           brand="instagram"
           title="TikTok / Instagram"
           status={displayScan.social.status}
-          detail={`${displayScan.social.executed.toLocaleString("ar-SA")} عملية مكتملة · ${displayScan.social.failed.toLocaleString("ar-SA")} فشل`}
+          detail={`${displayScan.social.created.toLocaleString("ar-SA")} جديد · ${displayScan.social.executed.toLocaleString("ar-SA")} عملية مكتملة · ${displayScan.social.failed.toLocaleString("ar-SA")} فشل`}
         />
         <ScanStep
           brand="x"

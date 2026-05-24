@@ -79,7 +79,7 @@ function buildInstagramInput(rule: SourceRule) {
   const maxItems = getApifyAutoMaxItems();
   const username = instagramUsernameFromRule(rule);
   return {
-    username: [username],
+    username,
     resultsLimit: maxItems,
     skipPinnedPosts: true,
     dataDetailLevel: "basicData",
