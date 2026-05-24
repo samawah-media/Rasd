@@ -65,6 +65,12 @@ type SourceCreateResponse = {
   duplicate?: boolean;
 };
 
+type ManualUrlTestResponse = {
+  item: MonitoringItem;
+  duplicate?: boolean;
+  testTerm?: string;
+};
+
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
 type SourceSection = "issues" | "keywords" | "news" | "social" | "x" | "archive";
 
@@ -278,6 +284,7 @@ export function SourcesClient() {
   const [section, setSection] = useState<SourceSection>("social");
   const [sourceSearch, setSourceSearch] = useState("");
   const [rssTestTerm, setRssTestTerm] = useState("");
+  const [newsTestUrl, setNewsTestUrl] = useState("");
 
   const rssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
@@ -488,6 +495,12 @@ export function SourcesClient() {
   }
 
   async function pollActiveSources() {
+    const testUrl = newsTestUrl.trim();
+    if (testUrl) {
+      await testNewsUrl(testUrl);
+      return;
+    }
+
     setPending("poll-active");
     const testTerm = rssTestTerm.trim();
     setMessage(testTerm ? `جاري اختبار المصادر النشطة بكلمة مؤقتة: ${testTerm}...` : "جاري تشغيل المصادر النشطة...");
@@ -503,6 +516,32 @@ export function SourcesClient() {
       setMessageType(result.poll.failed > 0 || (result.poll.created === 0 && (result.poll.skipped ?? 0) > 0) ? "warning" : "success");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function testNewsUrl(testUrl: string) {
+    const testTerm = rssTestTerm.trim();
+    setPending("news-url-test");
+    setMessage(testTerm ? `جاري فحص رابط الخبر بكلمة مؤقتة: ${testTerm}...` : "جاري فحص رابط الخبر...");
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<ManualUrlTestResponse>("/api/items/manual-url", {
+        method: "POST",
+        body: JSON.stringify({ url: testUrl, test_term: testTerm || undefined }),
+      });
+      await refreshSilently();
+      setMessage(
+        result.duplicate
+          ? `الرابط موجود مسبقًا في الرصد اليومي، وتم تحديث بياناته إن توفرت معلومات أفضل.`
+          : `تم حفظ رابط الاختبار في الرصد اليومي: ${result.item.title}`,
+      );
+      setMessageType(result.item.state === "needs_review" ? "success" : "warning");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر فحص رابط الخبر.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -830,7 +869,7 @@ export function SourcesClient() {
 
             {section === "news" && (
               <div className="mb-4 rounded-lg border border-[#dbeafe] bg-[#f8fbff] p-3">
-                <div className="flex flex-col gap-2 md:flex-row md:items-end">
+                <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_150px] lg:items-end">
                   <label className="min-w-0 flex-1">
                     <span className="mb-1 block text-[11px] font-extrabold text-[#1d4f8f]">اختبار الأخبار بكلمة مؤقتة</span>
                     <input
@@ -840,18 +879,27 @@ export function SourcesClient() {
                       className="h-10 w-full rounded-lg border border-[#c7d8f3] bg-white px-3 text-xs font-semibold outline-none transition focus:border-[#1f6feb]"
                     />
                   </label>
+                  <label className="min-w-0 flex-1">
+                    <span className="mb-1 block text-[11px] font-extrabold text-[#1d4f8f]">رابط خبر مباشر اختياري</span>
+                    <input
+                      value={newsTestUrl}
+                      onChange={(event) => setNewsTestUrl(event.target.value)}
+                      placeholder="الصق رابط المقال هنا لاختباره مباشرة..."
+                      className="h-10 w-full rounded-lg border border-[#c7d8f3] bg-white px-3 text-xs font-semibold outline-none transition focus:border-[#1f6feb]"
+                    />
+                  </label>
                   <button
                     type="button"
                     onClick={pollActiveSources}
-                    disabled={pending !== null || !rssSources.some((source) => source.isActive)}
+                    disabled={pending !== null || (!newsTestUrl.trim() && !rssSources.some((source) => source.isActive))}
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f6feb] px-4 text-xs font-extrabold text-white transition hover:bg-[#195ec9] disabled:opacity-50"
                   >
-                    {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                    اختبر المصادر النشطة
+                    {pending === "poll-active" || pending === "news-url-test" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    {newsTestUrl.trim() ? "اختبر الرابط" : "اختبر RSS"}
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] font-semibold leading-5 text-[var(--color-text-muted)]">
-                  هذا الاختبار لا يغيّر كلمات هداية المحفوظة. يستخدم الكلمة مرة واحدة فقط للتأكد أن RSS يجلب ويحفظ ويعرض المواد.
+                  بدون رابط، نفحص آخر مواد RSS. مع رابط مباشر، نفحص المقال نفسه ونحفظه في الرصد اليومي. الكلمة المؤقتة لا تغيّر كلمات هداية المحفوظة.
                 </p>
               </div>
             )}

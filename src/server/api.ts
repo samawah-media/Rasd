@@ -997,6 +997,10 @@ api.post("/items/manual-url", async (c) => {
   const providedText = optionalString(body.text);
   const providedAuthorName = optionalString(body.authorName, body.author_name);
   const providedAuthorHandle = optionalString(body.authorHandle, body.author_handle);
+  const keywordRule = temporaryKeywordRuleFromTerm(
+    body.test_term ?? body.testTerm,
+    (await persistentStore.listKeywordRules())[0] ?? null,
+  );
   const metadata =
     providedTitle && providedText && providedAuthorName
       ? null
@@ -1011,12 +1015,14 @@ api.post("/items/manual-url", async (c) => {
     authorHandle: providedAuthorHandle ?? metadata?.authorHandle,
     publishedAt: publishedAt.value ?? metadata?.publishedAt,
     extraction: compactExtractionMetadata(metadata),
+    keywordRule,
   });
 
   return c.json(
     withRequestId(c, {
       ...result,
       metadata,
+      testTerm: keywordRule?.requiredTerms[0],
       next_step: result.item.state === "needs_review" ? "review" : "tune_keyword_rules",
     }),
     result.duplicate ? 200 : 201,

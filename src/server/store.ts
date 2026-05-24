@@ -96,6 +96,7 @@ type ManualUrlInput = {
   authorHandle?: string;
   publishedAt?: string;
   extraction?: Record<string, unknown>;
+  keywordRule?: KeywordRule;
   sourceType?: "manual_url" | "x_recent_search";
   sourceName?: string;
   discoveryMethod?: MonitoringItem["discoveryMethod"];
@@ -334,7 +335,7 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
     changed = true;
   }
   if (item.state === "archived" || item.state === "rejected") {
-    const rule = keywordRules[0];
+    const rule = input.keywordRule ?? keywordRules[0];
     const match = explainKeywordMatch(`${input.title ?? item.title} ${input.text ?? item.summary} ${canonicalUrl}`, rule);
     item.state = match.score > 0 ? "needs_review" : "candidate";
     changed = true;
@@ -344,7 +345,7 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
     changed = true;
   }
 
-  const rule = keywordRules[0];
+  const rule = input.keywordRule ?? keywordRules[0];
   const match = explainKeywordMatch(`${item.title} ${item.summary} ${canonicalUrl}`, rule);
   if (match.score > item.relevanceScore) {
     item.relevanceScore = match.score;
@@ -876,7 +877,7 @@ export const store = {
       return { item: duplicate, duplicate: true, duplicateType };
     }
 
-    const rule = keywordRules[0];
+    const rule = input.keywordRule ?? keywordRules[0];
     const match = explainKeywordMatch(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`, rule);
     const item: MonitoringItem = {
       id: crypto.randomUUID(),

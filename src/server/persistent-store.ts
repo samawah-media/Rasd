@@ -191,6 +191,7 @@ type ManualUrlInput = {
   authorHandle?: string;
   publishedAt?: string;
   extraction?: Record<string, unknown>;
+  keywordRule?: KeywordRule;
   sourceType?: "manual_url" | "x_recent_search";
   sourceName?: string;
   discoveryMethod?: MonitoringItem["discoveryMethod"];
@@ -733,7 +734,7 @@ async function refreshSupabaseManualDuplicate(
 
   const title = String(patch.title ?? row.title ?? "");
   const summary = String(patch.summary ?? row.summary ?? "");
-  const rule = keywordRules[0];
+  const rule = input.keywordRule ?? keywordRules[0];
   const match = explainKeywordMatch(`${title} ${summary} ${canonicalUrl}`, rule);
   if (row.state === "archived" || row.state === "rejected") {
     patch.state = match.score > 0 ? "needs_review" : "candidate";
@@ -1406,7 +1407,7 @@ export const persistentStore = {
       return { item, duplicate: true, duplicateType };
     }
 
-    const rule = keywordRules[0];
+    const rule = input.keywordRule ?? keywordRules[0];
     const match = explainKeywordMatch(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`, rule);
     const { data: row, error } = await supabase
       .from("monitoring_items")
