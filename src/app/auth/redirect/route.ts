@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   }
 
   if (isAdminPath(next) && !isAdminRole(context.membership.role)) {
-    return NextResponse.redirect(new URL("/unauthorized", requestUrl.origin));
+    return NextResponse.redirect(new URL(defaultPathForRole(context.membership.role), requestUrl.origin));
   }
 
   if (isClientPath(next) || isAdminPath(next)) {

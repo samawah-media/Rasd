@@ -10,6 +10,7 @@ import {
   LEGACY_ORGANIZATION_SLUG,
   RASD_OWNER_EMAIL,
   defaultPathForRole,
+  isAdminRole,
   isRoleAllowed,
 } from "@/lib/auth-config";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
@@ -70,6 +71,10 @@ export async function requireRole(allowed: readonly Role[], nextPath = "/") {
   }
 
   if (!isRoleAllowed(context.membership.role, allowed)) {
+    if (!isAdminRole(context.membership.role)) {
+      redirect(defaultPathForRole(context.membership.role));
+    }
+
     redirect("/unauthorized");
   }
 

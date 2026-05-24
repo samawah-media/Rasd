@@ -60,7 +60,7 @@ const sentimentIcons: Record<string, string> = {
   negative: "☹️",
 };
 
-export function ClientReportView({ data }: { data: ClientReportData; role: Role }) {
+export function ClientReportView({ data, role }: { data: ClientReportData; role: Role }) {
   const [filters, setFilters] = useState<Filters>({
     query: "",
     from: data.summary.dateFrom ?? "",
@@ -150,8 +150,8 @@ export function ClientReportView({ data }: { data: ClientReportData; role: Role 
     window.open(`/api/client-report/hidayathon/export-pdf?${params.toString()}`, "_blank", "noopener,noreferrer");
   }
 
-  return (
-    <AppShell>
+  const pageContent = (
+    <>
       <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-white/90 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div>
@@ -515,8 +515,18 @@ export function ClientReportView({ data }: { data: ClientReportData; role: Role 
           </div>
         </div>
       ) : null}
-    </AppShell>
+    </>
   );
+
+  if (role === "viewer") {
+    return (
+      <main className="min-h-screen bg-[var(--color-bg-main)] font-sans text-[var(--color-text-body)]" dir="rtl">
+        {pageContent}
+      </main>
+    );
+  }
+
+  return <AppShell>{pageContent}</AppShell>;
 }
 
 function ReportRow({ item, selected, onClick }: { item: ClientReportItem; selected: boolean; onClick: () => void }) {
