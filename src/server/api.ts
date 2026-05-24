@@ -23,7 +23,7 @@ import {
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl, type UrlMetadata } from "@/server/url-metadata";
-import { searchNewsSiteWithApifyGoogle } from "@/server/apify-extractor";
+import { searchNewsSiteSitemap, searchNewsSiteWithApifyGoogle } from "@/server/apify-extractor";
 import { renderEvidenceCardSvg } from "@/server/evidence-card";
 import { buildClientReportExportHtml } from "@/server/client-report-export";
 import {
@@ -716,24 +716,30 @@ api.post("/sources/search-news", async (c) => {
   const options = await rssPollOptionsFromBody({ test_term: testTerm });
   const maxResults = typeof body.limit === "number" ? Math.trunc(body.limit) : 5;
   const search = await searchNewsSiteWithApifyGoogle(siteUrl, testTerm, { maxResults });
-  const ingest = await ingestNewsSearchResults(search.results, options.keywordRule);
+  const sitemapFallback = search.results.length
+    ? { results: [], searched: [] as string[], error: undefined as string | undefined }
+    : await searchNewsSiteSitemap(siteUrl, testTerm, { maxResults });
+  const results = search.results.length ? search.results : sitemapFallback.results;
+  const ingest = await ingestNewsSearchResults(results, options.keywordRule);
 
   return c.json(
     withRequestId(c, {
       search: {
-        provider: "apify_google_search",
+        provider: search.results.length ? "apify_google_search" : "news_sitemap",
         query: search.query,
-        fetched: search.results.length,
+        fetched: results.length,
         created: ingest.created,
         duplicates: ingest.duplicates,
         failed: ingest.failed,
         testTerm,
-        error: search.error,
-        results: search.results,
+        error: results.length ? undefined : `${search.error ?? "apify_google_search_empty"};${sitemapFallback.error ?? "news_sitemap_empty"}`,
+        apifyError: search.error,
+        sitemapSearched: sitemapFallback.searched,
+        results,
         items: ingest.items,
       },
     }),
-    search.error && search.results.length === 0 ? 502 : 200,
+    results.length === 0 ? 502 : 200,
   );
 });
 

@@ -591,7 +591,8 @@ export function SourcesClient() {
       const created = result.search.created.toLocaleString("ar-SA");
       const duplicates = result.search.duplicates.toLocaleString("ar-SA");
       const failed = result.search.failed.toLocaleString("ar-SA");
-      setMessage(`بحث Apify داخل الموقع: نتائج ${fetched}، جديد ${created}، مكرر ${duplicates}، متعثر ${failed}.`);
+      const provider = result.search.provider === "news_sitemap" ? "sitemap الأخبار" : "Apify Google";
+      setMessage(`بحث داخل الموقع عبر ${provider}: نتائج ${fetched}، جديد ${created}، مكرر ${duplicates}، متعثر ${failed}.`);
       setMessageType(result.search.created > 0 ? "success" : "warning");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر البحث داخل الموقع عبر Apify.");
@@ -952,7 +953,7 @@ export function SourcesClient() {
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] font-semibold leading-5 text-[var(--color-text-muted)]">
-                  بدون رابط، نفحص آخر مواد RSS. مع رابط موقع مثل okaz.com.sa نبحث داخله عبر Apify Google Search. مع رابط مقال نفحص المقال نفسه. الكلمة المؤقتة لا تغيّر كلمات هداية المحفوظة.
+                  بدون رابط، نفحص آخر مواد RSS. مع رابط موقع مثل okaz.com.sa نبحث داخله عبر Apify Google Search ثم sitemap الأخبار إذا كان الخبر حديثًا. مع رابط مقال نفحص المقال نفسه. الكلمة المؤقتة لا تغيّر كلمات هداية المحفوظة.
                 </p>
               </div>
             )}

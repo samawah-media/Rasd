@@ -470,6 +470,66 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("falls back to a news sitemap when Apify Google Search has not indexed a recent article", async () => {
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    const originalFetch = globalThis.fetch;
+    const term = "\u0633\u0641\u0627\u0631\u0629 \u00ab\u0623\u0631\u0636 \u0627\u0644\u0635\u0648\u0645\u0627\u0644\u00bb";
+    const title = "\u0627\u0644\u0633\u0639\u0648\u062f\u064a\u0629 \u064814 \u062f\u0648\u0644\u0629: \u0633\u0641\u0627\u0631\u0629 \u00ab\u0623\u0631\u0636 \u0627\u0644\u0635\u0648\u0645\u0627\u0644\u00bb \u0628\u0627\u0644\u0642\u062f\u0633 \u063a\u064a\u0631 \u0642\u0627\u0646\u0648\u0646\u064a\u0629 \u0648\u0645\u0631\u0641\u0648\u0636\u0629";
+
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("apify~google-search-scraper")) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url === "https://www.okaz.com.sa/robots.txt") {
+        return new Response("Sitemap: https://www.okaz.com.sa/sitemaps/news_sitemap.xml", {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (url === "https://www.okaz.com.sa/sitemaps/news_sitemap.xml") {
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?>
+          <urlset>
+            <url>
+              <loc>https://www.okaz.com.sa/local/na/2250043</loc>
+              <news:news>
+                <news:title>${title}</news:title>
+                <news:publication_date>2026-05-24T14:07:00+03:00</news:publication_date>
+              </news:news>
+            </url>
+          </urlset>`,
+          { status: 200, headers: { "content-type": "application/xml" } },
+        );
+      }
+      return new Response("", { status: 404 });
+    };
+
+    try {
+      const result = await requestJson("/api/sources/search-news", {
+        method: "POST",
+        body: JSON.stringify({
+          site_url: "https://www.okaz.com.sa/",
+          test_term: term,
+        }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.search.provider, "news_sitemap");
+      assert.equal(result.json.search.apifyError, "apify_google_search_empty");
+      assert.equal(result.json.search.fetched, 1);
+      assert.equal(result.json.search.created, 1);
+      assert.equal(result.json.search.results[0].source, "news_sitemap");
+      assert.equal(result.json.search.items[0].originalUrl, "https://www.okaz.com.sa/local/na/2250043");
+      assert.deepEqual(result.json.search.items[0].matchedTerms, [term]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
   it("polls active RSS sources with a small batch limit", async () => {
     const active = store.createSource({
       name: "Active RSS",
