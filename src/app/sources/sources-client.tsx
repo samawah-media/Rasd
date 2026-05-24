@@ -71,6 +71,19 @@ type ManualUrlTestResponse = {
   testTerm?: string;
 };
 
+type NewsSearchResponse = {
+  search: {
+    provider: string;
+    query: string;
+    fetched: number;
+    created: number;
+    duplicates: number;
+    failed: number;
+    error?: string;
+    items?: MonitoringItem[];
+  };
+};
+
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
 type SourceSection = "issues" | "keywords" | "news" | "social" | "x" | "archive";
 
@@ -240,6 +253,16 @@ function sourceRulePlatform(rule: SourceRule) {
 
 function sourceRuleTarget(rule: SourceRule) {
   return [rule.query, rule.url].filter(Boolean).join(" · ") || "بدون هدف";
+}
+
+function isSiteRootUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    const path = parsed.pathname.replace(/\/+$/u, "");
+    return path === "" || path === "/";
+  } catch {
+    return false;
+  }
 }
 
 function latestRunForRule(rule: SourceRule, runs: ConnectorRun[]) {
@@ -524,6 +547,11 @@ export function SourcesClient() {
 
   async function testNewsUrl(testUrl: string) {
     const testTerm = rssTestTerm.trim();
+    if (testTerm && isSiteRootUrl(testUrl)) {
+      await searchNewsSite(testUrl, testTerm);
+      return;
+    }
+
     setPending("news-url-test");
     setMessage(testTerm ? `جاري فحص رابط الخبر بكلمة مؤقتة: ${testTerm}...` : "جاري فحص رابط الخبر...");
     setMessageType("info");
@@ -542,6 +570,31 @@ export function SourcesClient() {
       setMessageType(result.item.state === "needs_review" ? "success" : "warning");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر فحص رابط الخبر.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function searchNewsSite(siteUrl: string, testTerm: string) {
+    setPending("news-site-search");
+    setMessage(`جاري البحث داخل الموقع عبر Apify: ${testTerm}...`);
+    setMessageType("info");
+
+    try {
+      const result = await apiJson<NewsSearchResponse>("/api/sources/search-news", {
+        method: "POST",
+        body: JSON.stringify({ site_url: siteUrl, test_term: testTerm, limit: 5 }),
+      });
+      await refreshSilently();
+      const fetched = result.search.fetched.toLocaleString("ar-SA");
+      const created = result.search.created.toLocaleString("ar-SA");
+      const duplicates = result.search.duplicates.toLocaleString("ar-SA");
+      const failed = result.search.failed.toLocaleString("ar-SA");
+      setMessage(`بحث Apify داخل الموقع: نتائج ${fetched}، جديد ${created}، مكرر ${duplicates}، متعثر ${failed}.`);
+      setMessageType(result.search.created > 0 ? "success" : "warning");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر البحث داخل الموقع عبر Apify.");
       setMessageType("error");
     } finally {
       setPending(null);
@@ -880,11 +933,11 @@ export function SourcesClient() {
                     />
                   </label>
                   <label className="min-w-0 flex-1">
-                    <span className="mb-1 block text-[11px] font-extrabold text-[#1d4f8f]">رابط خبر مباشر اختياري</span>
+                    <span className="mb-1 block text-[11px] font-extrabold text-[#1d4f8f]">رابط موقع أو خبر اختياري</span>
                     <input
                       value={newsTestUrl}
                       onChange={(event) => setNewsTestUrl(event.target.value)}
-                      placeholder="الصق رابط المقال هنا لاختباره مباشرة..."
+                      placeholder="الصق رابط الموقع للبحث داخله أو رابط المقال..."
                       className="h-10 w-full rounded-lg border border-[#c7d8f3] bg-white px-3 text-xs font-semibold outline-none transition focus:border-[#1f6feb]"
                     />
                   </label>
@@ -894,12 +947,12 @@ export function SourcesClient() {
                     disabled={pending !== null || (!newsTestUrl.trim() && !rssSources.some((source) => source.isActive))}
                     className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f6feb] px-4 text-xs font-extrabold text-white transition hover:bg-[#195ec9] disabled:opacity-50"
                   >
-                    {pending === "poll-active" || pending === "news-url-test" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                    {newsTestUrl.trim() ? "اختبر الرابط" : "اختبر RSS"}
+                    {pending === "poll-active" || pending === "news-url-test" || pending === "news-site-search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    {newsTestUrl.trim() ? (isSiteRootUrl(newsTestUrl.trim()) ? "ابحث داخل الموقع" : "اختبر الرابط") : "اختبر RSS"}
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] font-semibold leading-5 text-[var(--color-text-muted)]">
-                  بدون رابط، نفحص آخر مواد RSS. مع رابط مباشر، نفحص المقال نفسه ونحفظه في الرصد اليومي. الكلمة المؤقتة لا تغيّر كلمات هداية المحفوظة.
+                  بدون رابط، نفحص آخر مواد RSS. مع رابط موقع مثل okaz.com.sa نبحث داخله عبر Apify Google Search. مع رابط مقال نفحص المقال نفسه. الكلمة المؤقتة لا تغيّر كلمات هداية المحفوظة.
                 </p>
               </div>
             )}

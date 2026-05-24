@@ -12,12 +12,19 @@ export type ApifyHealth = {
   message: string;
 };
 
+export type ApifyGoogleSearchResult = {
+  title: string;
+  url: string;
+  description?: string;
+};
+
 type SocialPlatform = Extract<ExtractionResult["platform"], "TikTok" | "Instagram">;
 type FetchLike = typeof fetch;
 
 export const apifyTimeoutMs = 30_000;
 export const tiktokActorId = "clockworks/free-tiktok-scraper";
 export const instagramActorId = "apify/instagram-post-scraper";
+export const googleSearchActorId = "apify/google-search-scraper";
 
 export function isApifyConfigured() {
   return Boolean(cleanEnv(process.env.APIFY_API_TOKEN));
@@ -78,6 +85,46 @@ export async function runApifyActorDatasetItems(
   const token = cleanEnv(process.env.APIFY_API_TOKEN);
   if (!token) return { items: [], error: "apify_not_configured" };
   return runActor(actorId, payload, token, fetcher);
+}
+
+export async function searchNewsSiteWithApifyGoogle(
+  siteUrl: string,
+  term: string,
+  options: { maxResults?: number; fetcher?: FetchLike } = {},
+): Promise<{ results: ApifyGoogleSearchResult[]; query: string; error?: string }> {
+  const token = cleanEnv(process.env.APIFY_API_TOKEN);
+  const host = hostForSiteSearch(siteUrl);
+  const cleanTerm = term.trim();
+  const query = host && cleanTerm ? `site:${host} "${cleanTerm}"` : cleanTerm;
+  if (!token) return { results: [], query, error: "apify_not_configured" };
+  if (!host || !cleanTerm) return { results: [], query, error: "apify_search_input_invalid" };
+
+  const maxResults = clampNumber(options.maxResults ?? Number(process.env.APIFY_GOOGLE_SEARCH_MAX_RESULTS ?? 5), 1, 10);
+  const actorId = process.env.APIFY_GOOGLE_SEARCH_ACTOR || googleSearchActorId;
+  const { items, error } = await runActor(
+    actorId,
+    {
+      queries: query,
+      resultsPerPage: maxResults,
+      maxPagesPerQuery: 1,
+      countryCode: process.env.APIFY_GOOGLE_SEARCH_COUNTRY || "sa",
+      languageCode: process.env.APIFY_GOOGLE_SEARCH_LANGUAGE || "ar",
+      mobileResults: false,
+      saveHtml: false,
+      saveHtmlToKeyValueStore: false,
+    },
+    token,
+    options.fetcher ?? fetch,
+  );
+
+  const results = mapGoogleSearchItems(items)
+    .filter((result) => sameHostnameOrSubdomain(result.url, host))
+    .slice(0, maxResults);
+  return {
+    results,
+    query,
+    error: results.length ? undefined : error ?? "apify_google_search_empty",
+  };
 }
 
 export async function extractWithApify(
@@ -266,6 +313,78 @@ function firstObject(items: unknown[]) {
   return items.find((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)));
 }
 
+function mapGoogleSearchItems(items: unknown[]) {
+  const candidates: ApifyGoogleSearchResult[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    for (const nested of nestedSearchRows(row)) {
+      const result = googleResultFromObject(nested);
+      if (result) candidates.push(result);
+    }
+    const direct = googleResultFromObject(row);
+    if (direct) candidates.push(direct);
+  }
+
+  const seen = new Set<string>();
+  return candidates.filter((result) => {
+    const key = result.url;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function nestedSearchRows(row: Record<string, unknown>) {
+  const fields = ["organicResults", "organic_results", "results", "searchResults"];
+  return fields.flatMap((field) => {
+    const value = row[field];
+    return Array.isArray(value)
+      ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+      : [];
+  });
+}
+
+function googleResultFromObject(row: Record<string, unknown>): ApifyGoogleSearchResult | null {
+  const rawUrl =
+    stringValue(row.url) ??
+    stringValue(row.link) ??
+    stringValue(row.displayedUrl) ??
+    stringValue(row.displayUrl);
+  if (!rawUrl) return null;
+
+  let url: string;
+  try {
+    url = new URL(rawUrl).toString();
+  } catch {
+    return null;
+  }
+
+  const title = stringValue(row.title) ?? url;
+  return {
+    title,
+    url,
+    description: stringValue(row.description) ?? stringValue(row.snippet),
+  };
+}
+
+function hostForSiteSearch(siteUrl: string) {
+  try {
+    return new URL(siteUrl).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function sameHostnameOrSubdomain(url: string, host: string) {
+  try {
+    const candidate = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return candidate === host || candidate.endsWith(`.${host}`);
+  } catch {
+    return false;
+  }
+}
+
 function objectValue(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -305,6 +424,11 @@ function sanitizeApifyError(value: string) {
   const token = cleanEnv(process.env.APIFY_API_TOKEN);
   const sanitized = token ? value.replaceAll(token, "[APIFY_TOKEN_HIDDEN]") : value;
   return sanitized.length > 500 ? `${sanitized.slice(0, 497)}...` : sanitized;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
 function numberValue(value: unknown): number | undefined {
