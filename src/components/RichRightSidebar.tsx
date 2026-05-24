@@ -16,13 +16,13 @@ import {
 
 // Primary product mark for RASD.
 const SamawahLogoPlaceholder = () => (
-  <div className="flex items-center gap-3">
+  <div className="flex items-center gap-3 lg:flex-col lg:gap-1">
     <div className="w-10 h-10 rounded-lg bg-[#111111] flex items-center justify-center text-white font-extrabold text-sm shadow-sm border border-black/10">
       رصد
     </div>
-    <div className="flex flex-col text-right">
-      <span className="text-base font-extrabold leading-tight text-[var(--color-text-title)]">رصد</span>
-      <span className="text-[10px] font-semibold text-[var(--color-text-muted)]">منصة الرصد الإعلامي</span>
+    <div className="flex flex-col text-right lg:text-center">
+      <span className="text-base font-extrabold leading-tight text-[var(--color-text-title)] lg:text-sm">رصد</span>
+      <span className="text-[10px] font-semibold text-[var(--color-text-muted)] lg:hidden">منصة الرصد الإعلامي</span>
     </div>
   </div>
 );
@@ -58,7 +58,7 @@ export default function RichRightSidebar() {
 
   const menuItems = [
     {
-      title: "لوحة التشغيل",
+      title: "الرصد اليومي",
       subtitle: "إضافة وتصفية ومراجعة المحتوى",
       path: "/ops",
       icon: Cpu,
@@ -76,7 +76,7 @@ export default function RichRightSidebar() {
       icon: FileText,
     },
     {
-      title: "صحة الخوادم",
+      title: "الصحة والربط",
       subtitle: "مؤشرات حية لكفاءة المنصة",
       path: "/health",
       icon: Activity,
@@ -123,13 +123,13 @@ export default function RichRightSidebar() {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 right-0 w-80 bg-white border-l border-[var(--color-border)] flex flex-col z-50 transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 right-0 w-80 bg-white border-l border-[var(--color-border)] flex flex-col z-50 transition-transform duration-300 lg:w-28 lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         dir="rtl"
       >
         {/* Sidebar Header */}
-        <div className="h-20 border-b border-[var(--color-border)] px-6 flex items-center justify-between">
+        <div className="h-20 border-b border-[var(--color-border)] px-4 flex items-center justify-between lg:justify-center">
           <div>
             {isReportPage ? <HedayaLogo /> : <SamawahLogoPlaceholder />}
           </div>
@@ -143,7 +143,7 @@ export default function RichRightSidebar() {
         </div>
 
         {/* Sidebar Navigation Links (Circle.so style) */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path || Boolean(pathname?.startsWith(`${item.path}/`));
@@ -153,14 +153,14 @@ export default function RichRightSidebar() {
                 key={item.path}
                 href={item.path}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-4 p-3 rounded-lg transition-all duration-200 group active:scale-[0.97] ${
+                className={`flex items-center gap-4 p-3 rounded-lg transition-all duration-200 group active:scale-[0.97] lg:flex-col lg:gap-1.5 lg:px-2 lg:py-3 ${
                   isActive
-                    ? "bg-[#2383E2]/10 border-r-4 border-[#2383E2]"
+                    ? "bg-[#2383E2]/10 border-r-4 border-[#2383E2] lg:border-r-0 lg:border-l-2"
                     : "hover:bg-[var(--color-bg-hover)]"
                 }`}
               >
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors lg:h-8 lg:w-8 ${
                     isActive
                       ? "bg-[#2383E2] text-white"
                       : "bg-[#2383E2]/10 text-[#2383E2] group-hover:bg-[#2383E2] group-hover:text-white"
@@ -168,15 +168,15 @@ export default function RichRightSidebar() {
                 >
                   <Icon size={18} />
                 </div>
-                <div className="flex flex-col text-right">
+                <div className="flex flex-col text-right lg:text-center">
                   <span
-                    className={`text-sm font-semibold transition-colors ${
+                    className={`text-sm font-semibold transition-colors lg:text-[11px] ${
                       isActive ? "text-[#2383E2]" : "text-[var(--color-text-body)]"
                     }`}
                   >
                     {item.title}
                   </span>
-                  <span className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  <span className="text-[10px] text-[var(--color-text-muted)] mt-0.5 lg:hidden">
                     {item.subtitle}
                   </span>
                 </div>
@@ -186,7 +186,7 @@ export default function RichRightSidebar() {
         </nav>
 
         {/* Sidebar Footer Guardrail Info */}
-        <div className="p-4 border-t border-[var(--color-border)]">
+        <div className="p-4 border-t border-[var(--color-border)] lg:hidden">
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-title)]">
               <LockKeyhole size={14} className="text-[#2383E2]" />
@@ -200,7 +200,7 @@ export default function RichRightSidebar() {
       </aside>
 
       {/* Spacer for desktop layout so content doesn't get covered */}
-      <div className="hidden lg:block w-80 shrink-0" />
+      <div className="hidden lg:block w-28 shrink-0" />
     </>
   );
 }
