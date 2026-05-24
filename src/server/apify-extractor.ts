@@ -18,6 +18,10 @@ export type ApifyGoogleSearchResult = {
   description?: string;
 };
 
+export type NewsSiteSearchResult = ApifyGoogleSearchResult & {
+  source: "apify_google_search" | "news_sitemap";
+};
+
 type SocialPlatform = Extract<ExtractionResult["platform"], "TikTok" | "Instagram">;
 type FetchLike = typeof fetch;
 
@@ -91,7 +95,7 @@ export async function searchNewsSiteWithApifyGoogle(
   siteUrl: string,
   term: string,
   options: { maxResults?: number; fetcher?: FetchLike } = {},
-): Promise<{ results: ApifyGoogleSearchResult[]; query: string; error?: string }> {
+): Promise<{ results: NewsSiteSearchResult[]; query: string; error?: string }> {
   const token = cleanEnv(process.env.APIFY_API_TOKEN);
   const host = hostForSiteSearch(siteUrl);
   const cleanTerm = term.trim();
@@ -119,11 +123,52 @@ export async function searchNewsSiteWithApifyGoogle(
 
   const results = mapGoogleSearchItems(items)
     .filter((result) => sameHostnameOrSubdomain(result.url, host))
-    .slice(0, maxResults);
+    .slice(0, maxResults)
+    .map((result) => ({ ...result, source: "apify_google_search" as const }));
   return {
     results,
     query,
     error: results.length ? undefined : error ?? "apify_google_search_empty",
+  };
+}
+
+export async function searchNewsSiteSitemap(
+  siteUrl: string,
+  term: string,
+  options: { maxResults?: number; fetcher?: FetchLike } = {},
+): Promise<{ results: NewsSiteSearchResult[]; searched: string[]; error?: string }> {
+  const host = hostForSiteSearch(siteUrl);
+  const cleanTerm = term.trim();
+  if (!host || !cleanTerm) return { results: [], searched: [], error: "news_sitemap_input_invalid" };
+
+  const maxResults = clampNumber(options.maxResults ?? 5, 1, 10);
+  const fetcher = options.fetcher ?? fetch;
+  const sitemapUrls = await discoverNewsSitemaps(siteUrl, fetcher);
+  const searched: string[] = [];
+  const results: NewsSiteSearchResult[] = [];
+
+  for (const sitemapUrl of sitemapUrls) {
+    if (results.length >= maxResults) break;
+    searched.push(sitemapUrl);
+    const xml = await fetchText(sitemapUrl, fetcher);
+    if (!xml) continue;
+    for (const row of parseNewsSitemap(xml)) {
+      if (results.length >= maxResults) break;
+      if (!sameHostnameOrSubdomain(row.url, host)) continue;
+      if (!matchesNewsTerm([row.title, row.description, row.url], cleanTerm)) continue;
+      results.push({
+        title: row.title || row.url,
+        url: row.url,
+        description: row.description,
+        source: "news_sitemap",
+      });
+    }
+  }
+
+  return {
+    results,
+    searched,
+    error: results.length ? undefined : "news_sitemap_empty",
   };
 }
 
@@ -366,6 +411,108 @@ function googleResultFromObject(row: Record<string, unknown>): ApifyGoogleSearch
     url,
     description: stringValue(row.description) ?? stringValue(row.snippet),
   };
+}
+
+async function discoverNewsSitemaps(siteUrl: string, fetcher: FetchLike) {
+  const root = new URL(siteUrl);
+  const origin = root.origin;
+  const robots = await fetchText(`${origin}/robots.txt`, fetcher);
+  const fromRobots =
+    robots
+      ?.split(/\r?\n/u)
+      .map((line) => line.match(/^\s*sitemap:\s*(\S+)/iu)?.[1])
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => sitemapPriority(b) - sitemapPriority(a)) ?? [];
+
+  return uniqueStrings([
+    ...fromRobots,
+    `${origin}/sitemaps/news_sitemap.xml`,
+    `${origin}/news_sitemap.xml`,
+    `${origin}/sitemap-news.xml`,
+    `${origin}/sitemap.xml`,
+  ]).slice(0, 6);
+}
+
+async function fetchText(url: string, fetcher: FetchLike) {
+  try {
+    const response = await fetchWithTimeout(url, fetcher, {
+      method: "GET",
+      headers: { accept: "application/xml,text/xml,text/plain,*/*" },
+    });
+    if (!response.ok) return undefined;
+    return await response.text();
+  } catch {
+    return undefined;
+  }
+}
+
+function parseNewsSitemap(xml: string) {
+  const rows: Array<{ url: string; title: string; description?: string }> = [];
+  for (const block of xml.matchAll(/<url\b[\s\S]*?<\/url>/giu)) {
+    const value = block[0];
+    const url = decodeXml(xmlTag(value, "loc") ?? "");
+    if (!url) continue;
+    const title = decodeXml(xmlTag(value, "news:title") ?? xmlTag(value, "title") ?? url);
+    const publishedAt = decodeXml(xmlTag(value, "news:publication_date") ?? "");
+    rows.push({
+      url,
+      title,
+      description: publishedAt ? `Published ${publishedAt}` : undefined,
+    });
+  }
+  return rows;
+}
+
+function xmlTag(xml: string, tag: string) {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = xml.match(new RegExp(`<${escaped}[^>]*>\\s*(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?\\s*<\\/${escaped}>`, "iu"));
+  return match?.[1]?.trim();
+}
+
+function decodeXml(value: string) {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .trim();
+}
+
+function matchesNewsTerm(values: Array<string | undefined>, term: string) {
+  const normalizedTerm = normalizeSearchText(term);
+  const relaxedTerm = normalizeSearchText(term.replace(/[«»"']/gu, " "));
+  return values.some((value) => {
+    const normalizedValue = normalizeSearchText(value ?? "");
+    return normalizedValue.includes(normalizedTerm) || (relaxedTerm.length > 3 && normalizedValue.includes(relaxedTerm));
+  });
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFKC")
+    .replace(/[ًٌٍَُِّْـ]/gu, "")
+    .replace(/[إأآ]/gu, "ا")
+    .replace(/ى/gu, "ي")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function sitemapPriority(url: string) {
+  const lower = url.toLowerCase();
+  if (lower.includes("news")) return 3;
+  if (lower.includes("sitemap")) return 1;
+  return 0;
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
 }
 
 function hostForSiteSearch(siteUrl: string) {
