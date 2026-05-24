@@ -155,6 +155,7 @@ const arabicApiErrors: Record<string, string> = {
   request_failed: "تعذر إتمام الطلب. حاول مرة أخرى.",
   archive_failed: "تعذرت أرشفة المادة.",
   xai_api_key_missing: "محرك بحث X الحقيقي غير مفعّل. أضف XAI_API_KEY أو استخدم mock_search للتجربة.",
+  x_search_provider_not_ready: "محرك بحث X غير جاهز. راجع صفحة صحة الخوادم أو إعدادات Vercel.",
   no_keyword_rules_configured: "لا توجد قاعدة كلمات مفتاحية لتشغيل البحث.",
   search_failed: "تعذر تشغيل بحث X.",
 };
@@ -168,6 +169,8 @@ const tabLabels: Record<WorkTab, string> = {
 };
 
 function arabicError(key: string): string {
+  if (key.startsWith("xai_no_credits")) return "محرك XAI لا يملك رصيدًا كافيًا لتشغيل بحث X.";
+  if (key.startsWith("xai_api_error")) return "تعذر الاتصال بمحرك XAI. راجع مفتاح XAI_API_KEY أو حالة الخدمة.";
   if (key.startsWith("rss_fetch_failed")) return arabicApiErrors.rss_fetch_failed;
   return arabicApiErrors[key] ?? key;
 }

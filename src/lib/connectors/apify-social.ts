@@ -77,14 +77,29 @@ function buildTikTokInput(rule: SourceRule) {
 
 function buildInstagramInput(rule: SourceRule) {
   const maxItems = getApifyAutoMaxItems();
-  const directUrl = rule.url || rule.query || "";
+  const username = instagramUsernameFromRule(rule);
   return {
-    directUrls: [directUrl],
-    resultsType: "posts",
+    username: [username],
     resultsLimit: maxItems,
-    searchLimit: 1,
-    addParentData: false,
+    skipPinnedPosts: true,
+    dataDetailLevel: "basicData",
   };
+}
+
+function instagramUsernameFromRule(rule: SourceRule) {
+  const raw = (rule.url || rule.query || "").trim();
+  if (!raw) return "instagram";
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.replace(/^www\./u, "").toLowerCase();
+    if (host === "instagram.com" || host === "instagr.am") {
+      const segment = url.pathname.split("/").filter(Boolean)[0];
+      if (segment) return segment.replace(/^@/u, "");
+    }
+  } catch {
+    // Fall through to handle-like input.
+  }
+  return raw.replace(/^https?:\/\/(?:www\.)?instagram\.com\//iu, "").split(/[/?#]/u)[0]?.replace(/^@/u, "") || raw.replace(/^@/u, "");
 }
 
 function toIngestedItem(

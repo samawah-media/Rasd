@@ -1,206 +1,210 @@
 import React from "react";
 import Link from "next/link";
-import { ArrowLeft, ShieldCheck, HelpCircle, Activity } from "lucide-react";
+import { Activity, ArrowLeft, FileCheck2, ShieldCheck, Sparkles } from "lucide-react";
 import { adminRoles } from "@/lib/auth-config";
 import { requireRole } from "@/server/auth";
 import AnimatedWorkflowHero from "@/components/AnimatedWorkflowHero";
 
-// Samawah Logo Placeholder
 const SamawahIcon = () => (
-  <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#2383E2] to-[#00C853] flex items-center justify-center text-white font-extrabold text-3xl shadow-md border border-white/20">
+  <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,#163b33,#1f7a5d)] text-3xl font-bold text-white shadow-[0_18px_40px_rgba(22,59,51,0.28)]">
     س
   </div>
 );
 
-// Hedaya Hackathon Logo Scraped Asset
 const HedayaIcon = () => (
-  <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center border border-[#204733]/20 p-2 shadow-md">
+  <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-[#1f4d3f]/10 bg-white p-2 shadow-[0_16px_36px_rgba(15,23,32,0.12)]">
     {/* eslint-disable-next-line @next/next/no-img-element */}
     <img
       src="https://hedayathon.com/assets/images/uploads/header/68f724bfa13a4.png"
       alt="شعار هداية"
-      className="w-full h-full object-contain"
+      className="h-full w-full object-contain"
     />
   </div>
 );
 
+const clientPoints = [
+  "شوف التقرير النهائي بسرعة",
+  "تصفح المواد المعتمدة بوضوح",
+  "افتح الروابط والأدلة من نفس المكان",
+];
+
+const opsPoints = [
+  "تابع المواد أول بأول",
+  "اعتمد أو ارفض من نفس المسار",
+  "خل التقرير جاهز بدون لخبطة",
+];
+
 export default async function Home() {
-  // Ensure the user is fully logged in with correct administrative/operational roles
   await requireRole(adminRoles, "/");
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-main)] text-[var(--color-text-body)] font-sans relative overflow-x-hidden" dir="rtl">
+    <div
+      className="relative min-h-screen overflow-x-hidden bg-[#f3f7f1] text-[var(--color-text-body)]"
+      dir="rtl"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,197,94,0.1),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(37,99,235,0.08),transparent_26%)]" />
+      <div className="absolute inset-0 opacity-[0.05] [background-image:linear-gradient(rgba(20,65,52,0.75)_1px,transparent_1px),linear-gradient(90deg,rgba(20,65,52,0.75)_1px,transparent_1px)] [background-size:36px_36px]" />
 
-      {/* Decorative Top Gradient bar */}
-      <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-[#2383E2] via-[#204733] to-[#00C853]" />
+      <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-10">
+        <main className="overflow-hidden rounded-[36px] border border-white/60 bg-white/78 p-5 shadow-[0_30px_90px_rgba(15,23,32,0.08)] backdrop-blur-xl md:p-8">
+          <section className="mb-8">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+              <div>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#1f7a5d]/10 bg-[#1f7a5d]/8 px-3 py-1 text-[11px] font-semibold text-[#1f6a53]">
+                  <Activity size={14} />
+                  الرصد من أول لحظة إلى التقرير
+                </span>
 
-      {/* Modern Background Subtle Grid Patterns */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.05] bg-[linear-gradient(to_right,#808080_1px,transparent_1px),linear-gradient(to_bottom,#808080_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[300px] bg-gradient-to-b from-[#2383E2]/10 to-transparent blur-[120px] pointer-events-none" />
+                <h1 className="mt-4 text-4xl font-bold tracking-tight text-[#12211d] md:text-6xl">
+                  منصة رصد إعلامي
+                </h1>
 
-      {/* Main Container */}
-      <div className="max-w-6xl mx-auto px-4 py-12 md:py-16 flex flex-col items-center justify-between min-h-screen relative z-10">
+                <p className="mt-4 max-w-2xl text-sm leading-8 text-[#496057] md:text-base">
+                  نرصد المحتوى، نرتبه، ونحوّله لتقارير واضحة وجاهزة للمشاركة. والصفحة الرئيسية
+                  صارت تعطيك إحساس حي بالرصد بدل ما تكون مجرد مدخل ثابت.
+                </p>
 
-        {/* Header Branding */}
-        <header className="w-full flex flex-col items-center text-center mb-10 md:mb-12">
-          {/* Pulsing AI Activity Badge */}
-          <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-widest text-[#2383E2] bg-[#2383E2]/5 border border-[#2383E2]/15 px-4 py-1.5 rounded-full shadow-sm mb-6 animate-pulse select-none">
-            <Activity size={14} className="text-[#00C853]" />
-            <span>نظام رصد الذكي يعمل بأعلى كفاءة</span>
-          </div>
+                <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-[#24463b]">
+                  <span className="rounded-full border border-[#dbe8de] bg-[#f8fbf8] px-3 py-1.5">
+                    اعتماد ورفض بشكل مباشر
+                  </span>
+                  <span className="rounded-full border border-[#dbe8de] bg-[#f8fbf8] px-3 py-1.5">
+                    بوابة عميل أوضح
+                  </span>
+                  <span className="rounded-full border border-[#dbe8de] bg-[#f8fbf8] px-3 py-1.5">
+                    تشغيل يومي مرتب
+                  </span>
+                </div>
+              </div>
 
-          {/* Core Arabic Title */}
-          <h1 className="text-4xl md:text-6xl font-black text-[var(--color-text-title)] tracking-tight drop-shadow-sm">
-            منصة رصد إعلامي
-          </h1>
+              <div className="rounded-[30px] border border-[#dbe8de] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] p-5 shadow-[0_22px_50px_rgba(15,23,32,0.05)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <HedayaIcon />
+                    <div>
+                      <p className="text-sm font-bold text-[#12211d]">هداية</p>
+                      <p className="text-xs text-[#62786f]">واجهة التقرير والمواد المعتمدة</p>
+                    </div>
+                  </div>
 
-          {/* Connected Logos Side-by-Side with Glow */}
-          <div className="relative my-8 flex items-center justify-center gap-6">
-            {/* Glowing background blur behind logos */}
-            <div className="absolute inset-0 w-44 h-20 bg-gradient-to-r from-[#2383E2]/20 to-[#00C853]/20 blur-2xl -z-10 rounded-full animate-pulse" />
-            
-            <div className="transform hover:scale-105 transition-transform duration-300">
-              <HedayaIcon />
+                  <div className="h-px flex-1 bg-[linear-gradient(90deg,rgba(31,122,93,0),rgba(31,122,93,0.25),rgba(31,122,93,0))]" />
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-[#12211d]">سماوة</p>
+                      <p className="text-xs text-[#62786f]">غرفة الرصد والعمليات</p>
+                    </div>
+                    <SamawahIcon />
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[22px] border border-[#ddeae0] bg-white p-4">
+                    <div className="flex items-center gap-2 text-[#1f6a53]">
+                      <FileCheck2 size={16} />
+                      <span className="text-sm font-semibold">تقرير أوضح</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-6 text-[#5e756d]">
+                      المواد المعتمدة تظهر بشكل أسهل وأسرع للعميل.
+                    </p>
+                  </div>
+
+                  <div className="rounded-[22px] border border-[#ddeae0] bg-white p-4">
+                    <div className="flex items-center gap-2 text-[#1f6a53]">
+                      <ShieldCheck size={16} />
+                      <span className="text-sm font-semibold">قرار أوضح</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-6 text-[#5e756d]">
+                      الاعتماد والرفض صاروا ظاهرين بصريًا من أول نظرة.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="w-8 h-[1px] bg-stone-300 flex items-center justify-center text-[10px] text-stone-400 font-bold select-none">
-              &
-            </div>
-            <div className="transform hover:scale-105 transition-transform duration-300">
-              <SamawahIcon />
-            </div>
-          </div>
+          </section>
 
-          {/* Clean English Tagline (observability focus) */}
-          <div className="mt-2 p-4 bg-white/40 border border-stone-200/50 rounded-2xl max-w-2xl shadow-sm backdrop-blur-[2px] transition hover:border-[#2383E2]/20">
-            <p className="text-sm md:text-base font-extrabold text-[#2383E2] tracking-wide font-mono">
-              AI-Powered Observability and Security
-            </p>
-            <p className="text-xs md:text-sm text-stone-600 mt-1 font-semibold leading-relaxed">
-              See inside any stack, any app, at any scale, anywhere.
-            </p>
-            <p className="text-[11px] md:text-xs text-[#00C853] font-bold mt-1.5 tracking-wider font-mono">
-              AI-Powered Automation for Every Decision
-            </p>
-          </div>
-        </header>
-
-        {/* Daydream workflow timeline component */}
-        <section className="w-full mb-12 md:mb-16">
           <AnimatedWorkflowHero />
-        </section>
 
-        {/* Massive Landing Choice Cards with Hover Animations */}
-        <section className="w-full grid gap-8 md:grid-cols-2 max-w-5xl mx-auto mb-16">
+          <section className="mt-8 grid gap-4 lg:grid-cols-2">
+            <article className="group rounded-[30px] border border-[#dce8de] bg-[linear-gradient(180deg,#ffffff,#f5faf6)] p-6 shadow-[0_18px_50px_rgba(15,23,32,0.05)] transition-transform duration-300 hover:-translate-y-1">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="inline-flex rounded-full border border-[#1f7a5d]/10 bg-[#1f7a5d]/8 px-3 py-1 text-[11px] font-semibold text-[#1f6a53]">
+                    واجهة التقرير
+                  </span>
+                  <h2 className="mt-4 text-2xl font-bold text-[#12211d]">بوابة العميل</h2>
+                  <p className="mt-3 max-w-md text-sm leading-7 text-[#5b7169]">
+                    هنا يشوف العميل التقرير النهائي والمواد المعتمدة بطريقة مرتبة وواضحة.
+                  </p>
+                </div>
 
-          {/* 1. Hedaya Portal Card */}
-          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-2xl hover:scale-[1.02] hover:border-[#204733]/20 transition-all duration-300 flex flex-col justify-between overflow-hidden">
-            {/* Background blur gradient */}
-            <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#204733]/5 rounded-full blur-3xl group-hover:bg-[#204733]/10 transition-colors duration-300" />
-
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
                 <HedayaIcon />
-                <span className="text-[10px] font-extrabold text-[#c0912d] bg-[#204733]/5 border border-[#204733]/10 px-2.5 py-1 rounded-md">
-                  بوابة تقرير رصد العميل
-                </span>
               </div>
 
-              <h2 className="text-xl md:text-2xl font-black text-[#204733] mb-3 flex items-center gap-1.5">
-                هاكاثون هداية
-              </h2>
-              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
-                تقارير وإحصائيات فورية وتغطيات معتمدة للشؤون الدينية بالحرمين الشريفين. اضغط تحت وادخل تقرير العميل الفخم.
-              </p>
+              <div className="mt-5 space-y-3">
+                {clientPoints.map((point) => (
+                  <div
+                    key={point}
+                    className="rounded-2xl border border-[#e3ece5] bg-white px-4 py-3 text-sm text-[#28473d]"
+                  >
+                    {point}
+                  </div>
+                ))}
+              </div>
 
-              {/* Bullet Features */}
-              <ul className="space-y-3.5 mb-8 text-xs font-semibold text-[var(--color-text-body)]">
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
-                  <span>تصفّح التقرير التنفيذي العام</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
-                  <span>شوف تحليل مشاعر الناس وتصنيف التغريدات</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00C853] animate-pulse" />
-                  <span>شارك روابط التقرير بضغطة زر مع الإدارة</span>
-                </li>
-              </ul>
-            </div>
+              <Link
+                href="/client-report"
+                className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[18px] bg-[#153c33] text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#0f3028]"
+              >
+                دخول بوابة العميل
+                <ArrowLeft size={16} className="transition-transform duration-300 group-hover:-translate-x-1" />
+              </Link>
+            </article>
 
-            <Link
-              href="/client-report"
-              className="relative z-10 w-full h-12 rounded-2xl bg-[#204733] hover:bg-[#1a3829] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
-            >
-              <span>دخول بوابة هداية من هنا</span>
-              <ArrowLeft size={16} className="group-hover:-translate-x-1.5 transition-transform duration-300" />
-            </Link>
-          </div>
+            <article className="group rounded-[30px] border border-[#dce3ef] bg-[linear-gradient(180deg,#ffffff,#f4f8ff)] p-6 shadow-[0_18px_50px_rgba(15,23,32,0.05)] transition-transform duration-300 hover:-translate-y-1">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="inline-flex rounded-full border border-[#2563eb]/10 bg-[#2563eb]/8 px-3 py-1 text-[11px] font-semibold text-[#2458cb]">
+                    غرفة الرصد
+                  </span>
+                  <h2 className="mt-4 text-2xl font-bold text-[#12211d]">غرفة العمليات</h2>
+                  <p className="mt-3 max-w-md text-sm leading-7 text-[#5b7169]">
+                    هنا يشتغل الفريق على الرصد والمراجعة والاعتماد قبل ما تدخل المواد في التقرير.
+                  </p>
+                </div>
 
-          {/* 2. Samawah Operations Dashboard Card */}
-          <div className="group relative rounded-3xl border border-[var(--color-border)] bg-white p-8 shadow-sm hover:shadow-2xl hover:scale-[1.02] hover:border-[#2383E2]/20 transition-all duration-300 flex flex-col justify-between overflow-hidden">
-            {/* Background blur gradient */}
-            <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#2383E2]/5 rounded-full blur-3xl group-hover:bg-[#2383E2]/10 transition-colors duration-300" />
-
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
                 <SamawahIcon />
-                <span className="text-[10px] font-extrabold text-[#2383E2] bg-[#2383E2]/5 border border-[#2383E2]/10 px-2.5 py-1 rounded-md">
-                  لوحة المتابعة التشغيلية والأدمن
-                </span>
               </div>
 
-              <h2 className="text-xl md:text-2xl font-black text-[var(--color-text-title)] mb-3 flex items-center gap-1.5">
-                غرفة الرصد والعمليات (سماوة)
-              </h2>
-              <p className="text-xs md:text-sm text-[var(--color-text-muted)] leading-relaxed mb-6 font-semibold">
-                من هنا تتحكم بكل شيء وتتابع سير العمل وتلقيم الروابط والتدقيق البشري وإقرار التغطيات وصحة الخوادم.
-              </p>
+              <div className="mt-5 space-y-3">
+                {opsPoints.map((point) => (
+                  <div
+                    key={point}
+                    className="rounded-2xl border border-[#e2e8f4] bg-white px-4 py-3 text-sm text-[#28473d]"
+                  >
+                    {point}
+                  </div>
+                ))}
+              </div>
 
-              {/* Bullet Features */}
-              <ul className="space-y-3.5 mb-8 text-xs font-semibold text-[var(--color-text-body)]">
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
-                  <span>تلقيم واستيراد روابط التغريدات والأخبار</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
-                  <span>تتبع خوادمنا وصحتها وشغلها بالملي</span>
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2383E2] animate-pulse" />
-                  <span>إدارة صلاحيات المشرفين والوصول</span>
-                </li>
-              </ul>
+              <Link
+                href="/ops"
+                className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-[18px] bg-[#2563eb] text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#1e54c7]"
+              >
+                دخول غرفة العمليات
+                <ArrowLeft size={16} className="transition-transform duration-300 group-hover:-translate-x-1" />
+              </Link>
+            </article>
+          </section>
+
+          <footer className="mt-8 flex flex-col gap-3 border-t border-[#e1e8e2] pt-6 text-xs text-[#60766d] md:flex-row md:items-center md:justify-between">
+            <p>منصة لإدارة الرصد والتقارير بشكل أوضح وأسهل للفريق والعميل.</p>
+            <div className="flex items-center gap-2 text-[#24463b]">
+              <Sparkles size={14} />
+              <span>تجربة أحدث، وحركة أوضح، وقرارات تبان من أول نظرة.</span>
             </div>
-
-            <Link
-              href="/ops"
-              className="relative z-10 w-full h-12 rounded-2xl bg-[#2383E2] hover:bg-[#1b6ec4] text-white flex items-center justify-center gap-2 text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-[0.98]"
-            >
-              <span>دخول غرفة العمليات من هنا</span>
-              <ArrowLeft size={16} className="group-hover:-translate-x-1.5 transition-transform duration-300" />
-            </Link>
-          </div>
-
-        </section>
-
-        {/* Footer info & security */}
-        <footer className="w-full flex flex-col md:flex-row items-center justify-between gap-4 border-t border-[var(--color-border)] pt-8 pb-4 text-xs font-semibold text-[var(--color-text-muted)] select-none">
-          <div className="flex items-center gap-2">
-            <ShieldCheck size={16} className="text-[#00C853] animate-pulse" />
-            <span>الاتصال مشفر ومؤمن بالكامل عبر بروتوكولات حماية الأنظمة</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] text-[#2383E2] bg-[#2383E2]/5 px-2 py-0.5 rounded">إصدار منصة التشغيل: 1.0.5</span>
-            <div className="flex items-center gap-1 hover:text-[var(--color-text-title)] cursor-pointer transition-colors">
-              <HelpCircle size={14} />
-              <span>المساعدة والدعم الفني</span>
-            </div>
-          </div>
-        </footer>
-
+          </footer>
+        </main>
       </div>
     </div>
   );
