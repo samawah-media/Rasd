@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   Database,
   Cpu,
   FileText,
@@ -11,18 +12,13 @@ import {
   X,
   LockKeyhole,
   Settings,
-  Activity
 } from "lucide-react";
 
 // Primary product mark for RASD.
-const SamawahLogoPlaceholder = () => (
-  <div className="flex items-center gap-3 lg:flex-col lg:gap-1">
-    <div className="w-10 h-10 rounded-lg bg-[#111111] flex items-center justify-center text-white font-extrabold text-sm shadow-sm border border-black/10">
+const RasdLogo = () => (
+  <div className="flex items-center">
+    <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-black/10 bg-[#111111] text-sm font-extrabold text-white shadow-sm">
       رصد
-    </div>
-    <div className="flex flex-col text-right lg:text-center">
-      <span className="text-base font-extrabold leading-tight text-[var(--color-text-title)] lg:text-sm">رصد</span>
-      <span className="text-[10px] font-semibold text-[var(--color-text-muted)] lg:hidden">منصة الرصد الإعلامي</span>
     </div>
   </div>
 );
@@ -59,37 +55,37 @@ export default function RichRightSidebar() {
   const menuItems = [
     {
       title: "الرصد اليومي",
-      subtitle: "إضافة وتصفية ومراجعة المحتوى",
+      subtitle: "مراجعة المحتوى واعتماده",
       path: "/ops",
       icon: Cpu,
     },
     {
       title: "البث المباشر",
-      subtitle: "متابعة المواد لحظة بلحظة",
+      subtitle: "المواد أول بأول",
       path: "/feed",
       icon: Activity,
     },
     {
       title: "التقارير",
-      subtitle: "الواجهة النهائية للأنيق للعميل",
+      subtitle: "بوابة فريق هداية",
       path: "/client-report",
       icon: FileText,
     },
     {
       title: "الصحة والربط",
-      subtitle: "مؤشرات حية لكفاءة المنصة",
+      subtitle: "حالة النظام والتكاملات",
       path: "/health",
       icon: Activity,
     },
     {
       title: "المصادر",
-      subtitle: "إدارة الـ RSS والكلمات الدالة",
+      subtitle: "قنوات الرصد والكلمات",
       path: "/sources",
       icon: Database,
     },
     {
       title: "الإعدادات",
-      subtitle: "تخصيص الهوية والربط التقني",
+      subtitle: "الهوية والربط التقني",
       path: "/settings",
       icon: Settings,
     },
@@ -109,7 +105,7 @@ export default function RichRightSidebar() {
           <Menu size={24} />
         </button>
         <div className="scale-90">
-          {isReportPage ? <HedayaLogo /> : <SamawahLogoPlaceholder />}
+          {isReportPage ? <HedayaLogo /> : <RasdLogo />}
         </div>
       </div>
 
@@ -123,15 +119,15 @@ export default function RichRightSidebar() {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 right-0 w-80 bg-white border-l border-[var(--color-border)] flex flex-col z-50 transition-transform duration-300 lg:w-28 lg:translate-x-0 ${
+        className={`fixed bottom-0 right-0 top-0 z-50 flex w-[min(86vw,320px)] flex-col border-l border-[var(--color-border)] bg-white shadow-2xl transition-transform duration-300 lg:w-[292px] lg:translate-x-0 lg:shadow-none ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         dir="rtl"
       >
         {/* Sidebar Header */}
-        <div className="h-20 border-b border-[var(--color-border)] px-4 flex items-center justify-between lg:justify-center">
+        <div className="flex h-20 items-center justify-between border-b border-[var(--color-border)] px-5">
           <div>
-            {isReportPage ? <HedayaLogo /> : <SamawahLogoPlaceholder />}
+            {isReportPage ? <HedayaLogo /> : <RasdLogo />}
           </div>
           <button
             onClick={handleToggle}
@@ -143,7 +139,7 @@ export default function RichRightSidebar() {
         </div>
 
         {/* Sidebar Navigation Links (Circle.so style) */}
-        <nav className="flex-1 px-3 py-4 space-y-2 overflow-y-auto">
+        <nav className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:overflow-visible">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path || Boolean(pathname?.startsWith(`${item.path}/`));
@@ -153,30 +149,30 @@ export default function RichRightSidebar() {
                 key={item.path}
                 href={item.path}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-4 p-3 rounded-lg transition-all duration-200 group active:scale-[0.97] lg:flex-col lg:gap-1.5 lg:px-2 lg:py-3 ${
+                className={`group flex items-center gap-3.5 rounded-lg border px-3.5 py-3 text-right transition-all duration-200 active:scale-[0.98] ${
                   isActive
-                    ? "bg-[#2383E2]/10 border-r-4 border-[#2383E2] lg:border-r-0 lg:border-l-2"
-                    : "hover:bg-[var(--color-bg-hover)]"
+                    ? "border-[#c7dfcf] bg-[#f2f8f4] shadow-sm"
+                    : "border-transparent hover:border-[#dce8df] hover:bg-[#f8faf8]"
                 }`}
               >
                 <div
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors lg:h-8 lg:w-8 ${
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors ${
                     isActive
-                      ? "bg-[#2383E2] text-white"
-                      : "bg-[#2383E2]/10 text-[#2383E2] group-hover:bg-[#2383E2] group-hover:text-white"
+                      ? "bg-[#204733] text-white"
+                      : "bg-[#204733]/10 text-[#204733] group-hover:bg-[#204733] group-hover:text-white"
                   }`}
                 >
                   <Icon size={18} />
                 </div>
-                <div className="flex flex-col text-right lg:text-center">
+                <div className="min-w-0 flex flex-col text-right">
                   <span
-                    className={`text-sm font-semibold transition-colors lg:text-[11px] ${
-                      isActive ? "text-[#2383E2]" : "text-[var(--color-text-body)]"
+                    className={`text-sm font-bold transition-colors ${
+                      isActive ? "text-[#204733]" : "text-[var(--color-text-body)]"
                     }`}
                   >
                     {item.title}
                   </span>
-                  <span className="text-[10px] text-[var(--color-text-muted)] mt-0.5 lg:hidden">
+                  <span className="mt-0.5 truncate text-[11px] font-semibold text-[var(--color-text-muted)]">
                     {item.subtitle}
                   </span>
                 </div>
@@ -186,21 +182,21 @@ export default function RichRightSidebar() {
         </nav>
 
         {/* Sidebar Footer Guardrail Info */}
-        <div className="p-4 border-t border-[var(--color-border)] lg:hidden">
-          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
+        <div className="border-t border-[var(--color-border)] p-4">
+          <div className="flex flex-col gap-2 rounded-lg border border-[#dce8df] bg-[#f7faf7] p-3.5">
             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-title)]">
-              <LockKeyhole size={14} className="text-[#2383E2]" />
-              <span>المنصة تحت الحماية والرقابة</span>
+              <LockKeyhole size={14} className="text-[#204733]" />
+              <span>المنصة مؤمنة</span>
             </div>
-            <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
-              تطمن، حماية استهلاك السيرفر والتكاليف شغالين بأعلى كفاءة لضمان سرعة الرصد.
+            <p className="text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+              الرصد والربط تحت المتابعة باستمرار.
             </p>
           </div>
         </div>
       </aside>
 
       {/* Spacer for desktop layout so content doesn't get covered */}
-      <div className="hidden lg:block w-28 shrink-0" />
+      <div className="hidden w-[292px] shrink-0 lg:block" />
     </>
   );
 }
