@@ -1213,13 +1213,27 @@ function MonitoringRow({
 }) {
   return (
     <div className={`grid gap-3 rounded-lg border p-3 transition sm:grid-cols-[88px_minmax(0,1fr)_86px] ${selected ? "border-[#2563eb] bg-[#f8fbff]" : "border-[var(--color-border)] bg-white"}`}>
-      <button type="button" onClick={onSelect} className="min-w-0 text-right sm:order-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <PlatformBadge label={platformLabel(item)} />
-          <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
-        </div>
-        <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[var(--color-text-title)]">{item.title}</h3>
-        <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{item.summary}</p>
+      <div className="min-w-0 text-right sm:order-2">
+        <button type="button" onClick={onSelect} className="block w-full min-w-0 text-right">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <PlatformBadge label={platformLabel(item)} />
+            <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
+          </div>
+          <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[var(--color-text-title)]">{item.title}</h3>
+          <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{item.summary}</p>
+        </button>
+        {item.originalUrl ? (
+          <a
+            href={item.originalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#c7d8f3] bg-[#f6f9ff] px-2 py-1 text-[10px] font-extrabold text-[#1f6feb] hover:border-[#1f6feb]/50"
+            title={item.originalUrl}
+          >
+            <LinkIcon className="h-3 w-3 shrink-0" />
+            <span className="truncate" dir="ltr">{item.originalUrl}</span>
+          </a>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-1">
           {item.matchedTerms.slice(0, 4).map((term) => (
             <span key={term} className="rounded-md bg-[#e8f5ef] px-1.5 py-0.5 text-[9px] font-bold text-[#15803d]">
@@ -1227,7 +1241,7 @@ function MonitoringRow({
             </span>
           ))}
         </div>
-      </button>
+      </div>
 
       <button type="button" onClick={onSelect} className="relative h-24 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] sm:order-3">
         {asset ? (
