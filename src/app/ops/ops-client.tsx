@@ -7,24 +7,17 @@ import {
   BarChart3,
   Camera,
   Check,
-  ChevronLeft,
-  Clock,
   CircleCheck,
   Eye,
   Filter,
   Globe,
   Link as LinkIcon,
   Loader2,
-  Pause,
-  Pencil,
-  Play,
   Plus,
   RefreshCw,
   Search,
-  Shield,
   Sparkles,
   Trash2,
-  Database,
 } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 import AppShell from "@/components/AppShell";
@@ -280,13 +273,6 @@ function messageClass(type: MessageType) {
   if (type === "warning") return "border-[#eed478] bg-[#fff8dc] text-[#735d00]";
   if (type === "success") return "border-[#b7ddce] bg-[#ecf7f2] text-[#0f6b57]";
   return "border-[#c7d8f3] bg-[#f1f6ff] text-[#315f9b]";
-}
-
-function systemText(metrics: HealthMetric[]) {
-  if (!metrics.length) return "جاري الفحص";
-  if (metrics.some((metric) => metric.status === "danger")) return "تحتاج متابعة";
-  if (metrics.some((metric) => metric.status === "warning")) return "مستقرة مع تنبيه";
-  return "مستقرة";
 }
 
 function latestWorkflowItems(items: MonitoringItem[], limit = 48, pinnedId?: string | null) {
@@ -673,7 +659,7 @@ export function OpsClient() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[1.02fr_1.08fr_1fr]">
+        <div className="mx-auto max-w-6xl">
           <section className="rounded-lg border border-[var(--color-border)] bg-white shadow-sm">
             <PanelHeader
               title="الرصد اليومي"
@@ -691,6 +677,16 @@ export function OpsClient() {
               </button>
             </PanelHeader>
             <div className="space-y-4 p-4">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="بحث سريع في المواد..."
+                  className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white pr-8 pl-3 text-xs font-semibold outline-none transition focus:border-[#2563eb]"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={runSourceSearch}
@@ -770,6 +766,15 @@ export function OpsClient() {
                   <Trash2 className="h-3.5 w-3.5" />
                   أرشفة المعروض
                 </button>
+                <button
+                  type="button"
+                  onClick={triggerXSearch}
+                  disabled={pending !== null || searchRunning}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#bfdbfe] bg-white px-3 text-[11px] font-extrabold text-[#2563eb] transition hover:bg-[#eff6ff] disabled:opacity-50"
+                >
+                  {searchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                  بحث X الآن
+                </button>
               </div>
 
               <div className="space-y-2">
@@ -808,102 +813,6 @@ export function OpsClient() {
                   </div>
                 )}
               </div>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-[var(--color-border)] bg-white shadow-sm">
-            <PanelHeader title="المصادر" description="إدارة مصادر الرصد والقواعد والكلمات المفتاحية." icon={Database}>
-              <a
-                href="/sources"
-                className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2563eb] px-3 text-xs font-extrabold text-white transition hover:bg-[#1d4ed8]"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                إضافة مصدر
-              </a>
-            </PanelHeader>
-            <div className="border-b border-[var(--color-border)] px-4">
-              <div className="flex gap-6 text-xs font-extrabold text-[var(--color-text-muted)]">
-                {["الكلمات", "الأخبار", "TikTok / Instagram", "X", "سجل الفحص"].map((label) => (
-                  <span key={label} className={`border-b-2 py-3 ${label === "TikTok / Instagram" ? "border-[#2563eb] text-[#2563eb]" : "border-transparent"}`}>
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-3 p-4">
-              <div className="grid gap-2 sm:grid-cols-2">
-                <select className="h-10 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold outline-none">
-                  <option>كل المنصات</option>
-                </select>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="ابحث في المصادر أو المواد..."
-                    className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white pr-8 pl-3 text-xs outline-none transition focus:border-[#2563eb]"
-                  />
-                </div>
-              </div>
-
-              <SourceRow
-                title="بحث X بالكلمات"
-                subtitle={`آخر نتيجة: ${state.xSearchLastRun?.newItems ?? 0} مادة جديدة`}
-                status={state.connectors?.x_recent_search === "not_configured" ? "يحتاج إعداد" : "يعمل"}
-                icon={<span className="text-2xl font-black">X</span>}
-                warning={state.connectors?.x_recent_search === "not_configured"}
-                onRun={triggerXSearch}
-                pending={searchRunning}
-              />
-              <SourceRow
-                title="مصادر الأخبار RSS"
-                subtitle={`${activeRssSources.length.toLocaleString("ar-SA")} مصادر نشطة`}
-                status={state.connectors?.rss === "not_configured" ? "يحتاج إعداد" : "يعمل"}
-                icon={<Globe className="h-6 w-6" />}
-                warning={state.connectors?.rss === "not_configured"}
-                onRun={runSourceSearch}
-                pending={pending === "source-search"}
-              />
-              {state.sources.slice(0, 5).map((source) => (
-                <SourceRow
-                  key={source.id}
-                  title={source.name}
-                  subtitle={source.type === "rss" ? source.feedUrl ?? source.url : source.url}
-                  status={source.isActive ? "يعمل" : "متوقف"}
-                  icon={source.type === "instagram_public_profile" ? <Sparkles className="h-6 w-6" /> : source.type === "x_recent_search" ? <span className="text-2xl font-black">X</span> : <Globe className="h-6 w-6" />}
-                  warning={!source.isActive}
-                />
-              ))}
-              <div className="text-center text-[11px] font-semibold text-[var(--color-text-muted)]">
-                عرض {Math.min(state.sources.length, 5).toLocaleString("ar-SA")} من {state.sources.length.toLocaleString("ar-SA")} مصدر
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-[var(--color-border)] bg-white shadow-sm">
-            <PanelHeader title="صحة الربط" description="حالة الخدمات والتكاملات الخارجية التي تعتمد عليها المنصة." icon={Shield} />
-            <div className="space-y-3 p-4">
-              {state.metrics.length ? (
-                state.metrics.slice(0, 6).map((metric) => <HealthRow key={`${metric.label}-${metric.value}`} metric={metric} />)
-              ) : (
-                <HealthRow metric={{ label: "حالة النظام", value: systemText(state.metrics), status: "good" }} />
-              )}
-              <div className="rounded-lg border border-[var(--color-border)] p-3">
-                <h3 className="text-sm font-extrabold text-[var(--color-text-title)]">سجل النشاط الأخير</h3>
-                <div className="mt-3 space-y-2 text-xs font-semibold text-[var(--color-text-muted)]">
-                  <ActivityLine ok text={`تم فحص ${activeRssSources.length.toLocaleString("ar-SA")} مصدر نشط.`} />
-                  <ActivityLine ok={state.connectors?.x_recent_search !== "not_configured"} text={`بحث X: ${state.connectors?.x_recent_search ?? "ready"}`} />
-                  <ActivityLine ok={Boolean(state.liveReport)} text={state.liveReport ? `التقرير الحي جاهز: ${state.liveReport.title}` : "التقرير الحي غير محمل بعد."} />
-                  {message ? <ActivityLine ok={messageType !== "error"} text={message} /> : null}
-                </div>
-              </div>
-              <a
-                href="/health"
-                className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-white text-xs font-extrabold text-[#2563eb] transition hover:border-[#2563eb]/40"
-              >
-                عرض كل السجل
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </a>
             </div>
           </section>
         </div>
@@ -1020,98 +929,6 @@ function MonitoringRow({
           أرشفة
         </button>
       </div>
-    </div>
-  );
-}
-
-function SourceRow({
-  title,
-  subtitle,
-  status,
-  icon,
-  warning,
-  pending,
-  onRun,
-}: {
-  title: string;
-  subtitle?: string;
-  status: string;
-  icon: ReactNode;
-  warning?: boolean;
-  pending?: boolean;
-  onRun?: () => void;
-}) {
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] p-3">
-      <div className="flex items-start gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[var(--color-bg-main)] text-[var(--color-text-title)]">{icon}</div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="truncate text-sm font-extrabold text-[var(--color-text-title)]">{title}</h3>
-            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${warning ? "bg-[#fff7ed] text-[#c2410c]" : "bg-[#e8f5ef] text-[#15803d]"}`}>
-              <span className={`h-2 w-2 rounded-full ${warning ? "bg-[#f59e0b]" : "bg-[#16a34a]"}`} />
-              {status}
-            </span>
-          </div>
-          {subtitle ? <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">{subtitle}</p> : null}
-          <div className="mt-3 flex gap-2">
-            {onRun ? (
-              <button
-                type="button"
-                onClick={onRun}
-                disabled={pending}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-[#bfdbfe] bg-[#eff6ff] px-3 text-[11px] font-extrabold text-[#2563eb] disabled:opacity-50"
-              >
-                {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                اختبر الآن
-              </button>
-            ) : null}
-            <a href="/sources" className="inline-flex h-8 items-center gap-1 rounded-md border border-[var(--color-border)] bg-white px-3 text-[11px] font-bold text-[var(--color-text-body)]">
-              <Pencil className="h-3.5 w-3.5" />
-              تعديل
-            </a>
-            {warning ? (
-              <span className="inline-flex h-8 items-center gap-1 rounded-md border border-[#fecaca] bg-[#fff1f2] px-3 text-[11px] font-bold text-[#dc2626]">
-                <Pause className="h-3.5 w-3.5" />
-                مراجعة
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HealthRow({ metric }: { metric: HealthMetric }) {
-  const ok = metric.status === "good";
-  const warning = metric.status === "warning";
-  return (
-    <div className="rounded-lg border border-[var(--color-border)] p-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-extrabold text-[var(--color-text-title)]">{metric.label}</h3>
-          <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">{metric.value}</p>
-        </div>
-        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${ok ? "bg-[#e8f5ef] text-[#15803d]" : warning ? "bg-[#fff7ed] text-[#c2410c]" : "bg-[#fff1f2] text-[#dc2626]"}`}>
-          <span className={`h-2 w-2 rounded-full ${ok ? "bg-[#16a34a]" : warning ? "bg-[#f59e0b]" : "bg-[#dc2626]"}`} />
-          {ok ? "يعمل" : warning ? "تحذير" : "متوقف"}
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[var(--color-border)] pt-3 text-[10px] font-semibold text-[var(--color-text-muted)]">
-        <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> منذ دقيقة</span>
-        <span>التشغيل القادم</span>
-        <span>رسالة الحالة</span>
-      </div>
-    </div>
-  );
-}
-
-function ActivityLine({ ok, text }: { ok: boolean; text: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-md bg-[var(--color-bg-main)] px-2 py-2">
-      <span className={`h-2 w-2 rounded-full ${ok ? "bg-[#16a34a]" : "bg-[#ef4444]"}`} />
-      <span className="line-clamp-1">{text}</span>
     </div>
   );
 }
