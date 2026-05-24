@@ -56,6 +56,7 @@ type SourcePollResponse = {
     skipped?: number;
     failed: number;
     items?: MonitoringItem[];
+    testTerm?: string;
   };
 };
 
@@ -65,7 +66,7 @@ type SourceCreateResponse = {
 };
 
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
-type SourceSection = "keywords" | "news" | "social" | "x" | "archive";
+type SourceSection = "issues" | "keywords" | "news" | "social" | "x" | "archive";
 
 type SourceRuleResponse = {
   source_rule: SourceRule;
@@ -139,10 +140,12 @@ const watchlistScheduleOptions = [
   { label: "كل 6 ساعات", value: 360 },
   { label: "يوميًا", value: 1440 },
   { label: "كل يومين", value: 2880 },
+  { label: "كل 3 أيام", value: 4320 },
   { label: "أسبوعيًا", value: 10080 },
 ] as const;
 
 const sourceSections: Array<{ id: SourceSection; label: string; description: string }> = [
+  { id: "issues", label: "تحتاج إصلاح", description: "مصادر متعثرة" },
   { id: "keywords", label: "الكلمات", description: "قواعد المطابقة" },
   { id: "news", label: "الأخبار", description: "RSS والمواقع" },
   { id: "social", label: "TikTok / Instagram", description: "حسابات ومنشورات" },
@@ -216,12 +219,13 @@ function rssPollMessage(prefix: string, poll: SourcePollResponse["poll"]) {
   const skipped = (poll.skipped ?? 0).toLocaleString("ar-SA");
   const failed = poll.failed.toLocaleString("ar-SA");
   const base = `${prefix}: جلب ${fetched}، جديد ${created}، مكرر ${duplicates}، غير مطابق ${skipped}، متعثر ${failed}.`;
+  const testPrefix = poll.testTerm ? `اختبار مؤقت بكلمة "${poll.testTerm}" — ` : "";
 
   if (poll.fetched > 0 && poll.created === 0 && (poll.skipped ?? 0) > 0 && poll.failed === 0) {
-    return `${base} لم تدخل مواد جديدة لأن الأخبار لا تطابق كلمات الرصد الحالية.`;
+    return `${testPrefix}${base} لم تدخل مواد جديدة لأن الأخبار لا تطابق ${poll.testTerm ? "كلمة الاختبار" : "كلمات الرصد الحالية"}.`;
   }
 
-  return base;
+  return `${testPrefix}${base}`;
 }
 
 function sourceRulePlatform(rule: SourceRule) {
@@ -267,12 +271,13 @@ export function SourcesClient() {
   const [watchlistType, setWatchlistType] = useState<WatchlistType>("tiktok_research");
   const [watchlistQuery, setWatchlistQuery] = useState("");
   const [watchlistUrl, setWatchlistUrl] = useState("");
-  const [watchlistIntervalMinutes, setWatchlistIntervalMinutes] = useState(1440);
+  const [watchlistIntervalMinutes, setWatchlistIntervalMinutes] = useState(4320);
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
   const [section, setSection] = useState<SourceSection>("social");
   const [sourceSearch, setSourceSearch] = useState("");
+  const [rssTestTerm, setRssTestTerm] = useState("");
 
   const rssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
@@ -438,13 +443,14 @@ export function SourcesClient() {
 
   async function pollSource(source: Source) {
     setPending(`poll-${source.id}`);
-    setMessage("جاري تشغيل المصدر...");
+    const testTerm = rssTestTerm.trim();
+    setMessage(testTerm ? `جاري اختبار ${source.name} بكلمة مؤقتة: ${testTerm}...` : "جاري تشغيل المصدر...");
     setMessageType("info");
 
     try {
       const result = await apiJson<SourcePollResponse>(`/api/sources/${source.id}/poll`, {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ test_term: testTerm || undefined }),
       });
       await refreshSilently();
       setMessage(rssPollMessage(`تم تشغيل ${source.name}`, result.poll));
@@ -483,13 +489,14 @@ export function SourcesClient() {
 
   async function pollActiveSources() {
     setPending("poll-active");
-    setMessage("جاري تشغيل المصادر النشطة...");
+    const testTerm = rssTestTerm.trim();
+    setMessage(testTerm ? `جاري اختبار المصادر النشطة بكلمة مؤقتة: ${testTerm}...` : "جاري تشغيل المصادر النشطة...");
     setMessageType("info");
 
     try {
       const result = await apiJson<SourcePollResponse>("/api/sources/poll-active", {
         method: "POST",
-        body: JSON.stringify({ limit: 5 }),
+        body: JSON.stringify({ limit: 5, test_term: testTerm || undefined }),
       });
       await refreshSilently();
       setMessage(rssPollMessage(`تم فحص ${(result.poll.sources ?? 0).toLocaleString("ar-SA")} مصدر`, result.poll));
@@ -604,15 +611,15 @@ export function SourcesClient() {
     }
   }
 
-  async function runDueWatchlists() {
-    setPending("watchlist-run-due");
-    setMessage("جاري فحص مصادر TikTok/Instagram الجاهزة...");
+  async function runWatchlistsNow(rule?: SourceRule) {
+    setPending(rule ? `watchlist-run-${rule.id}` : "watchlist-run-now");
+    setMessage(rule ? `جاري فحص ${sourceRuleTarget(rule)} الآن...` : "جاري فحص كل مصادر TikTok/Instagram النشطة الآن...");
     setMessageType("info");
 
     try {
       const result = await apiJson<RunDueResponse>("/api/source-rules/run-due", {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ force: true, source_rule_id: rule?.id }),
       });
       await refreshSilently();
       const checked = result.dueRulesCount.toLocaleString("ar-SA");
@@ -620,8 +627,8 @@ export function SourcesClient() {
       const failed = result.failedCount.toLocaleString("ar-SA");
       setMessage(
         result.failedCount
-          ? `فحصنا ${checked} مصدر جاهز، اكتملت ${executed} عملية، وتعثر ${failed}.`
-          : `فحصنا ${checked} مصدر جاهز، واكتملت ${executed} عملية فحص.`,
+          ? `فحصنا ${checked} مصدر، اكتملت ${executed} عملية، وتعثر ${failed}.`
+          : `فحصنا ${checked} مصدر، واكتملت ${executed} عملية فحص.`,
       );
       setMessageType(result.failedCount ? "warning" : "success");
     } catch (error) {
@@ -659,7 +666,11 @@ export function SourcesClient() {
   const visibleRssSources = rssSources.filter((source) => matchesSearch([source.name, source.feedUrl, source.url]));
   const visibleXSources = xReferenceSources.filter((source) => matchesSearch([source.name, source.url, source.handle]));
   const visibleArchiveSources = referenceSources.filter((source) => matchesSearch([source.name, source.url, source.handle]));
-  const failedRuns = state.connectorRuns.filter((run) => run.status === "failed").length;
+  const failedSocialRules = state.sourceRules
+    .map((rule) => ({ rule, latestRun: latestRunForRule(rule, state.connectorRuns) }))
+    .filter(({ rule, latestRun }) => matchesSearch([sourceRulePlatform(rule), sourceRuleTarget(rule)]) && latestRun?.status === "failed");
+  const failedRssSources = rssSources.filter((source) => matchesSearch([source.name, source.feedUrl, source.url]) && source.lastError);
+  const issueCount = failedSocialRules.length + failedRssSources.length;
 
   return (
     <AppShell>
@@ -704,7 +715,7 @@ export function SourcesClient() {
               <MiniMetric label="كلمات فعالة" value={(activeKeywordRule?.requiredTerms.length ?? 0).toLocaleString("ar-SA")} tone="blue" />
               <MiniMetric label="حسابات اجتماعية" value={state.sourceRules.length.toLocaleString("ar-SA")} tone="green" />
               <MiniMetric label="أخبار RSS" value={rssSources.length.toLocaleString("ar-SA")} tone="orange" />
-              <MiniMetric label="فشل يحتاج انتباه" value={failedRuns.toLocaleString("ar-SA")} tone="red" />
+              <MiniMetric label="فشل يحتاج انتباه" value={issueCount.toLocaleString("ar-SA")} tone="red" />
             </div>
 
             {state.sourceIntelligence && (
@@ -817,7 +828,109 @@ export function SourcesClient() {
               </select>
             </div>
 
+            {section === "news" && (
+              <div className="mb-4 rounded-lg border border-[#dbeafe] bg-[#f8fbff] p-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-end">
+                  <label className="min-w-0 flex-1">
+                    <span className="mb-1 block text-[11px] font-extrabold text-[#1d4f8f]">اختبار الأخبار بكلمة مؤقتة</span>
+                    <input
+                      value={rssTestTerm}
+                      onChange={(event) => setRssTestTerm(event.target.value)}
+                      placeholder="ضع كلمة من خبر حديث هنا، مثل اسم شخص أو جهة..."
+                      className="h-10 w-full rounded-lg border border-[#c7d8f3] bg-white px-3 text-xs font-semibold outline-none transition focus:border-[#1f6feb]"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={pollActiveSources}
+                    disabled={pending !== null || !rssSources.some((source) => source.isActive)}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f6feb] px-4 text-xs font-extrabold text-white transition hover:bg-[#195ec9] disabled:opacity-50"
+                  >
+                    {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    اختبر المصادر النشطة
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] font-semibold leading-5 text-[var(--color-text-muted)]">
+                  هذا الاختبار لا يغيّر كلمات هداية المحفوظة. يستخدم الكلمة مرة واحدة فقط للتأكد أن RSS يجلب ويحفظ ويعرض المواد.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-3">
+              {section === "issues" &&
+                (issueCount ? (
+                  <>
+                    {failedSocialRules.map(({ rule, latestRun }) => (
+                      <SourceListRow
+                        key={`issue-${rule.id}`}
+                        logo={sourceRulePlatform(rule)}
+                        title={sourceRuleTarget(rule)}
+                        platform={sourceRulePlatform(rule)}
+                        status="attention"
+                        statusText="يحتاج إصلاح"
+                        detail={friendlyConnectorFailure(latestRun?.failureReason)}
+                        target={sourceRuleTarget(rule)}
+                        schedule={scheduleLabel(rule.pollIntervalMinutes)}
+                        actions={
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setSection("social")}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-white px-3 text-[11px] font-extrabold text-[var(--color-text-title)]"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => runWatchlistsNow(rule)}
+                              disabled={pending !== null || !rule.active}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] px-3 text-[11px] font-extrabold text-[#1f6feb] disabled:opacity-50"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              إعادة اختبار
+                            </button>
+                          </>
+                        }
+                      />
+                    ))}
+                    {failedRssSources.map((source) => (
+                      <SourceListRow
+                        key={`issue-${source.id}`}
+                        logo="News"
+                        title={source.name}
+                        platform="الأخبار"
+                        status="attention"
+                        statusText="يحتاج إصلاح"
+                        detail={friendlyConnectorFailure(source.lastError)}
+                        target={source.feedUrl ?? source.url}
+                        schedule={scheduleLabel(source.pollIntervalMinutes)}
+                        actions={
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setSection("news")}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-white px-3 text-[11px] font-extrabold text-[var(--color-text-title)]"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => pollSource(source)}
+                              disabled={pending !== null || !source.isActive}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] px-3 text-[11px] font-extrabold text-[#1f6feb] disabled:opacity-50"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              إعادة اختبار
+                            </button>
+                          </>
+                        }
+                      />
+                    ))}
+                  </>
+                ) : (
+                  <EmptySources label="لا توجد مشاكل ظاهرة ضمن المصادر المطابقة لهذا الفلتر." />
+                ))}
+
               {section === "social" &&
                 (visibleSocialRules.length ? (
                   visibleSocialRules.map((rule) => {
@@ -858,8 +971,8 @@ export function SourcesClient() {
                             </button>
                             <button
                               type="button"
-                              onClick={runDueWatchlists}
-                              disabled={pending !== null}
+                              onClick={() => runWatchlistsNow(rule)}
+                              disabled={pending !== null || !rule.active}
                               className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] px-3 text-[11px] font-extrabold text-[#1f6feb] disabled:opacity-50"
                             >
                               <Play className="h-3.5 w-3.5" />
@@ -1045,8 +1158,8 @@ export function SourcesClient() {
                   </div>
                   <button
                     type="button"
-                    onClick={runDueWatchlists}
-                    disabled={pending !== null || state.sourceRules.length === 0}
+                    onClick={() => runWatchlistsNow()}
+                    disabled={pending !== null || state.sourceRules.every((rule) => !rule.active)}
                     className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#c7d8f3] bg-white px-2 text-[10px] font-extrabold text-[#1f6feb] disabled:opacity-50"
                   >
                     <Play className="h-3.5 w-3.5" />

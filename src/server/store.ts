@@ -112,6 +112,7 @@ type ItemCorrectionInput = {
 
 type RssIngestOptions = {
   fetcher?: typeof fetch;
+  keywordRule?: KeywordRule;
 };
 
 const items = seedItems.map((item) => ({ ...item }));
@@ -771,7 +772,7 @@ export const store = {
 
     try {
       const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
-      const rule = this.listKeywordRules()[0] ?? keywordRules[0];
+      const rule = options.keywordRule ?? this.listKeywordRules()[0] ?? keywordRules[0];
       let created = 0;
       let duplicates = 0;
       let failed = 0;
@@ -1403,19 +1404,23 @@ export const store = {
     return dueRules;
   },
 
-  async enqueueConnectorJob(rule: SourceRule, nowStr?: string) {
+  async enqueueConnectorJob(rule: SourceRule, nowStr?: string, options: { force?: boolean } = {}) {
     const time = nowStr ? new Date(nowStr) : new Date();
     const year = time.getUTCFullYear();
     const month = String(time.getUTCMonth() + 1).padStart(2, "0");
     const day = String(time.getUTCDate()).padStart(2, "0");
     const hour = String(time.getUTCHours()).padStart(2, "0");
-    const idempotencyKey = `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
+    const idempotencyKey = options.force
+      ? `rule:${rule.id}:manual:${crypto.randomUUID()}`
+      : `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
 
-    const existingJob = jobsState.find(
-      (j) => j.organizationId === rule.organizationId && j.idempotencyKey === idempotencyKey
-    );
-    if (existingJob) {
-      return existingJob;
+    if (!options.force) {
+      const existingJob = jobsState.find(
+        (j) => j.organizationId === rule.organizationId && j.idempotencyKey === idempotencyKey
+      );
+      if (existingJob) {
+        return existingJob;
+      }
     }
 
     const jobId = crypto.randomUUID();

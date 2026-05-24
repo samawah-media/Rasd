@@ -212,6 +212,7 @@ export type StoredCaptureAsset = {
 
 type RssIngestOptions = {
   fetcher?: typeof fetch;
+  keywordRule?: KeywordRule;
 };
 
 function shouldUseSupabase() {
@@ -1231,7 +1232,7 @@ export const persistentStore = {
 
     try {
       const feed = await fetchRssFeed(source.feedUrl!, options.fetcher);
-      const rule = (await this.listKeywordRules())[0] ?? keywordRules[0];
+      const rule = options.keywordRule ?? (await this.listKeywordRules())[0] ?? keywordRules[0];
       let created = 0;
       let duplicates = 0;
       let failed = 0;
@@ -2167,8 +2168,8 @@ export const persistentStore = {
     return dueRules;
   },
 
-  async enqueueConnectorJob(rule: SourceRule, nowStr?: string) {
-    if (!shouldUseSupabase()) return store.enqueueConnectorJob(rule, nowStr);
+  async enqueueConnectorJob(rule: SourceRule, nowStr?: string, options: { force?: boolean } = {}) {
+    if (!shouldUseSupabase()) return store.enqueueConnectorJob(rule, nowStr, options);
     const supabase = getSupabaseAdmin();
     await ensureDefaultWorkspace(supabase);
 
@@ -2177,17 +2178,21 @@ export const persistentStore = {
     const month = String(time.getUTCMonth() + 1).padStart(2, "0");
     const day = String(time.getUTCDate()).padStart(2, "0");
     const hour = String(time.getUTCHours()).padStart(2, "0");
-    const idempotencyKey = `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
+    const idempotencyKey = options.force
+      ? `rule:${rule.id}:manual:${crypto.randomUUID()}`
+      : `rule:${rule.id}:${year}-${month}-${day}-${hour}`;
 
-    const { data: existingJob, error: checkError } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("organization_id", rule.organizationId)
-      .eq("idempotency_key", idempotencyKey)
-      .maybeSingle();
-    if (checkError) throw checkError;
-    if (existingJob) {
-      return toJob(existingJob as DbJobRow);
+    if (!options.force) {
+      const { data: existingJob, error: checkError } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("organization_id", rule.organizationId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (checkError) throw checkError;
+      if (existingJob) {
+        return toJob(existingJob as DbJobRow);
+      }
     }
 
     const jobId = crypto.randomUUID();
