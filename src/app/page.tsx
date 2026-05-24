@@ -22,23 +22,6 @@ const entryCards = [
   },
 ];
 
-const videoStories = [
-  {
-    title: "من الرصد للتقرير",
-    description: "نلقط المنشور ونطلّعه بتقرير واضح.",
-    label: "العملية",
-    steps: ["رصد", "فرز", "تقرير"],
-    src: "/homepage-videos/rasd-process.mp4",
-  },
-  {
-    title: "الفريق يتابع أول بأول",
-    description: "تنبيه يوصل، والفريق يراجع بسرعة.",
-    label: "الرصد",
-    steps: ["تنبيه", "مراجعة", "تحديث"],
-    src: "/homepage-videos/rasd-team-monitoring.mp4",
-  },
-];
-
 export default async function Home() {
   await requireRole(adminRoles, "/");
 
@@ -57,47 +40,6 @@ export default async function Home() {
           </div>
 
           <AnimatedWorkflowHero />
-        </section>
-
-        <section className="grid gap-3 md:grid-cols-2" aria-label="فيديوهات توضيحية">
-          {videoStories.map((story) => (
-            <article
-              key={story.src}
-              className="group relative aspect-[16/10] overflow-hidden rounded-lg border border-[#d8e4db] bg-[#111d19] shadow-sm"
-            >
-              <video
-                className="absolute inset-0 h-full w-full object-cover opacity-[0.55] blur-[0.3px] saturate-[0.9] transition duration-700 group-hover:scale-[1.02]"
-                autoPlay
-                loop
-                muted
-                playsInline
-                preload="metadata"
-                aria-label={story.title}
-              >
-                <source src={story.src} type="video/mp4" />
-              </video>
-
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(247,248,244,0.64)_0%,rgba(17,29,25,0.22)_42%,rgba(17,29,25,0.92)_100%)]" />
-
-              <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-4">
-                <span className="rounded-md bg-white/90 px-2.5 py-1 text-xs font-bold text-[#18382e] shadow-sm">
-                  {story.label}
-                </span>
-                <div className="flex gap-1.5 text-[11px] font-bold text-[#18382e]">
-                  {story.steps.map((step) => (
-                    <span key={step} className="rounded-md bg-white/80 px-2 py-1 shadow-sm">
-                      {step}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-                <h2 className="text-xl font-bold">{story.title}</h2>
-                <p className="mt-1 max-w-sm text-sm leading-6 text-white/[0.82]">{story.description}</p>
-              </div>
-            </article>
-          ))}
         </section>
 
         <section className="grid gap-3 md:grid-cols-2">
