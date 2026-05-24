@@ -151,6 +151,17 @@ describe("Supabase SaaS schema safety", () => {
     assert.match(migration, /source_rules_poll_interval_minutes_check/);
   });
 
+  it("ships monitoring item discovery method for automated source attribution", async () => {
+    const migrationsDir = join(process.cwd(), "supabase", "migrations");
+    const migrations = await readdir(migrationsDir);
+    const discoveryMethodMigration = migrations.find((file) => file.endsWith("_add_monitoring_item_discovery_method.sql"));
+    assert.ok(discoveryMethodMigration);
+
+    const migration = await migrationSql(discoveryMethodMigration);
+    assert.match(migration, /alter table public\.monitoring_items/);
+    assert.match(migration, /add column if not exists discovery_method text/);
+  });
+
   it("registers a protected Vercel cron route for connector scheduling without removing RSS polling", async () => {
     const config = JSON.parse(await readFile(join(process.cwd(), "vercel.json"), "utf8")) as {
       crons: Array<{ path: string; schedule: string }>;
