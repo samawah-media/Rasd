@@ -1,26 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertTriangle,
   Check,
   ChevronLeft,
   Database,
-  FileInput,
   Globe,
   Loader2,
+  Pause,
+  Play,
   Plus,
-  Power,
   RefreshCw,
-  Settings,
+  Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import type { ConnectorRun, KeywordRule, MonitoringItem, Source, SourceRule } from "@/lib/types";
 import type { LegacySourceIntelligence } from "@/lib/legacy-source-intelligence";
 import AppShell from "@/components/AppShell";
-import { BentoCard, BentoGrid } from "@/components/BentoGrid";
 
 type MessageType = "success" | "error" | "info" | "warning";
 
@@ -65,7 +64,7 @@ type SourceCreateResponse = {
 };
 
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
-type SourceSection = "overview" | "keywords" | "news" | "social" | "archive";
+type SourceSection = "keywords" | "news" | "social" | "x" | "archive";
 
 type SourceRuleResponse = {
   source_rule: SourceRule;
@@ -143,11 +142,11 @@ const watchlistScheduleOptions = [
 ] as const;
 
 const sourceSections: Array<{ id: SourceSection; label: string; description: string }> = [
-  { id: "overview", label: "نظرة عامة", description: "الأهم في مكان واحد" },
-  { id: "keywords", label: "كلمات الرصد", description: "ما يدخل وما يستبعد" },
-  { id: "news", label: "مصادر الأخبار", description: "RSS والفحص اليدوي" },
-  { id: "social", label: "TikTok / Instagram", description: "حسابات وقواعد آلية" },
-  { id: "archive", label: "الأرشيف", description: "مصادر مستخرجة سابقًا" },
+  { id: "keywords", label: "الكلمات", description: "قواعد المطابقة" },
+  { id: "news", label: "الأخبار", description: "RSS والمواقع" },
+  { id: "social", label: "TikTok / Instagram", description: "حسابات ومنشورات" },
+  { id: "x", label: "X", description: "بحث وحسابات" },
+  { id: "archive", label: "سجل الفحص", description: "آخر النتائج" },
 ];
 
 function arabicError(key: string): string {
@@ -267,7 +266,8 @@ export function SourcesClient() {
   const [pending, setPending] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [messageType, setMessageType] = useState<MessageType>("info");
-  const [section, setSection] = useState<SourceSection>("overview");
+  const [section, setSection] = useState<SourceSection>("social");
+  const [sourceSearch, setSourceSearch] = useState("");
 
   const rssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
@@ -282,6 +282,18 @@ export function SourcesClient() {
   const referenceSources = useMemo(
     () => state.sources.filter((source) => source.type !== "rss"),
     [state.sources],
+  );
+
+  const xReferenceSources = useMemo(
+    () =>
+      referenceSources.filter(
+        (source) =>
+          source.type === "x_recent_search" ||
+          source.url.includes("x.com") ||
+          source.url.includes("twitter.com") ||
+          source.name.toLowerCase().includes("x"),
+      ),
+    [referenceSources],
   );
 
   const activeKeywordRule = state.keywordRules[0] ?? null;
@@ -635,453 +647,609 @@ export function SourcesClient() {
     }
   }
 
+  const searchTerm = sourceSearch.trim().toLowerCase();
+  const matchesSearch = (values: Array<string | null | undefined>) =>
+    !searchTerm || values.some((value) => value?.toLowerCase().includes(searchTerm));
+  const visibleSocialRules = state.sourceRules.filter((rule) => matchesSearch([sourceRulePlatform(rule), sourceRuleTarget(rule)]));
+  const visibleRssSources = rssSources.filter((source) => matchesSearch([source.name, source.feedUrl, source.url]));
+  const visibleXSources = xReferenceSources.filter((source) => matchesSearch([source.name, source.url, source.handle]));
+  const visibleArchiveSources = referenceSources.filter((source) => matchesSearch([source.name, source.url, source.handle]));
+  const failedRuns = state.connectorRuns.filter((run) => run.status === "failed").length;
+
   return (
     <AppShell>
-      <div className="min-h-screen bg-[var(--color-bg-main)] p-5 md:p-8" dir="rtl">
-        <header className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-          <div>
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-wider text-[var(--color-text-muted)]">
-              <Database className="h-3.5 w-3.5 text-[#2383E2]" />
-              <span>مصادر الرصد</span>
-              <span className="rounded-full bg-[#e8f5ef] px-2 py-0.5 text-[9px] text-[#0f6b57]">
-                {activeRssSources.length.toLocaleString("ar-SA")} نشط
-              </span>
-            </div>
-            <h1 className="mt-2 text-2xl font-black tracking-tight text-[var(--color-text-title)]">مركز المصادر</h1>
-            <p className="mt-2 max-w-2xl text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
-              نظّم كلمات الرصد، الأخبار، وحسابات TikTok/Instagram من شاشة واحدة بدون ازدحام.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/ops"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2]"
-            >
-              لوحة التشغيل
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Link>
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={pending !== null}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${pending === "refresh" ? "animate-spin" : ""}`} />
-              تحديث
-            </button>
-          </div>
-        </header>
-
-        {message && (
-          <div className={`mb-6 flex items-center justify-between rounded-2xl border p-4 text-xs font-bold shadow-sm ${messageClass(messageType)}`}>
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>{message}</span>
-            </div>
-            <button type="button" onClick={() => setMessage(null)} className="text-[10px] font-extrabold underline hover:text-[#2383E2]">
-              إغلاق
-            </button>
-          </div>
-        )}
-
-        <div className="mb-5 grid gap-2 md:grid-cols-5">
-          {sourceSections.map((sourceSection) => (
-            <button
-              key={sourceSection.id}
-              type="button"
-              onClick={() => setSection(sourceSection.id)}
-              className={`rounded-lg border p-3 text-right transition ${
-                section === sourceSection.id
-                  ? "border-[#2383E2] bg-[#f5faff] text-[#1d4f8f]"
-                  : "border-[var(--color-border)] bg-white text-[var(--color-text-title)] hover:border-[#2383E2]/40"
-              }`}
-            >
-              <span className="block text-xs font-extrabold">{sourceSection.label}</span>
-              <span className="mt-0.5 block text-[10px] font-semibold text-[var(--color-text-muted)]">{sourceSection.description}</span>
-            </button>
-          ))}
-        </div>
-
-        {state.sourceIntelligence && section === "overview" && (
-          <section className="mb-6 rounded-2xl border border-[var(--color-border)] bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-extrabold text-[var(--color-text-muted)]">
-                  <Sparkles className="h-3.5 w-3.5 text-[#2383E2]" />
-                  <span>اقتراحات من التقارير الأصلية</span>
-                  <span className="rounded-full bg-[#f1f6ff] px-2 py-0.5 text-[#315f9b]">
-                    {state.sourceIntelligence.intelligence.summary.items.toLocaleString("ar-SA")} مادة مرجعية
-                  </span>
+      <div className="min-h-screen bg-[#f7f8fa] p-4 md:p-5" dir="rtl">
+        <div className="grid gap-4 xl:grid-cols-[minmax(300px,0.84fr)_minmax(520px,1.35fr)_minmax(300px,0.86fr)]">
+          <section className="rounded-lg border border-[var(--color-border)] bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-[var(--color-text-muted)]">
+                  <Sparkles className="h-4 w-4 text-[#2383E2]" />
+                  <span>من التقارير الأصلية</span>
                 </div>
-                <h2 className="mt-2 text-lg font-black text-[var(--color-text-title)]">تحويل الأرشيف إلى مصادر رصد قابلة للتعديل</h2>
-                <p className="mt-1 max-w-3xl text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
-                  تم استخراج كلمات دالة، حسابات اجتماعية، ومواقع إخبارية من التقارير القديمة. طبّق ما تحتاجه ثم عدّل القوائم من نفس الصفحة.
+                <h2 className="mt-2 text-xl font-black text-[var(--color-text-title)]">مصادر جاهزة للرصد</h2>
+                <p className="mt-1 text-xs font-semibold leading-6 text-[var(--color-text-muted)]">
+                  طبّق الكلمات والحسابات والمواقع المستخرجة ثم عدّلها من القائمة.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={pending !== null}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
+                title="تحديث"
+              >
+                <RefreshCw className={`h-4 w-4 ${pending === "refresh" ? "animate-spin" : ""}`} />
+              </button>
+            </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => applySourceIntelligence("apply_keywords")}
-                  disabled={pending !== null}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#111111] px-3 text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
-                >
-                  {pending === "source-intelligence-apply_keywords" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  تطبيق الكلمات
+            {message && (
+              <div className={`mb-4 rounded-lg border p-3 text-xs font-bold leading-5 ${messageClass(messageType)}`}>
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{message}</span>
+                </div>
+                <button type="button" onClick={() => setMessage(null)} className="mt-2 text-[10px] font-extrabold underline">
+                  إغلاق التنبيه
                 </button>
-                <button
-                  type="button"
-                  onClick={() => applySourceIntelligence("apply_social_watchlists")}
-                  disabled={pending !== null}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] px-3 text-xs font-extrabold text-[#0f6b57] transition hover:bg-[#d4f2e4] disabled:opacity-50"
-                >
-                  {pending === "source-intelligence-apply_social_watchlists" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
-                  إضافة رصد TikTok/Instagram
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applySourceIntelligence("apply_reference_sources")}
-                  disabled={pending !== null}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 disabled:opacity-50"
-                >
-                  {pending === "source-intelligence-apply_reference_sources" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
-                  حفظ الأخبار وX
-                </button>
+              </div>
+            )}
+
+            <div className="grid gap-3">
+              <MiniMetric label="كلمات فعالة" value={(activeKeywordRule?.requiredTerms.length ?? 0).toLocaleString("ar-SA")} tone="blue" />
+              <MiniMetric label="حسابات اجتماعية" value={state.sourceRules.length.toLocaleString("ar-SA")} tone="green" />
+              <MiniMetric label="أخبار RSS" value={rssSources.length.toLocaleString("ar-SA")} tone="orange" />
+              <MiniMetric label="فشل يحتاج انتباه" value={failedRuns.toLocaleString("ar-SA")} tone="red" />
+            </div>
+
+            {state.sourceIntelligence && (
+              <div className="mt-4 space-y-3">
+                <SourceIntelPreview
+                  title="كلمات دالة"
+                  items={[...state.sourceIntelligence.intelligence.keywords.requiredTerms, ...state.sourceIntelligence.intelligence.keywords.hashtags].slice(0, 8)}
+                />
+                <SourceIntelPreview
+                  title="حسابات ومنصات"
+                  items={[
+                    ...state.sourceIntelligence.intelligence.tiktokProfiles.slice(0, 3),
+                    ...state.sourceIntelligence.intelligence.instagramProfiles.slice(0, 3),
+                    ...state.sourceIntelligence.intelligence.xAccounts.slice(0, 2),
+                  ].map((source) => `${source.label} (${source.count})`)}
+                />
+                <div className="grid gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applySourceIntelligence("apply_social_watchlists")}
+                    disabled={pending !== null}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f6feb] px-3 text-xs font-extrabold text-white transition hover:bg-[#195ec9] disabled:opacity-50"
+                  >
+                    {pending === "source-intelligence-apply_social_watchlists" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    إضافة حسابات التواصل
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applySourceIntelligence("apply_keywords")}
+                    disabled={pending !== null}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 disabled:opacity-50"
+                  >
+                    <Check className="h-4 w-4" />
+                    تحديث الكلمات الدالة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applySourceIntelligence("apply_reference_sources")}
+                    disabled={pending !== null}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 disabled:opacity-50"
+                  >
+                    <Globe className="h-4 w-4" />
+                    حفظ الأخبار وX
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <main className="rounded-lg border border-[var(--color-border)] bg-white p-4 shadow-sm">
+            <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Database className="h-7 w-7 text-[var(--color-text-muted)]" />
+                  <h1 className="text-2xl font-black tracking-tight text-[var(--color-text-title)]">المصادر</h1>
+                </div>
+                <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">إدارة جميع مصادر الرصد والقواعد والكلمات المفتاحية.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSection(section === "social" ? "news" : "social")}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#1f6feb] px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#195ec9]"
+              >
+                <Plus className="h-4 w-4" />
+                إضافة مصدر
+              </button>
+            </header>
+
+            <div className="mb-4 border-b border-[var(--color-border)]">
+              <div className="flex gap-1 overflow-x-auto">
+                {sourceSections.map((sourceSection) => (
+                  <button
+                    key={sourceSection.id}
+                    type="button"
+                    onClick={() => setSection(sourceSection.id)}
+                    className={`h-10 shrink-0 border-b-2 px-4 text-xs font-extrabold transition ${
+                      section === sourceSection.id
+                        ? "border-[#1f6feb] text-[#1f6feb]"
+                        : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-title)]"
+                    }`}
+                  >
+                    {sourceSection.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-4">
-              <SourceIntelPreview
-                title="كلمات الرصد"
-                items={[...state.sourceIntelligence.intelligence.keywords.requiredTerms, ...state.sourceIntelligence.intelligence.keywords.hashtags].slice(0, 8)}
-              />
-              <SourceIntelPreview
-                title="مصادر الأخبار"
-                items={state.sourceIntelligence.intelligence.newsSources.slice(0, 8).map((source) => `${source.label} (${source.count})`)}
-              />
-              <SourceIntelPreview
-                title="حسابات X"
-                items={state.sourceIntelligence.intelligence.xAccounts.slice(0, 8).map((source) => `${source.label} (${source.count})`)}
-              />
-              <SourceIntelPreview
-                title="TikTok/Instagram"
-                items={[
-                  ...state.sourceIntelligence.intelligence.tiktokProfiles.slice(0, 4),
-                  ...state.sourceIntelligence.intelligence.instagramProfiles.slice(0, 4),
-                ].map((source) => `${source.label} (${source.count})`)}
-              />
+            <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px_140px]">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <input
+                  value={sourceSearch}
+                  onChange={(event) => setSourceSearch(event.target.value)}
+                  placeholder="ابحث في المصادر..."
+                  className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white pr-9 pl-3 text-xs font-semibold outline-none transition focus:border-[#1f6feb]"
+                />
+              </label>
+              <select className="h-10 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold outline-none">
+                <option>كل المنصات</option>
+                <option>TikTok</option>
+                <option>Instagram</option>
+                <option>X</option>
+                <option>الأخبار</option>
+              </select>
+              <select className="h-10 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold outline-none">
+                <option>كل الحالات</option>
+                <option>يعمل</option>
+                <option>يحتاج تعديل</option>
+                <option>متوقف</option>
+              </select>
             </div>
-          </section>
-        )}
 
-        <BentoGrid>
-          {(section === "overview" || section === "news") && (
-          <BentoCard colSpan="col-span-12 xl:col-span-7" title="مصادر الأخبار" icon={Globe} subtitle="إضافة RSS، تشغيل يدوي، وجدولة دورية">
-            <div className="space-y-4">
+            <div className="space-y-3">
+              {section === "social" &&
+                (visibleSocialRules.length ? (
+                  visibleSocialRules.map((rule) => {
+                    const latestRun = latestRunForRule(rule, state.connectorRuns);
+                    return (
+                      <SourceListRow
+                        key={rule.id}
+                        logo={sourceRulePlatform(rule)}
+                        title={sourceRuleTarget(rule)}
+                        platform={sourceRulePlatform(rule)}
+                        status={rule.active ? (latestRun?.status === "failed" ? "attention" : "active") : "paused"}
+                        statusText={rule.active ? (latestRun?.status === "failed" ? "يحتاج تعديل" : "يعمل") : "متوقف"}
+                        detail={`آخر نتيجة: ${connectorRunLabel(latestRun)}`}
+                        target={sourceRuleTarget(rule)}
+                        schedule={scheduleLabel(rule.pollIntervalMinutes)}
+                        actions={
+                          <>
+                            <select
+                              value={rule.pollIntervalMinutes}
+                              onChange={(event) => updateWatchlistSchedule(rule, Number(event.target.value))}
+                              disabled={pending !== null}
+                              className="h-9 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold outline-none disabled:opacity-50"
+                            >
+                              {watchlistScheduleOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => toggleWatchlistRule(rule)}
+                              disabled={pending !== null}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-[11px] font-extrabold text-[#9a341f] disabled:opacity-50"
+                            >
+                              {rule.active ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                              {rule.active ? "إيقاف" : "تفعيل"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={runDueWatchlists}
+                              disabled={pending !== null}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] px-3 text-[11px] font-extrabold text-[#1f6feb] disabled:opacity-50"
+                            >
+                              <Play className="h-3.5 w-3.5" />
+                              اختبر الآن
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteWatchlistRule(rule)}
+                              disabled={pending !== null}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] transition hover:border-[#f1b6aa] hover:text-[#9a341f] disabled:opacity-50"
+                              title="حذف"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        }
+                      />
+                    );
+                  })
+                ) : (
+                  <EmptySources label="لا توجد قواعد TikTok أو Instagram مطابقة." />
+                ))}
+
+              {section === "news" &&
+                (visibleRssSources.length ? (
+                  visibleRssSources.map((source) => (
+                    <SourceListRow
+                      key={source.id}
+                      logo="News"
+                      title={source.name}
+                      platform="الأخبار"
+                      status={source.isActive ? (source.lastError ? "attention" : "active") : "paused"}
+                      statusText={source.isActive ? (source.lastError ? "يحتاج تعديل" : "يعمل") : "متوقف"}
+                      detail={source.lastError ? friendlyConnectorFailure(source.lastError) : `آخر فحص: ${source.lastCheckedAt ? new Date(source.lastCheckedAt).toLocaleString("ar-SA", { hour12: false }) : "لم يفحص بعد"}`}
+                      target={source.feedUrl ?? source.url}
+                      schedule={scheduleLabel(source.pollIntervalMinutes)}
+                      actions={
+                        <>
+                          <select
+                            value={source.pollIntervalMinutes}
+                            onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
+                            disabled={pending !== null}
+                            className="h-9 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold outline-none disabled:opacity-50"
+                          >
+                            {sourceScheduleOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                            disabled={pending !== null}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-[11px] font-extrabold text-[#9a341f] disabled:opacity-50"
+                          >
+                            {source.isActive ? "إيقاف" : "تفعيل"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => pollSource(source)}
+                            disabled={pending !== null || !source.isActive}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] px-3 text-[11px] font-extrabold text-[#1f6feb] disabled:opacity-50"
+                          >
+                            <Play className="h-3.5 w-3.5" />
+                            اختبر الآن
+                          </button>
+                        </>
+                      }
+                    />
+                  ))
+                ) : (
+                  <EmptySources label="لا توجد مصادر أخبار مطابقة." />
+                ))}
+
+              {section === "x" &&
+                (visibleXSources.length ? (
+                  visibleXSources.map((source) => (
+                    <SourceListRow
+                      key={source.id}
+                      logo="X"
+                      title={source.name}
+                      platform="X"
+                      status={source.isActive ? "active" : "paused"}
+                      statusText={source.isActive ? "يعمل" : "مرجعي"}
+                      detail={source.lastError ? friendlyConnectorFailure(source.lastError) : "بحث X محفوظ ضمن مصادر التقارير الأصلية."}
+                      target={source.url}
+                      schedule={scheduleLabel(source.pollIntervalMinutes)}
+                      actions={
+                        <button
+                          type="button"
+                          onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                          disabled={pending !== null}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#f1b6aa] bg-[#fff8f6] px-3 text-[11px] font-extrabold text-[#9a341f] disabled:opacity-50"
+                        >
+                          {source.isActive ? "إيقاف" : "تفعيل"}
+                        </button>
+                      }
+                    />
+                  ))
+                ) : (
+                  <EmptySources label="لا توجد مصادر X مطابقة." />
+                ))}
+
+              {section === "keywords" && (
+                <form onSubmit={submitKeywordRule} className="grid gap-3">
+                  <KeywordBox label="إشارات رئيسية" value={requiredTerms} onChange={setRequiredTerms} placeholder={"هداية\nهاكاثون هداية"} />
+                  <KeywordBox label="كلمات سياق" value={optionalTerms} onChange={setOptionalTerms} placeholder={"الابتكار\nالحرمين\nالشؤون الدينية"} />
+                  <KeywordBox label="استبعاد" value={excludeTerms} onChange={setExcludeTerms} placeholder={"وظائف\nإعلان ممول"} />
+                  <button
+                    type="submit"
+                    disabled={pending !== null}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#111111] text-xs font-extrabold text-white transition hover:bg-stone-900 disabled:opacity-50"
+                  >
+                    {pending === "keywords" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    حفظ الكلمات
+                  </button>
+                </form>
+              )}
+
+              {section === "archive" && (
+                <>
+                  {visibleArchiveSources.length ? (
+                    visibleArchiveSources.map((source) => (
+                      <SourceListRow
+                        key={source.id}
+                        logo={source.type === "x_recent_search" ? "X" : "News"}
+                        title={source.name}
+                        platform={source.type === "x_recent_search" ? "X" : "مرجعي"}
+                        status={source.isActive ? "active" : "paused"}
+                        statusText={source.isActive ? "يعمل" : "مرجعي"}
+                        detail={source.lastError ? friendlyConnectorFailure(source.lastError) : "محفوظ من التقارير الأصلية."}
+                        target={source.url}
+                        schedule={scheduleLabel(source.pollIntervalMinutes)}
+                        actions={
+                          <button
+                            type="button"
+                            onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
+                            disabled={pending !== null}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-white px-3 text-[11px] font-bold disabled:opacity-50"
+                          >
+                            {source.isActive ? "إيقاف" : "تفعيل مرجعي"}
+                          </button>
+                        }
+                      />
+                    ))
+                  ) : (
+                    <EmptySources label="لا توجد مصادر مرجعية محفوظة." />
+                  )}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <AdvancedLink href="/imports" title="استيراد التقارير القديمة" description="مراجعة بيانات التقارير قبل اعتمادها داخل المنصة." />
+                    <AdvancedLink href="/imports/backfill" title="استكمال روابط التقارير" description="تنظيف الروابط القديمة والروابط الناقصة من ملفات التقارير." />
+                  </div>
+                </>
+              )}
+            </div>
+          </main>
+
+          <aside className="rounded-lg border border-[var(--color-border)] bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black text-[var(--color-text-title)]">إضافة وتشغيل</h2>
+                <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">كل أوامر التشغيل السريعة في مكان واحد.</p>
+              </div>
+              <Link
+                href="/ops"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2]"
+                title="الرصد اليومي"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="space-y-5">
+              <div className="rounded-lg border border-[var(--color-border)] bg-[#fbfbfc] p-3">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SourceLogo label={watchlistType === "tiktok_research" ? "TikTok" : "Instagram"} />
+                    <div>
+                      <h3 className="text-sm font-black text-[var(--color-text-title)]">TikTok / Instagram</h3>
+                      <p className="text-[10px] font-bold text-[var(--color-text-muted)]">حسابات وقواعد آلية</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={runDueWatchlists}
+                    disabled={pending !== null || state.sourceRules.length === 0}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#c7d8f3] bg-white px-2 text-[10px] font-extrabold text-[#1f6feb] disabled:opacity-50"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    اختبر الكل
+                  </button>
+                </div>
+                <form onSubmit={submitWatchlistRule} className="space-y-2">
+                  <select
+                    value={watchlistType}
+                    onChange={(event) => setWatchlistType(event.target.value as WatchlistType)}
+                    className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold outline-none focus:border-[#1f6feb]"
+                  >
+                    <option value="tiktok_research">TikTok Research</option>
+                    <option value="instagram_public_profile">Instagram Profile</option>
+                  </select>
+                  <input
+                    value={watchlistQuery}
+                    onChange={(event) => setWatchlistQuery(event.target.value)}
+                    placeholder={watchlistType === "tiktok_research" ? "كلمة بحث أو هاشتاق..." : "استعلام اختياري للفلترة..."}
+                    className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs outline-none focus:border-[#1f6feb]"
+                  />
+                  <input
+                    value={watchlistUrl}
+                    onChange={(event) => setWatchlistUrl(event.target.value)}
+                    placeholder={watchlistType === "instagram_public_profile" ? "https://instagram.com/profile" : "رابط TikTok اختياري..."}
+                    className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white px-3 text-left text-xs outline-none focus:border-[#1f6feb]"
+                    dir="ltr"
+                    required={watchlistType === "instagram_public_profile"}
+                  />
+                  <select
+                    value={watchlistIntervalMinutes}
+                    onChange={(event) => setWatchlistIntervalMinutes(Number(event.target.value))}
+                    className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-bold outline-none focus:border-[#1f6feb]"
+                  >
+                    {watchlistScheduleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={pending !== null}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#111111] text-xs font-extrabold text-white transition hover:bg-stone-900 disabled:opacity-50"
+                  >
+                    {pending === "watchlist-rule" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    إضافة قاعدة رصد
+                  </button>
+                </form>
+              </div>
+
+              <div className="rounded-lg border border-[var(--color-border)] bg-[#fbfbfc] p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <SourceLogo label="News" />
+                  <div>
+                    <h3 className="text-sm font-black text-[var(--color-text-title)]">مصدر أخبار</h3>
+                    <p className="text-[10px] font-bold text-[var(--color-text-muted)]">RSS وجدولة فحص</p>
+                  </div>
+                </div>
               <form onSubmit={submitRssSource} className="grid gap-2 md:grid-cols-[minmax(160px,220px)_1fr_auto]">
                 <input
                   value={rssName}
                   onChange={(event) => setRssName(event.target.value)}
                   placeholder="اسم المصدر"
-                  className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  className="h-10 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs outline-none transition focus:border-[#1f6feb]"
                 />
                 <input
                   value={rssFeedUrl}
                   onChange={(event) => setRssFeedUrl(event.target.value)}
                   placeholder="رابط موجز RSS..."
-                  className="h-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
+                  className="h-10 rounded-lg border border-[var(--color-border)] bg-white px-3 text-left text-xs outline-none transition focus:border-[#1f6feb]"
                   dir="ltr"
                   required
                 />
                 <button
                   type="submit"
                   disabled={pending !== null}
-                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#111111] px-4 text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#111111] px-4 text-xs font-extrabold text-white transition hover:bg-stone-900 disabled:opacity-50"
                 >
-                  {pending === "rss-source" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  {pending === "rss-source" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   إضافة
                 </button>
               </form>
-
-              {rssSources.length ? (
-                <div className="space-y-2">
-                  {rssSources.map((source) => (
-                    <div key={source.id} className="grid gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full ${source.isActive ? "bg-[#00C853]" : "bg-stone-300"}`} />
-                          <p className="truncate text-sm font-extrabold text-[var(--color-text-title)]">{source.name}</p>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
-                            {source.isActive ? "نشط" : "متوقف"}
-                          </span>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
-                            {scheduleLabel(source.pollIntervalMinutes)}
-                          </span>
-                        </div>
-                        <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
-                          {source.feedUrl}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          aria-label="جدولة المصدر"
-                          className="h-9 rounded-xl border border-[var(--color-border)] bg-white px-2 text-[11px] font-bold outline-none transition focus:border-[#2383E2] disabled:opacity-50"
-                          disabled={pending !== null}
-                          onChange={(event) => updateSourceSchedule(source, { pollIntervalMinutes: Number(event.target.value) })}
-                          value={source.pollIntervalMinutes}
-                        >
-                          {sourceScheduleOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
-                          disabled={pending !== null}
-                          className="inline-flex h-9 items-center gap-1 rounded-xl border border-[var(--color-border)] bg-white px-3 text-[11px] font-bold transition hover:bg-stone-50 disabled:opacity-50"
-                        >
-                          {source.isActive ? "إيقاف" : "تفعيل"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => pollSource(source)}
-                          disabled={pending !== null || !source.isActive}
-                          className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] px-3 text-[11px] font-extrabold text-[#0f6b57] transition hover:bg-[#d4f2e4] disabled:opacity-50"
-                        >
-                          {pending === `poll-${source.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                          تشغيل
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-main)] p-8 text-center text-xs font-bold text-[var(--color-text-muted)]">
-                  لا توجد مصادر RSS محفوظة حاليًا.
-                </div>
-              )}
-
               <button
                 type="button"
                 onClick={pollActiveSources}
                 disabled={pending !== null || !activeRssSources.length}
-                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-[#00C853]/20 bg-[#e8f5ef] text-xs font-extrabold text-[#0f6b57] transition hover:bg-[#d4f2e4] disabled:opacity-50"
+                className="mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#b7ddce] bg-[#ecf7f2] text-xs font-extrabold text-[#0f6b57] transition hover:bg-[#d4f2e4] disabled:opacity-50"
               >
-                {pending === "poll-active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                {pending === "poll-active" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 فحص كل المصادر النشطة
               </button>
             </div>
-          </BentoCard>
-          )}
-
-          {(section === "overview" || section === "social") && (
-          <BentoCard colSpan="col-span-12 xl:col-span-5" title="رصد TikTok/Instagram الآلي" icon={Power} subtitle="حسابات وروابط اجتماعية تفحص تلقائيًا">
-            <div className="space-y-4">
-              <form onSubmit={submitWatchlistRule} className="space-y-3">
-                <select
-                  value={watchlistType}
-                  onChange={(event) => setWatchlistType(event.target.value as WatchlistType)}
-                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold outline-none transition focus:border-[#2383E2] focus:bg-white"
-                >
-                  <option value="tiktok_research">TikTok Research</option>
-                  <option value="instagram_public_profile">Instagram Profile</option>
-                </select>
-                <input
-                  value={watchlistQuery}
-                  onChange={(event) => setWatchlistQuery(event.target.value)}
-                  placeholder={watchlistType === "tiktok_research" ? "كلمة بحث أو هاشتاق..." : "استعلام اختياري للفلترة..."}
-                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
-                />
-                <input
-                  value={watchlistUrl}
-                  onChange={(event) => setWatchlistUrl(event.target.value)}
-                  placeholder={watchlistType === "instagram_public_profile" ? "https://instagram.com/profile" : "رابط TikTok اختياري..."}
-                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-left text-xs outline-none transition focus:border-[#2383E2] focus:bg-white"
-                  dir="ltr"
-                  required={watchlistType === "instagram_public_profile"}
-                />
-                <select
-                  value={watchlistIntervalMinutes}
-                  onChange={(event) => setWatchlistIntervalMinutes(Number(event.target.value))}
-                  className="h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] px-3 text-xs font-bold outline-none transition focus:border-[#2383E2] focus:bg-white"
-                >
-                  {watchlistScheduleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  disabled={pending !== null}
-                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
-                >
-                  {pending === "watchlist-rule" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                  إضافة قاعدة رصد
-                </button>
-              </form>
-
-              <button
-                type="button"
-                onClick={runDueWatchlists}
-                disabled={pending !== null || state.sourceRules.length === 0}
-                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-white text-xs font-bold text-[var(--color-text-title)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
-              >
-                {pending === "watchlist-run-due" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                افحص المصادر الجاهزة الآن
-              </button>
-
-              {state.sourceRules.length ? (
-                <div className="space-y-2">
-                  {state.sourceRules.map((rule) => {
-                    const latestRun = latestRunForRule(rule, state.connectorRuns);
-                    return (
-                      <div key={rule.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full ${rule.active ? "bg-[#00C853]" : "bg-stone-300"}`} />
-                              <p className="text-sm font-extrabold text-[var(--color-text-title)]">{sourceRulePlatform(rule)}</p>
-                              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
-                                {rule.active ? "نشطة" : "متوقفة"}
-                              </span>
-                            </div>
-                            <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
-                              {sourceRuleTarget(rule)}
-                            </p>
-                            <p className="mt-2 text-[10px] font-bold text-[var(--color-text-muted)]">{connectorRunLabel(latestRun)}</p>
-                            <div className="mt-2 flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-[var(--color-text-muted)]">الجدولة</span>
-                              <select
-                                value={rule.pollIntervalMinutes}
-                                onChange={(event) => updateWatchlistSchedule(rule, Number(event.target.value))}
-                                disabled={pending !== null}
-                                className="h-8 rounded-lg border border-[var(--color-border)] bg-white px-2 text-[10px] font-bold text-[var(--color-text-title)] outline-none transition focus:border-[#2383E2] disabled:opacity-50"
-                              >
-                                {watchlistScheduleOptions.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => toggleWatchlistRule(rule)}
-                              disabled={pending !== null}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] transition hover:border-[#2383E2]/40 hover:text-[#2383E2] disabled:opacity-50"
-                              title={rule.active ? "إيقاف" : "تفعيل"}
-                            >
-                              {pending === `watchlist-toggle-${rule.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteWatchlistRule(rule)}
-                              disabled={pending !== null}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#f1b6aa] bg-[#fff8f6] text-[#9a341f] transition hover:border-[#d7745f] disabled:opacity-50"
-                              title="حذف"
-                            >
-                              {pending === `watchlist-delete-${rule.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-main)] p-6 text-center text-xs font-bold text-[var(--color-text-muted)]">
-                  لا توجد قواعد TikTok أو Instagram محفوظة بعد.
-                </div>
-              )}
             </div>
-          </BentoCard>
-          )}
-
-          {(section === "overview" || section === "keywords") && (
-          <BentoCard colSpan="col-span-12 xl:col-span-5" title="كلمات الرصد" icon={Settings} subtitle="هذه الكلمات تحدد ما يدخل من الأخبار">
-            <form onSubmit={submitKeywordRule} className="space-y-3">
-              <KeywordBox label="إشارات رئيسية" value={requiredTerms} onChange={setRequiredTerms} placeholder={"هداية\nهاكاثون هداية"} />
-              <KeywordBox label="كلمات سياق" value={optionalTerms} onChange={setOptionalTerms} placeholder={"الابتكار\nالحرمين\nالشؤون الدينية"} />
-              <KeywordBox label="استبعاد" value={excludeTerms} onChange={setExcludeTerms} placeholder={"وظائف\nإعلان ممول"} />
-              <button
-                type="submit"
-                disabled={pending !== null}
-                className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#111111] text-xs font-bold text-white transition hover:bg-stone-900 disabled:opacity-50"
-              >
-                {pending === "keywords" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                حفظ الكلمات
-              </button>
-            </form>
-          </BentoCard>
-          )}
-
-          {(section === "overview" || section === "archive") && (
-          <BentoCard colSpan="col-span-12 xl:col-span-7" title="مصادر مرجعية من الأرشيف" icon={Globe} subtitle="مواقع وحسابات X مستخرجة من التقارير الأصلية، محفوظة للتنظيم والتحويل لاحقًا إلى رصد نشط">
-            {referenceSources.length ? (
-              <div className="space-y-2">
-                {referenceSources.map((source) => (
-                  <div key={source.id} className="grid gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full ${source.isActive ? "bg-[#00C853]" : "bg-stone-300"}`} />
-                        <p className="truncate text-sm font-extrabold text-[var(--color-text-title)]">{source.name}</p>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
-                          {source.type === "x_recent_search" ? "X" : "Web"}
-                        </span>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
-                          {source.isActive ? "نشط" : "مرجعي"}
-                        </span>
-                      </div>
-                      <p className="mt-1 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
-                        {source.url}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => updateSourceSchedule(source, { isActive: !source.isActive })}
-                      disabled={pending !== null}
-                      className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-[var(--color-border)] bg-white px-3 text-[11px] font-bold transition hover:bg-stone-50 disabled:opacity-50"
-                    >
-                      {source.isActive ? "إيقاف" : "تفعيل مرجعي"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-[var(--color-bg-main)] p-6 text-center text-xs font-bold text-[var(--color-text-muted)]">
-                لم تحفظ بعد مصادر مرجعية من الأرشيف. استخدم زر &quot;حفظ الأخبار وX&quot; أعلى الصفحة.
-              </div>
-            )}
-          </BentoCard>
-          )}
-
-          {(section === "overview" || section === "archive") && (
-          <BentoCard colSpan="col-span-12" title="أدوات الأرشيف القديم" icon={FileInput} subtitle="خيارات متقدمة، لا تظهر داخل لوحة التشغيل اليومية">
-            <div className="grid gap-3 md:grid-cols-2">
-              <AdvancedLink
-                href="/imports"
-                title="استيراد التقارير القديمة"
-                description="مراجعة بيانات التقارير المستخرجة قبل اعتمادها داخل المنصة."
-              />
-              <AdvancedLink
-                href="/imports/backfill"
-                title="استكمال روابط التقارير"
-                description="أداة تنظيف الروابط القديمة والروابط الناقصة من ملفات التقارير."
-              />
-            </div>
-          </BentoCard>
-          )}
-        </BentoGrid>
+          </aside>
+        </div>
       </div>
     </AppShell>
+  );
+}
+
+function MiniMetric({ label, value, tone }: { label: string; value: string; tone: "blue" | "green" | "orange" | "red" }) {
+  const toneClass = {
+    blue: "border-[#c7d8f3] bg-[#f6f9ff] text-[#1f6feb]",
+    green: "border-[#b7ddce] bg-[#ecf7f2] text-[#0f6b57]",
+    orange: "border-[#efd4ad] bg-[#fff8ec] text-[#9a5b00]",
+    red: "border-[#f1b6aa] bg-[#fff1ed] text-[#9a341f]",
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border p-3 ${toneClass}`}>
+      <span className="block text-[10px] font-extrabold opacity-80">{label}</span>
+      <span className="mt-1 block text-xl font-black">{value}</span>
+    </div>
+  );
+}
+
+function SourceListRow({
+  logo,
+  title,
+  platform,
+  status,
+  statusText,
+  detail,
+  target,
+  schedule,
+  actions,
+}: {
+  logo: string;
+  title: string;
+  platform: string;
+  status: "active" | "attention" | "paused";
+  statusText: string;
+  detail: string;
+  target: string;
+  schedule: string;
+  actions: ReactNode;
+}) {
+  const statusClass =
+    status === "active"
+      ? "bg-[#ecf7f2] text-[#0f6b57]"
+      : status === "attention"
+        ? "bg-[#fff8ec] text-[#9a5b00]"
+        : "bg-stone-100 text-stone-500";
+
+  return (
+    <article className="rounded-lg border border-[var(--color-border)] bg-white p-3 shadow-[0_1px_8px_rgba(15,23,42,0.03)]">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+        <div className="flex min-w-0 items-start gap-3">
+          <SourceLogo label={logo} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-sm font-black text-[var(--color-text-title)]">{title}</h3>
+              <span className="rounded-full border border-[var(--color-border)] bg-[#fbfbfc] px-2 py-0.5 text-[10px] font-bold text-[var(--color-text-muted)]">
+                {platform}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusClass}`}>{statusText}</span>
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{detail}</p>
+            <p className="mt-2 truncate text-left text-[10px] font-semibold text-[var(--color-text-muted)]" dir="ltr">
+              {target}
+            </p>
+            <p className="mt-2 text-[10px] font-extrabold text-[#0f6b57]">جدولة الفحص: {schedule}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">{actions}</div>
+      </div>
+    </article>
+  );
+}
+
+function SourceLogo({ label }: { label: string }) {
+  if (label === "TikTok") {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white shadow-sm">
+        ♪
+      </div>
+    );
+  }
+
+  if (label === "Instagram") {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#e4405f] text-lg font-black text-white shadow-sm">
+        ◎
+      </div>
+    );
+  }
+
+  if (label === "X") {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white shadow-sm">
+        X
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] shadow-sm">
+      <Globe className="h-6 w-6" />
+    </div>
+  );
+}
+
+function EmptySources({ label }: { label: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[#fbfbfc] p-8 text-center text-xs font-bold text-[var(--color-text-muted)]">
+      {label}
+    </div>
   );
 }
 
