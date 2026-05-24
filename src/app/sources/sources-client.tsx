@@ -81,7 +81,18 @@ type NewsSearchResponse = {
     failed: number;
     error?: string;
     items?: MonitoringItem[];
+    results?: Array<{ title: string; url: string; description?: string; source?: string }>;
   };
+};
+
+type LastNewsSearch = {
+  provider: string;
+  fetched: number;
+  created: number;
+  duplicates: number;
+  failed: number;
+  items: Array<Pick<MonitoringItem, "id" | "title" | "originalUrl" | "state" | "summary">>;
+  results: Array<{ title: string; url: string; description?: string; source?: string }>;
 };
 
 type WatchlistType = "tiktok_research" | "instagram_public_profile";
@@ -308,6 +319,7 @@ export function SourcesClient() {
   const [sourceSearch, setSourceSearch] = useState("");
   const [rssTestTerm, setRssTestTerm] = useState("");
   const [newsTestUrl, setNewsTestUrl] = useState("");
+  const [lastNewsSearch, setLastNewsSearch] = useState<LastNewsSearch | null>(null);
 
   const rssSources = useMemo(
     () => state.sources.filter((source) => source.type === "rss" && source.feedUrl),
@@ -592,8 +604,17 @@ export function SourcesClient() {
       const duplicates = result.search.duplicates.toLocaleString("ar-SA");
       const failed = result.search.failed.toLocaleString("ar-SA");
       const provider = result.search.provider === "news_sitemap" ? "sitemap الأخبار" : "Apify Google";
+      setLastNewsSearch({
+        provider,
+        fetched: result.search.fetched,
+        created: result.search.created,
+        duplicates: result.search.duplicates,
+        failed: result.search.failed,
+        items: result.search.items ?? [],
+        results: result.search.results ?? [],
+      });
       setMessage(`بحث داخل الموقع عبر ${provider}: نتائج ${fetched}، جديد ${created}، مكرر ${duplicates}، متعثر ${failed}.`);
-      setMessageType(result.search.created > 0 ? "success" : "warning");
+      setMessageType(result.search.fetched > 0 ? "success" : "warning");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "تعذر البحث داخل الموقع عبر Apify.");
       setMessageType("error");
@@ -958,6 +979,8 @@ export function SourcesClient() {
               </div>
             )}
 
+            {section === "news" && lastNewsSearch && <NewsSearchResultPanel search={lastNewsSearch} />}
+
             <div className="space-y-3">
               {section === "issues" &&
                 (issueCount ? (
@@ -1146,8 +1169,8 @@ export function SourcesClient() {
                       }
                     />
                   ))
-                ) : (
-                  <EmptySources label="لا توجد مصادر أخبار مطابقة." />
+                ) : lastNewsSearch?.fetched ? null : (
+                  <EmptySources label={sourceSearch.trim() ? "لا توجد مصادر RSS مطابقة لهذا البحث. نتائج اختبار الموقع تظهر أعلاه وفي الرصد اليومي." : "لا توجد مصادر RSS محفوظة بعد. يمكنك اختبار رابط موقع أو إضافة موجز RSS."} />
                 ))}
 
               {section === "x" &&
@@ -1376,6 +1399,79 @@ function MiniMetric({ label, value, tone }: { label: string; value: string; tone
       <span className="block text-[10px] font-extrabold opacity-80">{label}</span>
       <span className="mt-1 block text-xl font-black">{value}</span>
     </div>
+  );
+}
+
+function NewsSearchResultPanel({ search }: { search: LastNewsSearch }) {
+  const foundItems = search.items.length
+    ? search.items.map((item) => ({
+        key: item.id,
+        title: item.title,
+        url: item.originalUrl,
+        description: item.summary,
+        state: item.state,
+      }))
+    : search.results.map((result) => ({
+        key: result.url,
+        title: result.title,
+        url: result.url,
+        description: result.description,
+        state: undefined,
+      }));
+  const statusText =
+    search.fetched > 0
+      ? `وجدنا ${search.fetched.toLocaleString("ar-SA")} نتيجة، الجديد ${search.created.toLocaleString("ar-SA")}، المكرر ${search.duplicates.toLocaleString("ar-SA")}.`
+      : "لم نجد مادة مطابقة داخل هذا الموقع.";
+
+  return (
+    <section className="mb-4 rounded-lg border border-[#b7ddce] bg-[#f4fbf7] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-black text-[#0f513f]">نتيجة بحث الموقع</h3>
+          <p className="mt-1 text-[11px] font-bold text-[#31715f]">
+            {statusText} المصدر: {search.provider}
+          </p>
+        </div>
+        <Link
+          href="/ops"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#111827] px-3 text-[11px] font-extrabold text-white"
+        >
+          فتح الرصد اليومي
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      {foundItems.length ? (
+        <div className="mt-3 space-y-2">
+          {foundItems.slice(0, 5).map((item) => (
+            <article key={item.key} className="rounded-lg border border-[#cfeadd] bg-white p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="line-clamp-2 text-sm font-black text-[var(--color-text-title)]">{item.title}</h4>
+                  {item.description ? <p className="mt-1 line-clamp-2 text-xs font-semibold text-[var(--color-text-muted)]">{item.description}</p> : null}
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 block truncate text-left text-[11px] font-bold text-[#1f6feb] underline"
+                    dir="ltr"
+                  >
+                    {item.url}
+                  </a>
+                </div>
+                {item.state ? (
+                  <span className="rounded-full bg-[#ecf7f2] px-2 py-1 text-[10px] font-extrabold text-[#0f6b57]">موجودة في الرصد</span>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg border border-dashed border-[#cfeadd] bg-white p-3 text-xs font-bold text-[var(--color-text-muted)]">
+          جرّب كلمة أدق من عنوان الخبر أو الصق رابط المقال مباشرة.
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -301,6 +301,14 @@ function platformLabel(item: MonitoringItem) {
   return "موقع";
 }
 
+function mediaPreviewLabel(item: MonitoringItem) {
+  const label = platformLabel(item);
+  if (label === "TikTok") return "فيديو";
+  if (label === "Instagram") return item.originalUrl.includes("/reel/") ? "فيديو" : "صورة";
+  if (label === "X") return "معاينة";
+  return "صورة خبر";
+}
+
 function messageClass(type: MessageType) {
   if (type === "error") return "border-[#f1b6aa] bg-[#fff1ed] text-[#8f321d]";
   if (type === "warning") return "border-[#eed478] bg-[#fff8dc] text-[#735d00]";
@@ -1228,7 +1236,7 @@ function MonitoringRow({
         ) : (
           <Camera className="mx-auto mt-9 h-5 w-5 text-[var(--color-text-muted)]" />
         )}
-        <span className="absolute bottom-1 left-1 rounded bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-white">00:28</span>
+        <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">{mediaPreviewLabel(item)}</span>
       </button>
 
       <div className="flex gap-2 sm:order-1 sm:flex-col">
