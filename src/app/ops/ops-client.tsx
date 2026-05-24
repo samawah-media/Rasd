@@ -16,11 +16,11 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import type { Capture, HealthMetric, MonitoringItem, ReportVersion, Source } from "@/lib/types";
 import AppShell from "@/components/AppShell";
+import { BrandIcon, brandFromLabel } from "@/components/BrandIcon";
 import { isValidXUrl } from "@/lib/x/parser";
 
 type MessageType = "success" | "error" | "info" | "warning";
@@ -738,8 +738,8 @@ export function OpsClient() {
                 {([
                   ["all", "الكل", Eye],
                   ["x", "X", Filter],
-                  ["instagram", "Instagram", Sparkles],
-                  ["tiktok", "TikTok", Sparkles],
+                  ["instagram", "Instagram", Filter],
+                  ["tiktok", "TikTok", Filter],
                   ["news", "الأخبار", Globe],
                 ] as Array<[PlatformFilter, string, ComponentType<{ className?: string }>]>
                 ).map(([id, label, Icon]) => (
@@ -753,7 +753,11 @@ export function OpsClient() {
                         : "border-transparent text-[var(--color-text-muted)] hover:bg-white"
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    {id === "x" || id === "instagram" || id === "tiktok" ? (
+                      <BrandIcon brand={brandFromLabel(label)} size="sm" />
+                    ) : (
+                      <Icon className="h-3.5 w-3.5" />
+                    )}
                     {label}
                   </button>
                 ))}
@@ -885,7 +889,7 @@ function MonitoringRow({
     <div className={`grid gap-3 rounded-lg border p-3 transition sm:grid-cols-[88px_minmax(0,1fr)_86px] ${selected ? "border-[#2563eb] bg-[#f8fbff]" : "border-[var(--color-border)] bg-white"}`}>
       <button type="button" onClick={onSelect} className="min-w-0 text-right sm:order-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="rounded-md bg-black px-1.5 py-0.5 text-[9px] font-extrabold text-white">{platformLabel(item)}</span>
+          <PlatformBadge label={platformLabel(item)} />
           <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
         </div>
         <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[var(--color-text-title)]">{item.title}</h3>
@@ -930,5 +934,14 @@ function MonitoringRow({
         </button>
       </div>
     </div>
+  );
+}
+
+function PlatformBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-[var(--color-border)] bg-white px-1.5 py-0.5 text-[9px] font-extrabold text-[var(--color-text-title)] shadow-sm">
+      <BrandIcon brand={brandFromLabel(label)} size="sm" className="h-4 w-4 rounded" />
+      {label}
+    </span>
   );
 }

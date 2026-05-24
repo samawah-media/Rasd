@@ -20,6 +20,7 @@ import {
 import type { ConnectorRun, KeywordRule, MonitoringItem, Source, SourceRule } from "@/lib/types";
 import type { LegacySourceIntelligence } from "@/lib/legacy-source-intelligence";
 import AppShell from "@/components/AppShell";
+import { BrandIcon, brandFromLabel } from "@/components/BrandIcon";
 
 type MessageType = "success" | "error" | "info" | "warning";
 
@@ -1214,35 +1215,7 @@ function SourceListRow({
 }
 
 function SourceLogo({ label }: { label: string }) {
-  if (label === "TikTok") {
-    return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white shadow-sm">
-        ♪
-      </div>
-    );
-  }
-
-  if (label === "Instagram") {
-    return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#e4405f] text-lg font-black text-white shadow-sm">
-        ◎
-      </div>
-    );
-  }
-
-  if (label === "X") {
-    return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white shadow-sm">
-        X
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-[var(--color-text-muted)] shadow-sm">
-      <Globe className="h-6 w-6" />
-    </div>
-  );
+  return <BrandIcon brand={brandFromLabel(label)} size="lg" />;
 }
 
 function EmptySources({ label }: { label: string }) {

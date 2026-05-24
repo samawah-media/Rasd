@@ -7,14 +7,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Database,
   ExternalLink,
-  Globe,
   RefreshCw,
   Shield,
   XCircle,
 } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { BrandIcon, brandFromLabel } from "@/components/BrandIcon";
 
 interface HealthClientProps {
   initialHealth: {
@@ -351,30 +350,7 @@ function ServiceCard({
 }
 
 function ServiceLogo({ label }: { label: string }) {
-  if (label === "X") {
-    return <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white">X</div>;
-  }
-  if (label === "♪") {
-    return <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-black text-lg font-black text-white">♪</div>;
-  }
-  if (label === "▲") {
-    return <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white text-xl font-black text-black">▲</div>;
-  }
-  if (label === "S") {
-    return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#b7ddce] bg-[#ecf7f2] text-[#0f6b57]">
-        <Database className="h-6 w-6" />
-      </div>
-    );
-  }
-  if (label === "A") {
-    return (
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] text-[#1f6feb]">
-        <Globe className="h-6 w-6" />
-      </div>
-    );
-  }
-  return <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border)] bg-white text-sm font-black">{label}</div>;
+  return <BrandIcon brand={brandFromLabel(label)} size="lg" />;
 }
 
 function MiniInfo({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
@@ -446,7 +422,10 @@ function ActivityRow({ level, time, message }: { level: string; time: string; me
 function SocialPulse({ label, value, ok }: { label: string; value: number; ok: boolean }) {
   return (
     <div className="rounded-lg border border-[var(--color-border)] bg-white p-3">
-      <span className="block text-[10px] font-bold text-[var(--color-text-muted)]">{label}</span>
+      <div className="flex items-center justify-center gap-2">
+        <BrandIcon brand={brandFromLabel(label)} size="sm" />
+        <span className="text-[10px] font-bold text-[var(--color-text-muted)]">{label}</span>
+      </div>
       <span className="mt-1 block text-lg font-black text-[var(--color-text-title)]">{value.toLocaleString("ar-SA")}</span>
       <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-extrabold ${ok ? "bg-[#ecf7f2] text-[#0f6b57]" : "bg-stone-100 text-stone-500"}`}>
         {ok ? "يعمل" : "متوقف"}
