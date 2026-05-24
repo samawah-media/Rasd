@@ -1,17 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  DEFAULT_ORGANIZATION_ID,
-  RASD_OWNER_EMAIL,
-  defaultPathForRole,
-  isAdminPath,
-  isAdminRole,
-  isAuthPath,
-  isClientPath,
-  isProtectedAppPath,
-} from "@/lib/auth-config";
-import type { Role } from "@/lib/types";
+import { isAuthPath, isProtectedAppPath } from "@/lib/auth-config";
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -55,56 +45,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (isClientPath(pathname)) {
-    return supabaseResponse;
-  }
-
-  const role = await resolveProxyRole(user.id, user.email?.toLowerCase() ?? null, supabase);
-
-  if (!role) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/unauthorized";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
-  if (isAdminPath(pathname) && !isAdminRole(role)) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/unauthorized";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
-  if (pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = defaultPathForRole(role);
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
   return supabaseResponse;
-}
-
-async function resolveProxyRole(
-  userId: string,
-  email: string | null,
-  supabase: ReturnType<typeof createServerClient>,
-): Promise<Role | null> {
-  if (email === RASD_OWNER_EMAIL) return "owner";
-
-  const { data, error } = await supabase
-    .from("memberships")
-    .select("organization_id, role")
-    .eq("user_id", userId);
-
-  if (error) return null;
-
-  const memberships = (data ?? []) as Array<{ organization_id: string; role: Role }>;
-  return (
-    memberships.find((membership) => membership.organization_id === DEFAULT_ORGANIZATION_ID)?.role ??
-    memberships[0]?.role ??
-    null
-  );
 }
 
 export const config = {
