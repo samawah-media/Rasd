@@ -248,6 +248,7 @@ function connectorRunLabel(run?: ConnectorRun) {
 function friendlyConnectorFailure(reason?: string | null) {
   if (!reason) return "تعذر الفحص، جرّب تشغيل المصدر مرة أخرى.";
   if (typeof reason !== "string") return "تعذر الفحص، وسبب الخطأ غير قابل للعرض.";
+  if (reason === "[object Object]") return "فشل مزود بيانات. جرّب الاختبار مرة أخرى أو راجع إعدادات هذا المصدر.";
   if (reason.includes("input.username is required")) return "حساب Instagram يحتاج اسم مستخدم واضح بدل رابط غير مكتمل.";
   if (reason.includes("apify_http_400")) return "مزود Instagram رفض بيانات الحساب. راجع الرابط أو اسم المستخدم.";
   if (reason.includes("apify_instagram_fetch_failed")) return "تعذر جلب حساب Instagram من المزود.";
