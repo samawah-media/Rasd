@@ -241,8 +241,16 @@ function latestRunForRule(rule: SourceRule, runs: ConnectorRun[]) {
 function connectorRunLabel(run?: ConnectorRun) {
   if (!run) return "لم يتم فحصه بعد";
   if (run.status === "success") return `آخر فحص ناجح · ${run.fetchedCount.toLocaleString("ar-SA")} مادة جديدة`;
-  if (run.status === "failed") return `يحتاج انتباه · ${run.failureReason ?? "سبب غير معروف"}`;
+  if (run.status === "failed") return `يحتاج انتباه · ${friendlyConnectorFailure(run.failureReason)}`;
   return run.status;
+}
+
+function friendlyConnectorFailure(reason?: string | null) {
+  if (!reason) return "تعذر الفحص، جرّب تشغيل المصدر مرة أخرى.";
+  if (reason.includes("input.username is required")) return "حساب Instagram يحتاج اسم مستخدم واضح بدل رابط غير مكتمل.";
+  if (reason.includes("apify_http_400")) return "مزود Instagram رفض بيانات الحساب. راجع الرابط أو اسم المستخدم.";
+  if (reason.includes("apify_instagram_fetch_failed")) return "تعذر جلب حساب Instagram من المزود.";
+  return reason.length > 120 ? `${reason.slice(0, 120)}...` : reason;
 }
 
 export function SourcesClient() {
