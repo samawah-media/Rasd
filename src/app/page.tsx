@@ -7,8 +7,8 @@ import AnimatedWorkflowHero from "@/components/AnimatedWorkflowHero";
 
 const entryCards = [
   {
-    title: "تقارير العميل",
-    description: "العميل يشوف التقرير فقط.",
+    title: "تقارير رصد هداية ثون",
+    description: "بوابة فريق هداية",
     href: "/client-report",
     className: "border-[#c9dfcf] bg-[#f6fbf6] text-[#173f34]",
     buttonClassName: "bg-[#173f34] text-white hover:bg-[#102e25]",
