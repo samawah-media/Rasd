@@ -27,6 +27,15 @@ type MessageType = "success" | "error" | "info" | "warning";
 type WorkTab = "active" | "review" | "capture" | "report" | "done";
 type IntakeMode = "manual" | "x-search" | "sources";
 type PlatformFilter = "all" | "news" | "tiktok" | "instagram" | "x";
+type ScanStepStatus = "idle" | "running" | "success" | "warning" | "error";
+
+type LastScan = {
+  finishedAt: string;
+  totalNewItems: number;
+  rss: { status: ScanStepStatus; sources: number; fetched: number; created: number; duplicates: number; skipped: number; failed: number };
+  social: { status: ScanStepStatus; checked: number; executed: number; failed: number };
+  x: { status: ScanStepStatus; discovered: number; created: number; duplicates: number; failed: number };
+};
 
 type ApiState = {
   items: MonitoringItem[];
@@ -105,6 +114,22 @@ type SourcePollActiveResponse = {
     failed: number;
     runs: Array<Record<string, unknown>>;
   };
+};
+
+type RunDueResponse = {
+  ok: boolean;
+  dueRulesCount: number;
+  enqueuedCount: number;
+  executedCount: number;
+  failedCount: number;
+};
+
+const emptyLastScan: LastScan = {
+  finishedAt: "",
+  totalNewItems: 0,
+  rss: { status: "idle", sources: 0, fetched: 0, created: 0, duplicates: 0, skipped: 0, failed: 0 },
+  social: { status: "idle", checked: 0, executed: 0, failed: 0 },
+  x: { status: "idle", discovered: 0, created: 0, duplicates: 0, failed: 0 },
 };
 
 const emptyState: ApiState = {
@@ -301,10 +326,24 @@ export function OpsClient() {
   const [tab, setTab] = useState<WorkTab>("active");
   const [, setIntakeMode] = useState<IntakeMode>("manual");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
-  const [query, setQuery] = useState("");
   const [searchRunning, setSearchRunning] = useState(false);
+  const [lastScan, setLastScan] = useState<LastScan | null>(null);
 
   const isXUrl = useMemo(() => isValidXUrl(url), [url]);
+
+  function existingXUrls(items = state.items) {
+    return items
+      .filter((item) => item.originalUrl?.includes("x.com") || item.originalUrl?.includes("twitter.com"))
+      .map((item) => item.originalUrl)
+      .filter(Boolean);
+  }
+
+  async function requestXSearch(items = state.items) {
+    return apiJson<XSearchResponse>("/api/x-search", {
+      method: "POST",
+      body: JSON.stringify({ existingUrls: existingXUrls(items) }),
+    });
+  }
 
   async function triggerXSearch() {
     setSearchRunning(true);
@@ -312,20 +351,12 @@ export function OpsClient() {
     setMessage("جاري تشغيل بحث X...");
     setMessageType("info");
     try {
-      const existingXUrls = state.items
-        .filter((item) => item.originalUrl?.includes("x.com") || item.originalUrl?.includes("twitter.com"))
-        .map((item) => item.originalUrl)
-        .filter(Boolean);
-
-      const data = await apiJson<XSearchResponse>("/api/x-search", {
-        method: "POST",
-        body: JSON.stringify({ existingUrls: existingXUrls }),
-      });
-
+      const data = await requestXSearch();
       if (data.ok && data.runResult) {
         const created = data.storage?.created ?? data.items?.length ?? data.runResult.newItems;
         const duplicates = data.storage?.duplicates ?? data.runResult.duplicateSkipped;
         const failed = data.storage?.failed ?? 0;
+        const discovered = data.runResult.newItems;
         const firstItem = data.items?.[0];
         if (firstItem) {
           setSelectedId(firstItem.id);
@@ -333,6 +364,12 @@ export function OpsClient() {
           setTab("active");
         }
         await refreshSilently();
+        setLastScan({
+          ...emptyLastScan,
+          finishedAt: new Date().toISOString(),
+          totalNewItems: created,
+          x: { status: failed ? "warning" : "success", discovered, created, duplicates, failed },
+        });
         setMessage(
           `اكتشف بحث X ${data.runResult.newItems} نتيجة، وأضاف ${created} مادة جديدة، وتخطى ${duplicates} مكرر${failed ? `، وفشل حفظ ${failed}` : ""}.`,
         );
@@ -346,6 +383,51 @@ export function OpsClient() {
       setMessageType("error");
     } finally {
       setSearchRunning(false);
+    }
+  }
+
+  async function runSocialSearch() {
+    setPending("social-search");
+    setIntakeMode("sources");
+    setMessage("جاري فحص TikTok / Instagram...");
+    setMessageType("info");
+
+    try {
+      const beforeIds = new Set(state.items.map((item) => item.id));
+      const result = await apiJson<RunDueResponse>("/api/source-rules/run-due", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      const snapshot = await fetchSnapshot();
+      setState(snapshot);
+      setTab("active");
+      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
+      if (newItems[0]) {
+        setSelectedId(newItems[0].id);
+        setPinnedItemId(newItems[0].id);
+      }
+      setLastScan({
+        ...emptyLastScan,
+        finishedAt: new Date().toISOString(),
+        totalNewItems: newItems.length,
+        social: {
+          status: result.failedCount ? "warning" : "success",
+          checked: result.dueRulesCount,
+          executed: result.executedCount,
+          failed: result.failedCount,
+        },
+      });
+      setMessage(
+        result.failedCount
+          ? `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، اكتملت ${result.executedCount.toLocaleString("ar-SA")} وتعثر ${result.failedCount.toLocaleString("ar-SA")}.`
+          : `فحصنا ${result.dueRulesCount.toLocaleString("ar-SA")} قاعدة TikTok/Instagram، وظهرت ${newItems.length.toLocaleString("ar-SA")} مادة جديدة.`,
+      );
+      setMessageType(result.failedCount ? "warning" : "success");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر فحص TikTok / Instagram.");
+      setMessageType("error");
+    } finally {
+      setPending(null);
     }
   }
 
@@ -377,7 +459,6 @@ export function OpsClient() {
   }, [workflowItems]);
 
   const visibleItems = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     return workflowItems.filter((item) => {
       const matchesTab = tab === "active" || tabForItem(item) === tab;
       const itemPlatform = platformLabel(item).toLowerCase();
@@ -385,16 +466,9 @@ export function OpsClient() {
         platformFilter === "all" ||
         (platformFilter === "news" && (itemPlatform === "خبر" || itemPlatform === "موقع")) ||
         itemPlatform === platformFilter;
-      const matchesQuery =
-        !normalizedQuery ||
-        [item.title, item.summary, item.authorName, item.authorHandle, item.sourceName, item.originalUrl]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(normalizedQuery);
-      return matchesTab && matchesPlatform && matchesQuery;
+      return matchesTab && matchesPlatform;
     });
-  }, [workflowItems, platformFilter, query, tab]);
+  }, [workflowItems, platformFilter, tab]);
 
   const selectedItem = useMemo(
     () => visibleItems.find((item) => item.id === selectedId) ?? workflowItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null,
@@ -520,26 +594,141 @@ export function OpsClient() {
   async function runSourceSearch() {
     setPending("source-search");
     setIntakeMode("sources");
-    setMessage("جاري تشغيل المصادر النشطة...");
+    setMessage("جاري فحص مصادر الأخبار...");
     setMessageType("info");
 
     try {
+      const beforeIds = new Set(state.items.map((item) => item.id));
       const result = await apiJson<SourcePollActiveResponse>("/api/sources/poll-active", {
         method: "POST",
         body: JSON.stringify({ limit: 5 }),
       });
 
-      await refreshSilently();
+      const snapshot = await fetchSnapshot();
+      setState(snapshot);
       setTab("active");
+      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
+      if (newItems[0]) {
+        setSelectedId(newItems[0].id);
+        setPinnedItemId(newItems[0].id);
+      }
+      setLastScan({
+        ...emptyLastScan,
+        finishedAt: new Date().toISOString(),
+        totalNewItems: newItems.length,
+        rss: {
+          status: result.poll.failed ? "warning" : "success",
+          sources: result.poll.sources,
+          fetched: result.poll.fetched,
+          created: result.poll.created,
+          duplicates: result.poll.duplicates,
+          skipped: result.poll.skipped,
+          failed: result.poll.failed,
+        },
+      });
       setMessage(
-        `فحصنا ${result.poll.sources} مصدر، وجلبنا ${result.poll.fetched} مادة. الجديد ${result.poll.created}، المكرر ${result.poll.duplicates}، المتجاوز ${result.poll.skipped}${result.poll.failed ? `، والفاشل ${result.poll.failed}` : ""}.`,
+        `فحصنا ${result.poll.sources} مصدر أخبار، وجلبنا ${result.poll.fetched} مادة. الجديد ${result.poll.created}، المكرر ${result.poll.duplicates}، غير مطابق ${result.poll.skipped}${result.poll.failed ? `، والفاشل ${result.poll.failed}` : ""}.`,
       );
       setMessageType(result.poll.failed ? "warning" : "success");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "تعذر تشغيل المصادر.");
+      setMessage(error instanceof Error ? error.message : "تعذر فحص مصادر الأخبار.");
       setMessageType("error");
     } finally {
       setPending(null);
+    }
+  }
+
+  async function runAllSources() {
+    setPending("scan-all");
+    setSearchRunning(true);
+    setIntakeMode("sources");
+    setMessage("جاري فحص كل المصادر: الأخبار ثم TikTok / Instagram ثم X...");
+    setMessageType("info");
+
+    const beforeIds = new Set(state.items.map((item) => item.id));
+    const nextScan: LastScan = {
+      ...emptyLastScan,
+      finishedAt: new Date().toISOString(),
+      rss: { ...emptyLastScan.rss, status: "running" },
+      social: { ...emptyLastScan.social, status: "running" },
+      x: { ...emptyLastScan.x, status: "running" },
+    };
+    setLastScan(nextScan);
+
+    try {
+      try {
+        const rssResult = await apiJson<SourcePollActiveResponse>("/api/sources/poll-active", {
+          method: "POST",
+          body: JSON.stringify({ limit: 10 }),
+        });
+        nextScan.rss = {
+          status: rssResult.poll.failed ? "warning" : "success",
+          sources: rssResult.poll.sources,
+          fetched: rssResult.poll.fetched,
+          created: rssResult.poll.created,
+          duplicates: rssResult.poll.duplicates,
+          skipped: rssResult.poll.skipped,
+          failed: rssResult.poll.failed,
+        };
+      } catch {
+        nextScan.rss = { ...emptyLastScan.rss, status: "error", failed: 1 };
+      }
+      setLastScan({ ...nextScan });
+
+      try {
+        const socialResult = await apiJson<RunDueResponse>("/api/source-rules/run-due", {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        nextScan.social = {
+          status: socialResult.failedCount ? "warning" : "success",
+          checked: socialResult.dueRulesCount,
+          executed: socialResult.executedCount,
+          failed: socialResult.failedCount,
+        };
+      } catch {
+        nextScan.social = { ...emptyLastScan.social, status: "error", failed: 1 };
+      }
+      setLastScan({ ...nextScan });
+
+      try {
+        const xResult = await requestXSearch();
+        const created = xResult.storage?.created ?? xResult.items?.length ?? xResult.runResult?.newItems ?? 0;
+        const duplicates = xResult.storage?.duplicates ?? xResult.runResult?.duplicateSkipped ?? 0;
+        const failed = xResult.storage?.failed ?? (xResult.ok ? 0 : 1);
+        nextScan.x = {
+          status: failed ? "warning" : "success",
+          discovered: xResult.runResult?.newItems ?? 0,
+          created,
+          duplicates,
+          failed,
+        };
+      } catch {
+        nextScan.x = { ...emptyLastScan.x, status: "error", failed: 1 };
+      }
+
+      const snapshot = await fetchSnapshot();
+      setState(snapshot);
+      setTab("active");
+      const newItems = snapshot.items.filter((item) => !beforeIds.has(item.id));
+      if (newItems[0]) {
+        setSelectedId(newItems[0].id);
+        setPinnedItemId(newItems[0].id);
+      }
+      nextScan.finishedAt = new Date().toISOString();
+      nextScan.totalNewItems = newItems.length;
+      setLastScan({ ...nextScan });
+
+      const failedTotal = nextScan.rss.failed + nextScan.social.failed + nextScan.x.failed;
+      setMessage(
+        failedTotal
+          ? `اكتمل الفحص مع تنبيهات: ${newItems.length.toLocaleString("ar-SA")} مواد جديدة، و${failedTotal.toLocaleString("ar-SA")} فشل يحتاج مراجعة.`
+          : `اكتمل فحص كل المصادر: ${newItems.length.toLocaleString("ar-SA")} مواد جديدة ظهرت في القائمة.`,
+      );
+      setMessageType(failedTotal ? "warning" : "success");
+    } finally {
+      setPending(null);
+      setSearchRunning(false);
     }
   }
 
@@ -677,25 +866,46 @@ export function OpsClient() {
               </button>
             </PanelHeader>
             <div className="space-y-4 p-4">
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="بحث سريع في المواد..."
-                  className="h-10 w-full rounded-lg border border-[var(--color-border)] bg-white pr-8 pl-3 text-xs font-semibold outline-none transition focus:border-[#2563eb]"
-                />
+              <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,0.46fr))]">
+                <button
+                  type="button"
+                  onClick={runAllSources}
+                  disabled={pending !== null || searchRunning}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#1d4ed8] disabled:opacity-50"
+                >
+                  {pending === "scan-all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  فحص كل المصادر
+                </button>
+                <button
+                  type="button"
+                  onClick={runSourceSearch}
+                  disabled={pending !== null || searchRunning || activeRssSources.length === 0}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-extrabold text-[var(--color-text-title)] transition hover:border-[#2563eb]/40 hover:text-[#2563eb] disabled:opacity-50"
+                >
+                  {pending === "source-search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+                  فحص الأخبار
+                </button>
+                <button
+                  type="button"
+                  onClick={runSocialSearch}
+                  disabled={pending !== null || searchRunning}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-extrabold text-[var(--color-text-title)] transition hover:border-[#2563eb]/40 hover:text-[#2563eb] disabled:opacity-50"
+                >
+                  {pending === "social-search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BrandIcon brand="instagram" size="sm" />}
+                  TikTok / Instagram
+                </button>
+                <button
+                  type="button"
+                  onClick={triggerXSearch}
+                  disabled={pending !== null || searchRunning}
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] bg-white px-3 text-xs font-extrabold text-[var(--color-text-title)] transition hover:border-[#2563eb]/40 hover:text-[#2563eb] disabled:opacity-50"
+                >
+                  {searchRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <BrandIcon brand="x" size="sm" />}
+                  بحث X
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={runSourceSearch}
-                disabled={pending !== null || searchRunning || activeRssSources.length === 0}
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-4 text-sm font-extrabold text-white shadow-sm transition hover:bg-[#1d4ed8] disabled:opacity-50"
-              >
-                {pending === "source-search" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                افحص الآن
-              </button>
+              <ScanSummary scan={lastScan} active={pending === "scan-all"} />
 
               <form onSubmit={submitUrl} className="grid gap-2 rounded-lg border border-[#dbeafe] bg-[#f8fbff] p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -770,15 +980,6 @@ export function OpsClient() {
                   <Trash2 className="h-3.5 w-3.5" />
                   أرشفة المعروض
                 </button>
-                <button
-                  type="button"
-                  onClick={triggerXSearch}
-                  disabled={pending !== null || searchRunning}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#bfdbfe] bg-white px-3 text-[11px] font-extrabold text-[#2563eb] transition hover:bg-[#eff6ff] disabled:opacity-50"
-                >
-                  {searchRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                  بحث X الآن
-                </button>
               </div>
 
               <div className="space-y-2">
@@ -812,8 +1013,10 @@ export function OpsClient() {
                 ) : (
                   <div className="rounded-lg border border-dashed border-[var(--color-border)] p-8 text-center">
                     <CircleCheck className="mx-auto h-8 w-8 text-[#16a34a]" />
-                    <h2 className="mt-3 text-sm font-extrabold text-[var(--color-text-title)]">لا توجد مواد ضمن هذا الفلتر</h2>
-                    <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">جرّب فحص المصادر أو تغيير الفلتر.</p>
+                    <h2 className="mt-3 text-sm font-extrabold text-[var(--color-text-title)]">لا توجد مواد جديدة ضمن هذا الفلتر</h2>
+                    <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">
+                      إذا انتهى الفحص بدون نتائج فغالبًا أن المواد مكررة أو لا تطابق كلمات الرصد أو أن مصدرًا يحتاج مراجعة.
+                    </p>
                   </div>
                 )}
               </div>
@@ -862,6 +1065,83 @@ function StatCard({ value, label, tone }: { value: number; label: string; tone: 
     <div className={`rounded-lg border p-3 ${toneClass}`}>
       <strong className="block text-2xl font-black">{value.toLocaleString("ar-SA")}</strong>
       <span className="mt-1 block text-xs font-bold">{label}</span>
+    </div>
+  );
+}
+
+function ScanSummary({ scan, active }: { scan: LastScan | null; active: boolean }) {
+  const displayScan = scan ?? emptyLastScan;
+  const hasScan = Boolean(scan);
+
+  return (
+    <section className="rounded-lg border border-[var(--color-border)] bg-[#fbfbfc] p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-black text-[var(--color-text-title)]">نتيجة آخر فحص</h3>
+          <p className="mt-1 text-[11px] font-semibold text-[var(--color-text-muted)]">
+            {active
+              ? "جاري تشغيل المصادر بالتتابع..."
+              : hasScan
+                ? `آخر فحص: ${new Date(displayScan.finishedAt).toLocaleString("ar-SA", { hour12: false })}`
+                : "اضغط فحص كل المصادر لبدء الرصد اليومي."}
+          </p>
+        </div>
+        <div className="rounded-lg border border-[#ccebd8] bg-[#f1fbf4] px-3 py-2 text-center text-[#15803d]">
+          <span className="block text-[10px] font-bold">مواد جديدة</span>
+          <strong className="text-xl font-black">{displayScan.totalNewItems.toLocaleString("ar-SA")}</strong>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <ScanStep
+          brand="news"
+          title="الأخبار"
+          status={displayScan.rss.status}
+          detail={`${displayScan.rss.created.toLocaleString("ar-SA")} جديد · ${displayScan.rss.duplicates.toLocaleString("ar-SA")} مكرر · ${displayScan.rss.skipped.toLocaleString("ar-SA")} غير مطابق`}
+        />
+        <ScanStep
+          brand="instagram"
+          title="TikTok / Instagram"
+          status={displayScan.social.status}
+          detail={`${displayScan.social.executed.toLocaleString("ar-SA")} عملية مكتملة · ${displayScan.social.failed.toLocaleString("ar-SA")} فشل`}
+        />
+        <ScanStep
+          brand="x"
+          title="X"
+          status={displayScan.x.status}
+          detail={`${displayScan.x.created.toLocaleString("ar-SA")} جديد · ${displayScan.x.duplicates.toLocaleString("ar-SA")} مكرر · ${displayScan.x.failed.toLocaleString("ar-SA")} فشل`}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ScanStep({ brand, title, status, detail }: { brand: "news" | "instagram" | "x"; title: string; status: ScanStepStatus; detail: string }) {
+  const statusText: Record<ScanStepStatus, string> = {
+    idle: "لم يبدأ",
+    running: "جاري",
+    success: "اكتمل",
+    warning: "تنبيه",
+    error: "فشل",
+  };
+  const statusClass: Record<ScanStepStatus, string> = {
+    idle: "bg-stone-100 text-stone-500",
+    running: "bg-[#eff6ff] text-[#2563eb]",
+    success: "bg-[#e8f5ef] text-[#15803d]",
+    warning: "bg-[#fff7ed] text-[#c2410c]",
+    error: "bg-[#fff1f2] text-[#dc2626]",
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--color-border)] bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <BrandIcon brand={brand} size="sm" />
+          <span className="text-xs font-black text-[var(--color-text-title)]">{title}</span>
+        </div>
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${statusClass[status]}`}>{statusText[status]}</span>
+      </div>
+      <p className="mt-2 text-[10px] font-semibold text-[var(--color-text-muted)]">{detail}</p>
     </div>
   );
 }
