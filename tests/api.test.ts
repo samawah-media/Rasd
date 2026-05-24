@@ -415,6 +415,61 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("searches inside a news site through Apify Google Search and ingests matching results", async () => {
+    const previousApifyToken = process.env.APIFY_API_TOKEN;
+    process.env.APIFY_API_TOKEN = "apify_test_token";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      assert.match(String(input), /apify~google-search-scraper/);
+      assert.equal(init?.method, "POST");
+      const payload = JSON.parse(String(init?.body));
+      assert.equal(payload.queries, 'site:okaz.com.sa "سفارة «أرض الصومال»"');
+      return new Response(
+        JSON.stringify([
+          {
+            organicResults: [
+              {
+                title: "السعودية و14 دولة: سفارة «أرض الصومال» بالقدس غير قانونية ومرفوضة",
+                url: "https://www.okaz.com.sa/local/na/2250043",
+                description: "دان وزراء خارجية المملكة العربية السعودية و14 دولة افتتاح سفارة مزعومة.",
+              },
+              {
+                title: "نتيجة خارج النطاق",
+                url: "https://example.com/not-okaz",
+                description: "يجب تجاهل هذه النتيجة.",
+              },
+            ],
+          },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    };
+
+    try {
+      const result = await requestJson("/api/sources/search-news", {
+        method: "POST",
+        body: JSON.stringify({
+          site_url: "https://www.okaz.com.sa/",
+          test_term: "سفارة «أرض الصومال»",
+        }),
+      });
+      const keywords = await requestJson("/api/keyword-rules");
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.search.provider, "apify_google_search");
+      assert.equal(result.json.search.fetched, 1);
+      assert.equal(result.json.search.created, 1);
+      assert.equal(result.json.search.items[0].state, "needs_review");
+      assert.equal(result.json.search.items[0].originalUrl, "https://www.okaz.com.sa/local/na/2250043");
+      assert.deepEqual(result.json.search.items[0].matchedTerms, ["سفارة «أرض الصومال»"]);
+      assert.equal(keywords.json.keyword_rules[0].requiredTerms.includes("سفارة «أرض الصومال»"), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousApifyToken === undefined) delete process.env.APIFY_API_TOKEN;
+      else process.env.APIFY_API_TOKEN = previousApifyToken;
+    }
+  });
+
   it("polls active RSS sources with a small batch limit", async () => {
     const active = store.createSource({
       name: "Active RSS",

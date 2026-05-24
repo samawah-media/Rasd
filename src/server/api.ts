@@ -23,6 +23,7 @@ import {
 } from "@/server/share-links";
 import { persistentStore } from "@/server/persistent-store";
 import { fetchUrlMetadata, isSafePublicHttpUrl, type UrlMetadata } from "@/server/url-metadata";
+import { searchNewsSiteWithApifyGoogle } from "@/server/apify-extractor";
 import { renderEvidenceCardSvg } from "@/server/evidence-card";
 import { buildClientReportExportHtml } from "@/server/client-report-export";
 import {
@@ -351,6 +352,33 @@ async function pollRssSources(sources: Awaited<ReturnType<typeof persistentStore
   };
 }
 
+async function ingestNewsSearchResults(results: Array<{ title: string; url: string; description?: string }>, keywordRule?: KeywordRule) {
+  const items = [];
+  let created = 0;
+  let duplicates = 0;
+  let failed = 0;
+
+  for (const result of results) {
+    try {
+      const ingested = await persistentStore.ingestManualUrl({
+        url: result.url,
+        title: result.title,
+        text: result.description ?? result.title,
+        sourceName: "بحث أخبار Apify",
+        keywordRule,
+        discoveryMethod: "auto_search",
+      });
+      items.push(ingested.item);
+      if (ingested.duplicate) duplicates += 1;
+      else created += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { created, duplicates, failed, items };
+}
+
 async function runDueConnectors(organizationId?: string, options: { force?: boolean; sourceRuleId?: string } = {}) {
   const beforeItems = await persistentStore.listItems();
   const beforeItemIds = new Set(beforeItems.map((item) => item.id));
@@ -673,6 +701,39 @@ api.post("/sources/poll-active", async (c) => {
     withRequestId(c, {
       poll: await pollRssSources(sources, options),
     }),
+  );
+});
+
+api.post("/sources/search-news", async (c) => {
+  const body = await readJson(c);
+  const testTerm = optionalString(body.test_term, body.testTerm, body.term, body.query);
+  const siteUrl = optionalString(body.site_url, body.siteUrl, body.url);
+  if (!testTerm) return c.json(withRequestId(c, { error: "test_term_required" }), 400);
+  if (!siteUrl || !isSafePublicHttpUrl(siteUrl)) {
+    return c.json(withRequestId(c, { error: "site_url_must_be_public_http_url" }), 400);
+  }
+
+  const options = await rssPollOptionsFromBody({ test_term: testTerm });
+  const maxResults = typeof body.limit === "number" ? Math.trunc(body.limit) : 5;
+  const search = await searchNewsSiteWithApifyGoogle(siteUrl, testTerm, { maxResults });
+  const ingest = await ingestNewsSearchResults(search.results, options.keywordRule);
+
+  return c.json(
+    withRequestId(c, {
+      search: {
+        provider: "apify_google_search",
+        query: search.query,
+        fetched: search.results.length,
+        created: ingest.created,
+        duplicates: ingest.duplicates,
+        failed: ingest.failed,
+        testTerm,
+        error: search.error,
+        results: search.results,
+        items: ingest.items,
+      },
+    }),
+    search.error && search.results.length === 0 ? 502 : 200,
   );
 });
 
