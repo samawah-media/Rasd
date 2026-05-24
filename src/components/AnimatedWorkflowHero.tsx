@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AtSign, Music2, Newspaper, Play } from "lucide-react";
 
-type SocialPlatform = "x" | "tiktok" | "youtube" | "web";
+type SocialPlatform = "x" | "tiktok" | "youtube";
 
 type SocialNotification = {
   platform: SocialPlatform;
@@ -49,9 +48,9 @@ const notifications: SocialNotification[] = [
     marker: { x: 253, y: 196 },
   },
   {
-    platform: "web",
-    account: "cpcomsa",
-    text: "خبر عن الابتكار الرقمي",
+    platform: "tiktok",
+    account: "mr.u191",
+    text: "تغطية فيديو مختصرة",
     card: { top: "38%", left: "4%" },
     marker: { x: 269, y: 311 },
   },
@@ -64,39 +63,36 @@ const platformMeta: Record<
   SocialPlatform,
   {
     label: string;
-    Icon: typeof AtSign;
     badge: string;
     dot: string;
     pulse: string;
+    mark: string;
+    markClassName: string;
   }
 > = {
   x: {
     label: "X",
-    Icon: AtSign,
     badge: "bg-black text-white",
     dot: "#f8fafc",
     pulse: "rgba(248,250,252,0.18)",
+    mark: "X",
+    markClassName: "text-base font-black",
   },
   tiktok: {
     label: "TikTok",
-    Icon: Music2,
     badge: "bg-[#111827] text-[#67e8f9]",
     dot: "#67e8f9",
     pulse: "rgba(103,232,249,0.2)",
+    mark: "♪",
+    markClassName: "text-xl font-black leading-none",
   },
   youtube: {
     label: "YouTube",
-    Icon: Play,
     badge: "bg-[#ef4444] text-white",
     dot: "#f87171",
     pulse: "rgba(248,113,113,0.2)",
-  },
-  web: {
-    label: "Web",
-    Icon: Newspaper,
-    badge: "bg-[#1f7a5d] text-white",
-    dot: "#86efac",
-    pulse: "rgba(134,239,172,0.2)",
+    mark: "play",
+    markClassName: "",
   },
 };
 
@@ -106,14 +102,13 @@ export default function AnimatedWorkflowHero() {
   useEffect(() => {
     const interval = window.setInterval(() => {
       setActiveNotice((current) => (current + 1) % notifications.length);
-    }, 1900);
+    }, 2100);
 
     return () => window.clearInterval(interval);
   }, []);
 
   const activeNotification = notifications[activeNotice];
   const activeMeta = platformMeta[activeNotification.platform];
-  const ActiveIcon = activeMeta.Icon;
 
   return (
     <section className="relative min-h-[430px] overflow-hidden rounded-lg border border-[#d8e4db] bg-[#101d19] p-4 shadow-sm">
@@ -181,15 +176,14 @@ export default function AnimatedWorkflowHero() {
           {notifications.map((notice, index) => {
             const active = activeNotice === index;
             const meta = platformMeta[notice.platform];
-            const Icon = meta.Icon;
 
             return (
               <article
                 key={`${notice.account}-notification`}
-                className={`absolute w-[236px] rounded-lg border border-white/70 bg-white/95 px-3 py-3 text-right text-[#17231f] shadow-[0_14px_34px_rgba(15,23,32,0.16)] backdrop-blur transition-all duration-500 ${
+                className={`absolute w-[236px] rounded-lg border border-white/70 bg-white/95 px-3 py-3 text-right text-[#17231f] shadow-[0_14px_34px_rgba(15,23,32,0.16)] backdrop-blur transition-all duration-700 ${
                   active
                     ? "translate-y-0 scale-100 opacity-100"
-                    : "pointer-events-none translate-y-3 scale-[0.96] opacity-0"
+                    : "pointer-events-none translate-y-4 scale-[0.92] opacity-0"
                 }`}
                 style={{
                   top: notice.card.top,
@@ -201,7 +195,11 @@ export default function AnimatedWorkflowHero() {
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.badge}`}
                     aria-label={meta.label}
                   >
-                    <Icon size={17} />
+                    {notice.platform === "youtube" ? (
+                      <span className="block h-0 w-0 border-y-[5px] border-l-[9px] border-y-transparent border-l-white" />
+                    ) : (
+                      <span className={meta.markClassName}>{meta.mark}</span>
+                    )}
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -223,7 +221,11 @@ export default function AnimatedWorkflowHero() {
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${activeMeta.badge}`}
               aria-label={activeMeta.label}
             >
-              <ActiveIcon size={17} />
+              {activeNotification.platform === "youtube" ? (
+                <span className="block h-0 w-0 border-y-[5px] border-l-[9px] border-y-transparent border-l-white" />
+              ) : (
+                <span className={activeMeta.markClassName}>{activeMeta.mark}</span>
+              )}
             </div>
 
             <div className="min-w-0 flex-1">
