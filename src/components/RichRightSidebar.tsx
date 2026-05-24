@@ -7,7 +7,6 @@ import {
   Database,
   Cpu,
   FileText,
-  UserRound,
   Menu,
   X,
   LockKeyhole,
@@ -15,15 +14,15 @@ import {
   Activity
 } from "lucide-react";
 
-// Beautiful SVG logo placeholder for Samawah
+// Primary product mark for RASD.
 const SamawahLogoPlaceholder = () => (
   <div className="flex items-center gap-3">
-    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#2383E2] to-[#00C853] flex items-center justify-center text-white font-extrabold text-xl shadow-md border border-white/20">
-      س
+    <div className="w-10 h-10 rounded-lg bg-[#111111] flex items-center justify-center text-white font-extrabold text-sm shadow-sm border border-black/10">
+      رصد
     </div>
     <div className="flex flex-col text-right">
-      <span className="text-base font-extrabold leading-tight text-[var(--color-text-title)]">سماوة</span>
-      <span className="text-[10px] font-medium text-[var(--color-text-muted)]">للحلول الرقمية</span>
+      <span className="text-base font-extrabold leading-tight text-[var(--color-text-title)]">رصد</span>
+      <span className="text-[10px] font-semibold text-[var(--color-text-muted)]">منصة الرصد الإعلامي</span>
     </div>
   </div>
 );
@@ -154,7 +153,7 @@ export default function RichRightSidebar() {
                 key={item.path}
                 href={item.path}
                 onClick={() => setIsOpen(false)}
-                className={`flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group active:scale-[0.97] ${
+                className={`flex items-center gap-4 p-3 rounded-lg transition-all duration-200 group active:scale-[0.97] ${
                   isActive
                     ? "bg-[#2383E2]/10 border-r-4 border-[#2383E2]"
                     : "hover:bg-[var(--color-bg-hover)]"
@@ -188,7 +187,7 @@ export default function RichRightSidebar() {
 
         {/* Sidebar Footer Guardrail Info */}
         <div className="p-4 border-t border-[var(--color-border)]">
-          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] p-4 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-title)]">
               <LockKeyhole size={14} className="text-[#2383E2]" />
               <span>المنصة تحت الحماية والرقابة</span>
