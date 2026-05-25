@@ -372,6 +372,41 @@ describe("connector and budget utilities", () => {
     assert.doesNotMatch(exportHtml.html, /<section class="page"[^>]*>\s*<img src="\/live-capture\.png"/);
   });
 
+  it("removes Instagram engagement metadata from client report content", () => {
+    const item = enrichClientReportItem({
+      id: "instagram-clean-content",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Instagram",
+      sourceName: "Instagram",
+      authorName: "emadowado7",
+      title: "18 likes, 4 comments - emadowado7 on March 31, 2026: عنوان المنشور فقط",
+      summary: "18 likes, 4 comments - emadowado7 on March 31, 2026: هذا هو محتوى المنشور فقط بدون بيانات التفاعل.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://instagram.com/p/ABCDE",
+      extractedOriginalUrl: "https://instagram.com/p/ABCDE",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://instagram.com/p/ABCDE"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.title, "عنوان المنشور فقط");
+    assert.equal(item.summary, "هذا هو محتوى المنشور فقط بدون بيانات التفاعل.");
+    assert.doesNotMatch(item.summary, /likes|comments|emadowado7 on March/u);
+  });
+
   it("does not treat the old placeholder capture image as client evidence", () => {
     const item = enrichClientReportItem({
       id: "manual-placeholder",

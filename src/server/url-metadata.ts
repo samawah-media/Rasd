@@ -633,7 +633,7 @@ function parseInstagramMetricDescription(value: string | null | undefined) {
   if (!cleaned) return null;
 
   const match = cleaned.match(
-    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?([A-Za-z0-9._]+)\s+on\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})\s*:\s*([\s\S]*)$/iu,
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?([A-Za-z0-9._]+)\s+on\s+([A-Z][a-z]+(?:\s+\d{1,2})?(?:,\s+\d{4})?)\s*:?\s*([\s\S]*)$/iu,
   );
   if (!match) return null;
 
@@ -642,7 +642,7 @@ function parseInstagramMetricDescription(value: string | null | undefined) {
     authorName,
     authorHandle: normalizeHandle(authorName),
     publishedAt: isoDate(match[2]),
-    caption: cleanText(match[3]),
+    caption: cleanText(match[3]) ?? "",
   };
 }
 

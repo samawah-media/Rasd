@@ -504,9 +504,13 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
   const sourceEvidenceImagePath = openableAssetUrl(item.sourceEvidenceImagePath);
   const linkStatus = getClientLinkStatus({ ...item, originalUrl, contentUrl });
   const screenshotStatus = evidenceImagePath ? "available" : "missing";
+  const title = cleanClientReportContent(item.title) ?? item.title;
+  const summary = cleanClientReportContent(item.summary) ?? item.summary;
 
   return {
     ...item,
+    title,
+    summary,
     originalUrl,
     contentUrl,
     evidenceImagePath,
@@ -691,6 +695,17 @@ function displayHandle(value: string | null | undefined) {
   const cleaned = cleanDisplayText(value)?.replace(/^@/u, "");
   if (!cleaned || !/^[A-Za-z0-9_][A-Za-z0-9._-]{0,80}$/u.test(cleaned)) return null;
   return `@${cleaned}`;
+}
+
+function cleanClientReportContent(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const instagramPrefix = cleaned.match(
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?[A-Za-z0-9._]+\s+on\s+[A-Z][a-z]+(?:\s+\d{1,2})?(?:,\s+\d{4})?\s*:?\s*([\s\S]*)$/iu,
+  );
+  if (instagramPrefix) return instagramPrefix[1]?.trim() ?? "";
+  return cleaned;
 }
 
 function cleanDisplayText(value: string | null | undefined) {
