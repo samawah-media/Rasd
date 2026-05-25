@@ -314,23 +314,54 @@ describe("connector and budget utilities", () => {
     assert.equal(report.items.some((item) => item.originalUrl?.includes("hedayathon.comسجّل")), false);
   });
 
-  it("builds a clean printable client export with the 50-item guardrail", () => {
+  it("builds a clean exact-design printable client export with the item guardrail", () => {
     const report = getHidayathonClientReportData();
     const selected = report.items.slice(0, 3).map((item) => item.id);
     const exportHtml = buildClientReportExportHtml(report, selected);
+    const expandedReport = {
+      ...report,
+      items: Array.from({ length: clientReportExportLimit + 1 }, (_, index) => ({
+        ...report.items[index % report.items.length],
+        id: `export-limit-${index}`,
+      })),
+    };
     const tooMany = buildClientReportExportHtml(
-      report,
-      report.items.slice(0, clientReportExportLimit + 1).map((item) => item.id),
+      expandedReport,
+      expandedReport.items.map((item) => item.id),
     );
 
     assert.equal(exportHtml.ok, true);
     assert.equal(exportHtml.count, 3);
     assert.match(exportHtml.html, /رصد هداية هاكاثون/);
     assert.match(exportHtml.html, /حفظ PDF/);
+    assert.match(exportHtml.html, /خيارات الطباعة/);
+    assert.match(exportHtml.html, /Landscape/);
+    assert.match(exportHtml.html, /Margins: None/);
+    assert.match(exportHtml.html, /@page \{ size: 16in 9in; margin: 0; \}/);
+    assert.match(exportHtml.html, /image-orientation: none/);
+    assert.match(exportHtml.html, /legacy-pages/);
     assert.doesNotMatch(exportHtml.html, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
     assert.equal(tooMany.ok, false);
     assert.equal(tooMany.error, "export_item_limit_exceeded");
     assert.equal(tooMany.maxItems, clientReportExportLimit);
+  });
+
+  it("uses the generated legacy-style page for newly added live content without a source PDF page", () => {
+    const report = getHidayathonClientReportData();
+    const liveItem = {
+      ...report.items[0],
+      id: "live-generated-export",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      reportLabel: "الرصد الحي",
+      sourceEvidenceImagePath: null,
+      page: 1,
+    };
+    const exportHtml = buildClientReportExportHtml({ ...report, items: [liveItem] }, [liveItem.id]);
+
+    assert.equal(exportHtml.ok, true);
+    assert.match(exportHtml.html, /generated-page/);
+    assert.match(exportHtml.html, /الرصد الحي/);
   });
 
   it("does not treat the old placeholder capture image as client evidence", () => {

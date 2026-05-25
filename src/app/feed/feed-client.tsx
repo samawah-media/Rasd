@@ -6,23 +6,18 @@ import {
   Archive,
   ArrowUpDown,
   BarChart3,
-  CalendarDays,
   Camera,
   CheckCircle2,
   Clock3,
   Eye,
   FilePlus2,
-  Filter,
   Inbox,
   Link2,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   XCircle,
-  TrendingUp,
   Loader2,
-  Trash2
 } from "lucide-react";
 import Link from "next/link";
 import { MonitoringItem, Sentiment, ItemState } from "@/lib/types";
@@ -47,11 +42,18 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   // API interaction states
   const [actionLoading, setActionLoading] = useState<string | null>(null); // "approve", "reject", "capture", "archive"
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
 
   // Find currently selected item
   const selectedItem = useMemo(() => {
     return items.find((item) => item.id === selectedId) || null;
   }, [items, selectedId]);
+
+  const recentActivityItems = useMemo(() => {
+    return [...items]
+      .sort((a, b) => new Date(b.publishedAt || "").getTime() - new Date(a.publishedAt || "").getTime())
+      .slice(0, 3);
+  }, [items]);
 
   // Handle checking platforms
   const togglePlatform = (platform: string) => {
@@ -140,7 +142,6 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         return selectedPlatforms.includes(key);
       });
     }
-
     // 3. Sentiment Filter
     if (selectedSentiments.length > 0) {
       result = result.filter((item) => selectedSentiments.includes(item.sentiment));
@@ -152,7 +153,6 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         return (b.relevanceScore || 0) - (a.relevanceScore || 0);
       }
       if (sortBy === "reach") {
-        // Approximate reach sorting, e.g. using confidence or metadata
         return (b.sentimentConfidence || 0) - (a.sentimentConfidence || 0);
       }
       // Default: newest first
@@ -170,7 +170,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
       const today = new Date().toDateString();
       const itemDate = new Date(item.publishedAt).toDateString();
       return today === itemDate;
-    }).length || items.length; // fallback to total if no items are from today
+    }).length;
 
     const needsReview = items.filter(item => item.state === "needs_review").length;
     const approved = items.filter(item => ["report_ready", "added_to_report", "approved_pending_capture"].includes(item.state)).length;
@@ -188,6 +188,8 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   const handleReview = async (id: string, action: "approve" | "reject") => {
     setActionLoading(action);
     setActionSuccessMessage(null);
+
+    setActionErrorMessage(null);
     try {
       const response = await fetch(`/api/items/${id}/review`, {
         method: "POST",
@@ -207,9 +209,13 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         );
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
+        setActionErrorMessage("تعذر تحديث حالة المادة. حاول مرة أخرى.");
+
         console.error("Failed to review item");
       }
     } catch (error) {
+      setActionErrorMessage("حدث خطأ أثناء إرسال إجراء المراجعة. حاول مرة أخرى.");
+
       console.error("Error during review API call:", error);
     } finally {
       setActionLoading(null);
@@ -220,6 +226,8 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   const handleCapture = async (id: string) => {
     setActionLoading("capture");
     setActionSuccessMessage(null);
+
+    setActionErrorMessage(null);
     try {
       const response = await fetch(`/api/items/${id}/capture-report-grade`, {
         method: "POST",
@@ -241,9 +249,13 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         setActionSuccessMessage("تم التقاط لقطة شاشة رسمية بجودة التقرير!");
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
+        setActionErrorMessage("تعذر بدء التقاط الدليل. حاول مرة أخرى.");
+
         console.error("Failed to capture");
       }
     } catch (error) {
+      setActionErrorMessage("حدث خطأ أثناء طلب التقاط الدليل. حاول مرة أخرى.");
+
       console.error("Error during capture API call:", error);
     } finally {
       setActionLoading(null);
@@ -254,6 +266,8 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
   const handleArchive = async (id: string) => {
     setActionLoading("archive");
     setActionSuccessMessage(null);
+
+    setActionErrorMessage(null);
     try {
       const response = await fetch(`/api/items/${id}/archive`, {
         method: "POST",
@@ -268,9 +282,13 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
         setActionSuccessMessage("تمت أرشفة المادة وحفظها في الأرشيف الآمن");
         setTimeout(() => setActionSuccessMessage(null), 4000);
       } else {
+        setActionErrorMessage("تعذر أرشفة المادة. حاول مرة أخرى.");
+
         console.error("Failed to archive");
       }
     } catch (error) {
+      setActionErrorMessage("حدث خطأ أثناء طلب الأرشفة. حاول مرة أخرى.");
+
       console.error("Error during archive API call:", error);
     } finally {
       setActionLoading(null);
@@ -303,21 +321,22 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
     );
   };
 
-  // Format Sentiment Saudi Style
   const getSentimentBadge = (sentiment: Sentiment) => {
-    const config = {
-      positive: { bg: "bg-[#d1fae5] text-[#065f46]", label: "إيجابي" },
-      neutral: { bg: "bg-[#f3f4f6] text-[#374151]", label: "محايد" },
-      negative: { bg: "bg-[#fee2e2] text-[#991b1b]", label: "سلبي" },
-    }[sentiment] || { bg: "bg-[#f3f4f6] text-[#374151]", label: sentiment };
+    const configs: Record<Sentiment, { bg: string; text: string; label: string }> = {
+      positive: { bg: "bg-emerald-50", text: "text-emerald-700", label: "إيجابي" },
+      neutral: { bg: "bg-slate-100", text: "text-slate-600", label: "محايد" },
+      negative: { bg: "bg-rose-50", text: "text-rose-700", label: "سلبي" },
+    };
+    const config = configs[sentiment] ?? configs.neutral;
 
     return (
-      <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${config.bg}`}>
-        <span>{config.label}</span>
+      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${config.bg} ${config.text}`}>
+        {config.label}
       </span>
     );
   };
 
+  // Format Sentiment Saudi Style
   return (
     <main className="min-h-screen bg-[#f5f6f4] text-[#171819] font-sans antialiased">
       {/* Dynamic glow decoration */}
@@ -333,11 +352,11 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               </Link>
               <span>/</span>
               <span className="font-medium text-[#171819] flex items-center gap-1">
-                البث الحي والمراجعة <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                المواد المرصودة والمراجعة <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
               </span>
             </div>
             <h1 className="mt-1 text-2xl font-bold md:text-3xl text-slate-800 tracking-tight">
-              البث المباشر
+              لوحة مراجعة المواد المرصودة
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -346,7 +365,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-[#dfe3de] bg-white px-4 text-sm font-semibold text-[#333837] hover:bg-slate-50 transition-colors active:scale-[0.97] transition-transform duration-100"
             >
               <SlidersHorizontal size={15} />
-              رست الفلاتر
+              إعادة تعيين الفلاتر
             </button>
             <Link
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#18201e] hover:bg-[#273431] px-5 text-sm font-semibold text-white transition-all shadow-md hover:shadow-lg active:scale-[0.97] transition-transform duration-100"
@@ -368,7 +387,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
           <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <Search className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">وش تدور عليه؟</h2>
+              <h2 className="font-bold text-slate-800">البحث في المواد المرصودة</h2>
             </div>
             <div>
               <label className="text-xs font-semibold text-[#69716d]" htmlFor="feed-search">
@@ -422,37 +441,36 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 })}
               </div>
             </div>
-
-            {/* Sentiment Filters */}
+            {/* Content Classification Filter */}
             <div className="mt-6 border-t border-slate-100 pt-4">
               <div className="flex items-center gap-1 mb-3 text-sm font-bold text-slate-700">
                 <Sparkles size={14} className="text-[#1f675d]" />
-                <span>تصفية المشاعر</span>
+                <span>حسب تصنيف المحتوى</span>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { key: "positive", label: "إيجابي" },
-                  { key: "neutral", label: "محايد" },
-                  { key: "negative", label: "سلبي" },
-                ].map((s) => {
-                  const isSelected = selectedSentiments.includes(s.key as Sentiment);
+                  { key: "positive" as Sentiment, label: "إيجابي" },
+                  { key: "neutral" as Sentiment, label: "محايد" },
+                  { key: "negative" as Sentiment, label: "سلبي" },
+                ].map((sentiment) => {
+                  const isChecked = selectedSentiments.includes(sentiment.key);
                   return (
                     <button
-                      key={s.key}
-                      onClick={() => toggleSentiment(s.key as Sentiment)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all active:scale-[0.97] transition-transform ${
-                        isSelected
-                          ? "bg-[#1f675d] text-white shadow-sm"
-                          : "bg-[#f3f4f6] text-[#374151] hover:bg-slate-200"
+                      key={sentiment.key}
+                      type="button"
+                      onClick={() => toggleSentiment(sentiment.key)}
+                      className={`rounded-xl border px-2.5 py-2 text-xs font-bold transition-all ${
+                        isChecked
+                          ? "border-[#1f675d] bg-[#e8f3ef] text-[#1f675d]"
+                          : "border-[#dfe3de] bg-[#fbfbfa] text-slate-600 hover:border-[#1f675d]/50"
                       }`}
                     >
-                      {s.label}
+                      {sentiment.label}
                     </button>
                   );
                 })}
               </div>
             </div>
-
             {/* Sorting Dropdown */}
             <div className="mt-6 border-t border-slate-100 pt-4">
               <div className="flex items-center gap-1 mb-3 text-sm font-bold text-slate-700">
@@ -466,7 +484,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               >
                 <option value="newest">الأحدث أولاً</option>
                 <option value="relevance">الأكثر صلة</option>
-                <option value="reach">الثقة بالمشاعر</option>
+                <option value="reach">ثقة تصنيف المحتوى</option>
               </select>
             </div>
           </section>
@@ -520,15 +538,15 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               <div className="size-16 rounded-full bg-[#f5f6f4] flex items-center justify-center text-slate-400 mb-4 animate-bounce">
                 <Inbox size={28} />
               </div>
-              <h3 className="text-lg font-bold text-slate-700">ما لقينا شي يطابق بحثك!</h3>
+              <h3 className="text-lg font-bold text-slate-700">لا توجد مواد تطابق البحث</h3>
               <p className="text-sm text-[#69716d] max-w-sm mt-2 leading-relaxed">
-                يا هلا! ما فيه أي مواد رصد تطابق الفلاتر النشطة حالياً. وش رايك تجرب تعدل فلاتر البحث أو تضيف رابط يدوي؟
+                لا توجد مواد رصد تطابق الفلاتر النشطة حالياً. جرّب تعديل فلاتر البحث أو إضافة رابط يدوي.
               </p>
               <button
                 onClick={resetFilters}
                 className="mt-5 inline-flex items-center gap-1 px-4 py-2 bg-[#1f675d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a554d] transition-colors"
               >
-                رست كل الفلاتر
+                إعادة تعيين كل الفلاتر
               </button>
             </div>
           ) : (
@@ -600,11 +618,16 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                             لقطة جاهزة
                           </span>
                         )}
+                        {item.warning?.includes("ملاءمة منخفضة") && (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-100">
+                            <AlertTriangle size={10} />
+                            مراجعة ملاءمة
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex gap-4 text-[11px] text-[#69716d]">
                         <span>الملاءمة: <strong className="text-slate-700">{item.relevanceScore}%</strong></span>
-                        <span>الثقة: <strong className="text-slate-700">{item.sentimentConfidence}%</strong></span>
                       </div>
                     </div>
                   </article>
@@ -625,7 +648,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 <div>
                   <div className="flex items-center gap-1.5 text-xs font-bold text-[#69716d]">
                     <Eye size={14} className="text-[#1f675d]" />
-                    كونسول التحكم والمراجعة
+                    لوحة التحكم والمراجعة
                   </div>
                   <h2 className="mt-2 text-base font-bold leading-snug text-slate-800 line-clamp-3">
                     {selectedItem.title}
@@ -639,6 +662,11 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                   {actionSuccessMessage}
                 </div>
               )}
+              {actionErrorMessage && (
+                <div className="mb-4 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 font-semibold shadow-sm animate-fade-in">
+                  {actionErrorMessage}
+                </div>
+              )}
 
               {/* Status and Telemetry list */}
               <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
@@ -648,14 +676,6 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-[#f7f8f6] rounded-xl px-3 py-2">
-                    <span className="block text-[10px] text-[#69716d]">المصدر</span>
-                    <strong className="block mt-0.5 truncate text-slate-800">{selectedItem.sourceName}</strong>
-                  </div>
-                  <div className="bg-[#f7f8f6] rounded-xl px-3 py-2">
-                    <span className="block text-[10px] text-[#69716d]">المشاعر الرصدية</span>
-                    <span className="block mt-0.5 font-bold">{getSentimentBadge(selectedItem.sentiment)}</span>
-                  </div>
                   <div className="bg-[#f7f8f6] rounded-xl px-3 py-2">
                     <span className="block text-[10px] text-[#69716d]">درجة الصلة بالهاكاثون</span>
                     <strong className="block mt-0.5 text-slate-800">{selectedItem.relevanceScore}%</strong>
@@ -673,7 +693,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
               <div className="mt-4 rounded-xl border border-[#dfe3de] bg-[#fbfbfa] p-4 text-xs">
                 <div className="flex items-center gap-1.5 font-bold text-slate-700 mb-1.5">
                   <Sparkles size={14} className="text-[#1f675d]" />
-                  نظام التقييم الذكي (AI Insight)
+                  تحليل الملاءمة والتصنيف
                 </div>
                 <p className="leading-relaxed text-[#5f6662]">
                   {selectedItem.relevanceReason || "تم استيراد المادة وتصنيفها كشكل من أشكال الرصد والتوثيق للفعاليات والشركاء."}
@@ -703,7 +723,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
 
               {/* Review console Action Buttons */}
               <div className="mt-5 border-t border-slate-100 pt-4">
-                <div className="text-xs font-bold text-[#333837] mb-3">اتخاذ إجراء فوري (اللهجة السعودية):</div>
+                <div className="text-xs font-bold text-[#333837] mb-3">اتخاذ إجراء تحريري:</div>
                 
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -716,7 +736,7 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
                     ) : (
                       <CheckCircle2 size={14} />
                     )}
-                    اعتماد الحين
+                    اعتماد المادة
                   </button>
 
                   <button
@@ -771,19 +791,27 @@ export default function FeedClient({ initialItems }: FeedClientProps) {
           <section className="rounded-2xl border border-[#dfe3de] bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-4">
               <Clock3 className="text-[#1f675d]" size={18} />
-              <h2 className="font-bold text-slate-800">آخر الحركات بالنظام</h2>
+              <h2 className="font-bold text-slate-800">آخر نشاط فعلي</h2>
             </div>
             <div className="space-y-3 text-xs text-slate-600">
-              {[
-                "تم اعتماد تغريدة من X بواسطة كونسول المحرر قبل قليل.",
-                "فشل التقاط تلقائي لرابط صحيفة محلية وجاري الجدولة لإعادة المحاولة.",
-                "تم تصدير مسودة جديدة من التقرير الإعلامي لهاكاثون هداية."
-              ].map((activity, idx) => (
-                <div className="flex items-start gap-2" key={idx}>
+              {recentActivityItems.length > 0 ? (
+                recentActivityItems.map((activity) => (
+                  <div className="flex items-start gap-2" key={activity.id}>
+                    <span className="mt-1.5 size-1.5 rounded-full bg-[#1f675d] shrink-0" />
+                    <span className="leading-snug">
+                      <span className="font-semibold text-slate-700 line-clamp-1">{activity.title}</span>
+                      <span className="mt-0.5 block text-[11px] text-slate-400">
+                        {getPlatformLabel(activity)} · {new Date(activity.publishedAt || "").toLocaleDateString("ar-SA")}
+                      </span>
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex items-start gap-2">
                   <span className="mt-1.5 size-1.5 rounded-full bg-[#1f675d] shrink-0" />
-                  <span className="leading-snug">{activity}</span>
+                  <span className="leading-snug">لا توجد مواد مرصودة لعرض نشاط فعلي حالياً.</span>
                 </div>
-              ))}
+              )}
             </div>
           </section>
         </aside>

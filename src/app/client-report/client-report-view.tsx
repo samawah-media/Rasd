@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { type MouseEvent, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarDays,
@@ -42,7 +42,7 @@ type Filters = {
 type MetricContext = "all" | "latest" | "positive" | "peak";
 type ClickableFilterKey = "platform" | "source" | "sentiment" | "from" | "to";
 
-const maxExportItems = 50;
+const maxExportItems = 160;
 
 const platformColors: Record<string, string> = {
   X: "#111111",
@@ -86,6 +86,11 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
   const metrics = useMemo(() => getMetrics(filteredItems), [filteredItems]);
   const heatmap = useMemo(() => getHeatmap(heatmapItems), [heatmapItems]);
   const platformDistribution = useMemo(() => getPlatformDistribution(filteredItems), [filteredItems]);
+  const exportUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("ids", filteredItems.map((item) => item.id).join(","));
+    return `/api/client-report/hidayathon/export-pdf?${params.toString()}`;
+  }, [filteredItems]);
 
   function updateFilter<K extends keyof Filters>(key: K, value: Filters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -139,15 +144,18 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
     window.setTimeout(() => setCopyState(""), 1600);
   }
 
-  function exportCurrentView() {
-    if (filteredItems.length > maxExportItems) {
-      window.alert(`اختر نطاقًا أضيق. الحد ${maxExportItems.toLocaleString("ar-SA")} مادة.`);
+  function handleExportClick(event: MouseEvent<HTMLAnchorElement>) {
+    if (!filteredItems.length) {
+      event.preventDefault();
+      window.alert("لا توجد مواد في النطاق الحالي للتصدير.");
       return;
     }
 
-    const params = new URLSearchParams();
-    params.set("ids", filteredItems.map((item) => item.id).join(","));
-    window.open(`/api/client-report/hidayathon/export-pdf?${params.toString()}`, "_blank", "noopener,noreferrer");
+    if (filteredItems.length > maxExportItems) {
+      event.preventDefault();
+      window.alert(`اختر نطاقًا أضيق. الحد ${maxExportItems.toLocaleString("ar-SA")} مادة.`);
+      return;
+    }
   }
 
   const pageContent = (
@@ -165,14 +173,16 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
+            <a
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#204733] px-4 text-sm font-bold text-white shadow-sm transition hover:bg-[#1a3829]"
-              onClick={exportCurrentView}
-              type="button"
+              href={exportUrl}
+              onClick={handleExportClick}
+              rel="noreferrer"
+              target="_blank"
             >
               <FileDown size={17} />
               تصدير التقرير PDF
-            </button>
+            </a>
             <a
               className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3.5 text-sm font-semibold text-[var(--color-text-body)] transition hover:bg-[var(--color-bg-hover)]"
               href="/auth/logout"
@@ -233,7 +243,7 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
 
           <BentoCard
             colSpan="col-span-1"
-            title="التوجه والمشاعر"
+            title="توجه المحتوى وتصنيفه"
             subtitle={metrics.positiveLabel}
             icon={Heart}
             className="cursor-pointer"
@@ -366,7 +376,7 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                 value={filters.source}
               />
               <SelectInput
-                label="تصنيف المشاعر"
+                label="تصنيف المحتوى"
                 onChange={(value) => updateFilter("sentiment", value)}
                 options={[
                   { label: "كل التصنيفات", value: "all" },

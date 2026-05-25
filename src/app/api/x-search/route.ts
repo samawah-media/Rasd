@@ -65,8 +65,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get keyword rule (use first active rule)
-    const rule = (await persistentStore.listKeywordRules())[0];
+    const storedKeywordRules = await persistentStore.listKeywordRules();
+    const rule = storedKeywordRules[0];
     if (!rule) {
       return NextResponse.json(
         { ok: false, error: "no_keyword_rules_configured" },

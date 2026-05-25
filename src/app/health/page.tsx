@@ -9,10 +9,11 @@ export default async function HealthPage() {
   await requireRole(adminRoles, "/health");
 
   // 2. Fetch server-side metrics and real-time database state
-  const [healthData, auditLogs] = await Promise.all([
+  const [healthData, auditLogs, sources] = await Promise.all([
     persistentStore.health(),
     persistentStore.listAuditLogs(),
+    persistentStore.listSources(),
   ]);
 
-  return <HealthClient initialHealth={healthData} initialLogs={auditLogs} />;
+  return <HealthClient initialHealth={healthData} initialLogs={auditLogs} initialSources={sources} />;
 }

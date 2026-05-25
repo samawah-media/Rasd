@@ -7,6 +7,7 @@ import { formatDateTime, formatGregorian, formatHijri } from "@/lib/dates";
 import type { MonitoringItem, ReportVersion, Sentiment, SourceType } from "@/lib/types";
 import { requireRole } from "@/server/auth";
 import { persistentStore } from "@/server/persistent-store";
+import { estimateSentimentConfidence } from "@/server/sentiment";
 
 type RenderableReportItem = MonitoringItem & {
   capturedAtLabel?: string;
@@ -249,33 +250,37 @@ function buildLegacyReportPage(issue: number, id: string): { report: ReportVersi
 
   const items = data.items
     .filter((item) => item.reportIssue === issue)
-    .map<RenderableReportItem>((item) => ({
-      id: item.id,
-      sourceId: `legacy-source-${item.platform}`,
-      sourceName: item.sourceName || item.authorName || item.platformLabel,
-      sourceType: mapLegacySourceType(item.platform),
-      state: "published",
-      title: item.title,
-      originalUrl: item.originalUrl ?? `legacy://hidayathon/${encodeURIComponent(item.sourcePdf)}#page=${item.page}`,
-      authorName: item.authorName,
-      publishedAt: item.publishDateIso ?? item.publishedDateText,
-      summary: item.summary,
-      summarySourceText: item.rawText,
-      sentiment: mapLegacySentiment(item.sentiment),
-      sentimentConfidence: item.confidence === "high" ? 95 : item.confidence === "medium" ? 82 : 70,
-      relevanceScore: 100,
-      relevanceReason: "مادة مستوردة من تقرير قديم معتمد ومنشور سابقًا.",
-      matchedTerms: ["هداية", "هاكاثون"],
-      dedupeKey: `legacy:${item.sourcePdf}:${item.page}:${item.platform}:${item.authorName}`,
-      hasReportGradeCapture: Boolean(item.evidenceImagePath),
-      warning: item.warnings.length
-        ? item.warnings.join("، ")
-        : item.originalUrl
-          ? undefined
-          : "لا يوجد رابط أصلي داخل التقرير القديم؛ الدليل المتاح هو صورة صفحة التقرير.",
-      capturedAtLabel: item.captureDateLabel,
-      evidenceAssetUrl: item.evidenceImagePath ?? undefined,
-    }));
+    .map<RenderableReportItem>((item) => {
+      const sentiment = mapLegacySentiment(item.sentiment);
+
+      return {
+        id: item.id,
+        sourceId: `legacy-source-${item.platform}`,
+        sourceName: item.sourceName || item.authorName || item.platformLabel,
+        sourceType: mapLegacySourceType(item.platform),
+        state: "published",
+        title: item.title,
+        originalUrl: item.originalUrl ?? `legacy://hidayathon/${encodeURIComponent(item.sourcePdf)}#page=${item.page}`,
+        authorName: item.authorName,
+        publishedAt: item.publishDateIso ?? item.publishedDateText,
+        summary: item.summary,
+        summarySourceText: item.rawText,
+        sentiment,
+        sentimentConfidence: estimateSentimentConfidence(sentiment),
+        relevanceScore: 100,
+        relevanceReason: "مادة مستوردة من تقرير قديم معتمد ومنشور سابقًا.",
+        matchedTerms: ["هداية", "هاكاثون"],
+        dedupeKey: `legacy:${item.sourcePdf}:${item.page}:${item.platform}:${item.authorName}`,
+        hasReportGradeCapture: Boolean(item.evidenceImagePath),
+        warning: item.warnings.length
+          ? item.warnings.join("، ")
+          : item.originalUrl
+            ? undefined
+            : "لا يوجد رابط أصلي داخل التقرير القديم؛ الدليل المتاح هو صورة صفحة التقرير.",
+        capturedAtLabel: item.captureDateLabel,
+        evidenceAssetUrl: item.evidenceImagePath ?? undefined,
+      };
+    });
 
   return {
     report: {

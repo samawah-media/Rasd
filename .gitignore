@@ -46,3 +46,7 @@ supabase/.temp/
 next-env.d.ts
 
 .vercel
+
+# TestSprite local run artifacts
+/testsprite_tests/tmp/
+/testsprite_tests/*.py

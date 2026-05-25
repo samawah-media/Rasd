@@ -1,0 +1,132 @@
+[
+  {
+    "id": "BE001",
+    "title": "Unauthenticated admin API endpoints return JSON auth errors",
+    "description": "Send direct HTTP requests without cookies to representative admin APIs such as /api/items, /api/sources, /api/source-rules, /api/imports/legacy/status, and /api/reports/hidayathon-live. Verify protected endpoints do not return admin data and respond with controlled JSON 401/403/404 errors rather than HTML or empty responses.",
+    "category": "API authorization",
+    "priority": "High",
+    "steps": [
+      "Request protected admin APIs without authentication",
+      "Verify responses are JSON",
+      "Verify no protected data is exposed",
+      "Verify status codes are controlled authorization errors"
+    ]
+  },
+  {
+    "id": "BE002",
+    "title": "Manual URL intake rejects malformed and private URLs",
+    "description": "POST invalid payloads to /api/items/manual-url, including empty bodies, invalid URL strings, localhost/private network URLs, and credentialed URLs. Verify each request fails with a controlled JSON error and never creates a monitoring item.",
+    "category": "API validation and SSRF protection",
+    "priority": "High",
+    "steps": [
+      "POST invalid manual URL payloads",
+      "POST private localhost and internal-address URLs",
+      "POST URLs containing credentials",
+      "Verify controlled 400-level JSON errors"
+    ]
+  },
+  {
+    "id": "BE003",
+    "title": "Share-link public API handles invalid tokens safely",
+    "description": "Call the public share-link read endpoint with malformed, random, and path-traversal-like tokens. Verify responses are controlled JSON errors, do not leak token hashes or report internals, and never return a server error.",
+    "category": "Public API safety",
+    "priority": "High",
+    "steps": [
+      "GET /api/share-links with invalid token values",
+      "Try random and traversal-like token strings",
+      "Verify 404/410-style JSON errors",
+      "Verify no token hashes or private report internals are leaked"
+    ]
+  },
+  {
+    "id": "BE004",
+    "title": "Cron endpoints fail closed when not configured or when secrets are wrong",
+    "description": "Call the GET-only cron APIs /api/cron/poll-sources and /api/cron/run-connectors with no Authorization header and with a wrong bearer token. If CRON_SECRET is not configured, a controlled 503 cron_not_configured JSON response is acceptable. If CRON_SECRET is configured, missing or wrong bearer tokens must return a controlled 401/403 JSON authorization error. In every case, the endpoint must not report successful work.",
+    "category": "Cron authorization",
+    "priority": "High",
+    "steps": [
+      "GET cron endpoints without Authorization",
+      "Repeat GET requests with an incorrect bearer token",
+      "Verify the response is either cron_not_configured or a controlled authorization failure",
+      "Verify no successful job execution is reported"
+    ]
+  },
+  {
+    "id": "BE005",
+    "title": "Client-report member APIs do not expose data anonymously",
+    "description": "Request /api/client-report/hidayathon, /api/client-report/hidayathon/export-pdf, and /api/captures/nonexistent/asset without authentication. Verify member-only data is not returned to anonymous callers and responses are controlled JSON or safe redirects.",
+    "category": "Member API authorization",
+    "priority": "High",
+    "steps": [
+      "GET member-only client report APIs anonymously",
+      "GET capture asset APIs anonymously",
+      "Verify protected report payloads are not returned",
+      "Verify errors are controlled and non-empty"
+    ]
+  },
+  {
+    "id": "BE006",
+    "title": "Legacy import APIs default to no-write behavior when unauthenticated",
+    "description": "Attempt legacy import and Supabase upsert APIs without authentication and without admin import headers. Verify real-write operations are blocked, dry-run output is not exposed anonymously, and no secret or token fields appear in responses.",
+    "category": "Import safety",
+    "priority": "High",
+    "steps": [
+      "POST /api/imports/legacy without authentication",
+      "GET /api/imports/legacy/supabase-plan without authentication",
+      "POST /api/imports/legacy/upsert-supabase without authentication",
+      "Verify writes are blocked and secrets are absent"
+    ]
+  },
+  {
+    "id": "BE007",
+    "title": "Source rule APIs validate unsupported payloads",
+    "description": "POST malformed source-rule payloads and unsupported source types to /api/source-rules without relying on UI validation. Verify validation failures are JSON, stable, and do not result in partial source persistence.",
+    "category": "API validation",
+    "priority": "Medium",
+    "steps": [
+      "POST malformed source-rule JSON",
+      "POST unsupported source type values",
+      "Verify controlled validation errors",
+      "Verify no successful persistence response is returned"
+    ]
+  },
+  {
+    "id": "BE008",
+    "title": "Unknown API routes return controlled JSON",
+    "description": "Request several nonexistent /api paths with GET and POST. Verify responses are controlled JSON errors rather than framework HTML error pages, empty responses, or server crashes.",
+    "category": "Error handling",
+    "priority": "Medium",
+    "steps": [
+      "Request nonexistent API routes",
+      "Try multiple HTTP methods",
+      "Verify status is 404 or another controlled error",
+      "Verify response body is JSON and non-empty"
+    ]
+  },
+  {
+    "id": "BE009",
+    "title": "Evidence-card SVG API handles invalid IDs safely",
+    "description": "Request /api/items/:id/evidence-card.svg with missing, random, and malformed item IDs. Verify the endpoint does not leak stack traces, private filesystem paths, or unrelated item data.",
+    "category": "Evidence asset safety",
+    "priority": "Medium",
+    "steps": [
+      "GET evidence-card SVG with invalid item IDs",
+      "Try IDs containing URL encoded special characters",
+      "Verify controlled errors or safe SVG responses",
+      "Verify no stack trace or filesystem path leakage"
+    ]
+  },
+  {
+    "id": "BE010",
+    "title": "Request methods are constrained on API endpoints",
+    "description": "Use incorrect HTTP methods against selected endpoints, such as GET on mutation-only APIs and POST on read-only APIs. Verify the server returns controlled method or authorization errors and does not perform unintended mutations.",
+    "category": "HTTP method safety",
+    "priority": "Medium",
+    "steps": [
+      "Send wrong methods to mutation APIs",
+      "Send wrong methods to read APIs",
+      "Verify errors are controlled",
+      "Verify responses do not imply state mutation"
+    ]
+  }
+]

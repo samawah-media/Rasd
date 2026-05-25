@@ -15,6 +15,14 @@ import {
 import AppShell from "@/components/AppShell";
 import { BrandIcon, brandFromLabel } from "@/components/BrandIcon";
 
+type AutomationRun = {
+  status: string;
+  fetchedCount: number;
+  failureReason: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+};
+
 interface HealthClientProps {
   initialHealth: {
     status: string;
@@ -61,13 +69,8 @@ interface HealthClientProps {
       activeSourceRulesCount: number;
       queuedJobsCount: number;
       failedJobsCount: number;
-      latestRun: {
-        status: string;
-        fetchedCount: number;
-        failureReason: string | null;
-        startedAt: string;
-        finishedAt: string | null;
-      } | null;
+      latestRun: AutomationRun | null;
+      latestSuccessfulRun?: AutomationRun | null;
       latestFailedJob: {
         status: string;
         failureReason: string | null;
@@ -97,6 +100,14 @@ interface HealthClientProps {
     metadata?: Record<string, unknown>;
     createdAt: string;
   }[];
+  initialSources: {
+    id: string;
+    name: string;
+    type: string;
+    lastCheckedAt?: string;
+    lastSuccessAt?: string;
+    lastError?: string;
+  }[];
 }
 
 type ServiceState = "healthy" | "warning" | "down";
@@ -111,7 +122,7 @@ type HealthService = {
   next: string;
 };
 
-export default function HealthClient({ initialHealth, initialLogs }: HealthClientProps) {
+export default function HealthClient({ initialHealth, initialLogs, initialSources }: HealthClientProps) {
   const [health, setHealth] = useState(initialHealth);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -143,7 +154,9 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
         title: "المهام المجدولة",
         logo: "▲",
         state: health.automation?.cronSecretConfigured ? "healthy" : "warning",
-        message: health.automation?.cronSecretConfigured ? "المهام المجدولة تعمل بشكل صحيح." : "أضف CRON_SECRET حتى تعمل المهام المحمية.",
+        message: health.automation?.cronSecretConfigured
+          ? "تم ضبط سر المهام المجدولة؛ تفاصيل التنفيذ تظهر في لوحة الرصد أدناه."
+          : "أضف CRON_SECRET حتى تعمل المهام المحمية.",
         last: latestRunText(health.automation?.latestRun?.finishedAt ?? health.automation?.latestRun?.startedAt),
         next: health.automation?.connectorCronScheduleUtc ? `خلال ${health.automation.connectorCronScheduleUtc}` : "غير محدد",
       },
@@ -183,6 +196,38 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
       })),
     [initialLogs],
   );
+
+  const latestRssPoll = useMemo(() => initialLogs.find((log) => log.action === "source.rss_polled"), [initialLogs]);
+  const latestRssFailure = useMemo(() => initialLogs.find((log) => log.action === "source.rss_poll_failed"), [initialLogs]);
+  const latestSuccessfulConnectorRun =
+    health.automation?.latestSuccessfulRun ?? (health.automation?.latestRun?.status === "success" ? health.automation.latestRun : null);
+  const latestSuccessAt = latestTimestamp([
+    latestRssPoll?.createdAt,
+    latestSuccessfulConnectorRun?.finishedAt ?? latestSuccessfulConnectorRun?.startedAt,
+  ]);
+  const rssCreated = numberFromMetadata(latestRssPoll?.metadata, "created");
+  const rssFetched = numberFromMetadata(latestRssPoll?.metadata, "fetched");
+  const rssSkipped = numberFromMetadata(latestRssPoll?.metadata, "skipped");
+  const rssFailed = numberFromMetadata(latestRssPoll?.metadata, "failed");
+  const rssLowConfidence = numberFromMetadata(latestRssPoll?.metadata, "lowConfidence");
+  const connectorCreated = latestSuccessfulConnectorRun?.fetchedCount ?? 0;
+  const openErrors = (health.automation?.failedJobsCount ?? 0) + rssFailed;
+  const monitoringIsFresh = latestSuccessAt ? !isOlderThanHours(latestSuccessAt, 24) : false;
+  const latestRssFailureAt = latestRssFailure?.createdAt;
+  const rssFailureIsUnresolved = latestRssFailureAt
+    ? !latestRssPoll || new Date(latestRssPoll.createdAt).getTime() < new Date(latestRssFailureAt).getTime()
+    : false;
+  const rssFailureOver24h = Boolean(latestRssFailureAt && rssFailureIsUnresolved && isOlderThanHours(latestRssFailureAt, 24));
+  const staleRssSources = initialSources.filter((source) => {
+    if (source.type !== "rss" || !source.lastError) return false;
+    const referenceTime = source.lastSuccessAt ?? source.lastCheckedAt;
+    return referenceTime ? isOlderThanHours(referenceTime, 24) : true;
+  });
+  const activeRssSourcesCount = initialSources.filter((source) => source.type === "rss").length;
+  const needsSetupAction =
+    !health.automation?.cronSecretConfigured ||
+    !health.automation?.apify?.configured ||
+    Boolean(health.automation?.mocksEnabled);
 
   const triggerRefresh = async () => {
     setIsRefreshing(true);
@@ -268,6 +313,87 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
                 {latestRunText(health.automation.latestFailedJob.createdAt)}
               </div>
             )}
+
+            {needsSetupAction && (
+              <section className="mt-4 rounded-lg border border-[#efd4ad] bg-[#fff8ec] p-4">
+                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold text-[#9a5b00]">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>إجراءات مطلوبة لتفعيل الرصد الكامل</span>
+                </div>
+                <div className="grid gap-2">
+                  <SetupAction
+                    ok={Boolean(health.automation?.cronSecretConfigured)}
+                    label="CRON_SECRET"
+                    detail="مطلوب حتى تعمل مهام Vercel المجدولة للرصد اليومي."
+                  />
+                  <SetupAction
+                    ok={Boolean(health.automation?.apify?.configured)}
+                    label="APIFY_API_TOKEN"
+                    detail="مطلوب لتشغيل رصد TikTok/Instagram الفعلي."
+                  />
+                  <SetupAction
+                    ok={!health.automation?.mocksEnabled}
+                    label="وضع البيانات التجريبية"
+                    detail="يجب أن يكون متوقفًا في الإنتاج حتى تظهر نتائج الموصلات الحقيقية."
+                  />
+                </div>
+              </section>
+            )}
+
+            <section className="mt-4 rounded-lg border border-[#c7d8f3] bg-[#f6f9ff] p-4">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-[#1f6feb]">
+                    <Activity className="h-4 w-4" />
+                    <span>لوحة مراقبة الرصد الآلي</span>
+                  </div>
+                  <h2 className="mt-1 text-lg font-black text-[var(--color-text-title)]">تشغيل المصادر والموصلات</h2>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold text-[#1f6feb] ring-1 ring-[#c7d8f3]">
+                  بيانات فعلية
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <MonitorTile
+                  label="آخر تشغيل ناجح"
+                  value={latestSuccessAt ? latestRunText(latestSuccessAt) : "لا يوجد"}
+                  caption={monitoringIsFresh ? "تم خلال آخر 24 ساعة" : "لم يثبت تشغيل ناجح خلال آخر 24 ساعة"}
+                  tone={monitoringIsFresh ? "green" : "red"}
+                />
+                <MonitorTile
+                  label="مواد مكتشفة"
+                  value={(rssCreated + connectorCreated).toLocaleString("ar-SA")}
+                  caption="حسب آخر تشغيل ناجح متاح"
+                  tone="green"
+                />
+                <MonitorTile
+                  label="أخطاء تحتاج متابعة"
+                  value={openErrors.toLocaleString("ar-SA")}
+                  caption={latestRssFailure ? formatFailureReason(latestRssFailure.metadata?.error ?? "فشل RSS") : "وظائف فاشلة أو عناصر RSS فاشلة"}
+                  tone={openErrors > 0 ? "red" : "green"}
+                />
+              </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-4">
+                <MiniInfo icon={<Clock className="h-3.5 w-3.5" />} label="RSS آخر فحص" value={latestRssPoll ? latestRunText(latestRssPoll.createdAt) : "لا يوجد"} />
+                <MiniInfo icon={<Activity className="h-3.5 w-3.5" />} label="RSS مكتشف/مضاف/متخطى/منخفض" value={`${rssFetched}/${rssCreated}/${rssSkipped}/${rssLowConfidence}`} />
+                <MiniInfo icon={<Shield className="h-3.5 w-3.5" />} label="مصادر RSS" value={activeRssSourcesCount.toLocaleString("ar-SA")} />
+                <MiniInfo
+                  icon={<Shield className="h-3.5 w-3.5" />}
+                  label="قواعد نشطة / انتظار"
+                  value={`${health.automation?.activeSourceRulesCount ?? 0}/${health.automation?.queuedJobsCount ?? 0}`}
+                />
+              </div>
+
+              {(rssFailureOver24h || staleRssSources.length > 0) && (
+                <div className="mt-3 rounded-lg border border-[#f1b6aa] bg-[#fff1ed] p-3 text-xs font-bold leading-6 text-[#8f321d]">
+                  تنبيه RSS: يوجد فشل غير محلول منذ أكثر من 24 ساعة.
+                  {staleRssSources.length > 0 ? ` المصادر المتأثرة: ${staleRssSources.map((source) => source.name).slice(0, 3).join("، ")}.` : " راجع آخر فشل في سجل النشاط."}
+                  {" "}راجع المصدر أو رابط الخلاصة من صفحة إدارة المصادر.
+                </div>
+              )}
+            </section>
           </main>
 
           <aside className="rounded-lg border border-[var(--color-border)] bg-white p-4 shadow-sm">
@@ -314,6 +440,44 @@ export default function HealthClient({ initialHealth, initialLogs }: HealthClien
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function SetupAction({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-white/70 bg-white/65 p-3">
+      {ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#0f6b57]" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#9a5b00]" />}
+      <div className="min-w-0">
+        <div className="text-xs font-black text-[var(--color-text-title)]">{label}</div>
+        <div className="mt-1 text-[10px] font-bold leading-5 text-[var(--color-text-muted)]">{ok ? "جاهز." : detail}</div>
+      </div>
+    </div>
+  );
+}
+
+function MonitorTile({
+  label,
+  value,
+  caption,
+  tone = "slate",
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  tone?: "slate" | "green" | "red";
+}) {
+  const className = {
+    slate: "border-[#d7e3f7] bg-white text-[var(--color-text-title)]",
+    green: "border-[#b7ddce] bg-[#ecf7f2] text-[#0f6b57]",
+    red: "border-[#f1b6aa] bg-[#fff1ed] text-[#9a341f]",
+  }[tone];
+
+  return (
+    <div className={`rounded-lg border p-3 ${className}`}>
+      <span className="block text-[10px] font-extrabold opacity-75">{label}</span>
+      <span className="mt-1 block text-lg font-black leading-6">{value}</span>
+      <span className="mt-1 line-clamp-2 block text-[10px] font-bold opacity-70">{caption}</span>
+    </div>
   );
 }
 
@@ -483,6 +647,25 @@ function connectorMessage(status?: string) {
   if (status === "degraded") return "بحث X يعمل مع تحذيرات. راجع الرصيد أو الإعدادات.";
   if (status === "not_configured") return "أضف مفاتيح مزود بحث X حتى يعمل الرصد الآلي.";
   return "تعذر تأكيد حالة بحث X.";
+}
+
+function numberFromMetadata(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function latestTimestamp(values: Array<string | null | undefined>) {
+  return (
+    values
+      .filter((value): value is string => Boolean(value))
+      .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
+  );
+}
+
+function isOlderThanHours(value: string, hours: number) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return true;
+  return Date.now() - timestamp > hours * 60 * 60 * 1000;
 }
 
 function formatFailureReason(reason: unknown) {

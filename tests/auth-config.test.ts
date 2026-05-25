@@ -33,6 +33,7 @@ describe("auth and role routing rules", () => {
     assert.equal(isAdminPath("/sources"), true);
     assert.equal(isAdminPath("/settings"), true);
     assert.equal(isAdminPath("/access"), true);
+    assert.equal(isAdminPath("/imports"), true);
     assert.equal(isAdminPath("/imports/backfill"), true);
     assert.equal(isAdminPath("/reports/report-5"), true);
     assert.equal(isClientPath("/client-report"), true);
@@ -58,9 +59,25 @@ describe("auth and role routing rules", () => {
     assert.deepEqual(getApiRouteRolesForTest("GET", "/api/source-intelligence"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("POST", "/api/source-intelligence/apply"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("GET", "/api/connectors/runs"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/imports/legacy/status"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/imports/legacy"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/imports/legacy/backfill"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/imports/legacy/upsert-supabase"), adminRoles);
     assert.deepEqual(getApiRouteRolesForTest("GET", "/api/captures/capture-1/asset"), memberRoles);
     assert.equal(getApiRouteRolesForTest("GET", "/api/cron/poll-sources"), "public");
     assert.equal(getApiRouteRolesForTest("GET", "/api/cron/run-connectors"), "public");
     assert.equal(isRoleAllowed("viewer", adminRoles), false);
+  });
+
+  it("keeps public API access narrow and protects share-link mutations", () => {
+    assert.equal(getApiRouteRolesForTest("GET", "/api/share-links/public-token"), "public");
+    assert.equal(getApiRouteRolesForTest("POST", "/api/share-links/public-token"), null);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/share-links/public-token/revoke"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/share-links/link-id/revoke-by-id"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("POST", "/api/reports/report-5/share-link"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/reports/report-5/share-links"), adminRoles);
+    assert.deepEqual(getApiRouteRolesForTest("GET", "/api/client-report/hidayathon"), memberRoles);
+    assert.equal(getApiRouteRolesForTest("POST", "/api/client-report/hidayathon"), null);
+    assert.equal(getApiRouteRolesForTest("GET", "/api/unknown"), null);
   });
 });

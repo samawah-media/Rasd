@@ -13,7 +13,6 @@ import {
   Search,
   Settings,
   Sparkles,
-  Gauge,
   Inbox,
 } from "lucide-react";
 import Link from "next/link";
@@ -35,7 +34,6 @@ export default async function OverviewPage() {
 
   const supabaseConfigured = isSupabaseAdminConfigured();
   const dbModeText = supabaseConfigured ? "Supabase (سحابي)" : "Memory (ذاكرة محلي)";
-  const dbModeStatus = supabaseConfigured ? "good" : "warning";
 
   // 1. Calculate Core KPIs
   const totalItems = items.length;
@@ -130,14 +128,8 @@ export default async function OverviewPage() {
   // 4. Resource Usage Calculations
   const screenshotsUsed = healthResult.usage?.screenshotsThisMonth ?? 0;
   const screenshotsLimit = usageLimit.maxScreenshotsPerMonth;
-  const screenshotsPct = Math.min(100, Math.round((screenshotsUsed / screenshotsLimit) * 100));
 
   const storageUsed = Math.round(healthResult.usage?.storageMb ?? 0);
-  const storageLimit = usageLimit.maxStorageMb;
-  const storagePct = Math.min(100, Math.round((storageUsed / storageLimit) * 100));
-
-  // 5. System Health Statuses
-  const failedCapturesCount = items.filter((i) => i.state === "capture_failed").length;
 
   // 6. Extract operational warnings/errors
   const itemsWithAlerts = items
@@ -326,7 +318,7 @@ export default async function OverviewPage() {
               </div>
             </Panel>
 
-            {/* Sentiment donut chart */}
+            {/* Content classification chart */}
             <Panel title="تحليل الذكاء الاصطناعي للمشاعر" icon={<Sparkles size={18} />}>
               <div className="flex flex-wrap items-center justify-center gap-6 py-2 sm:flex-nowrap">
                 <Donut
@@ -341,7 +333,7 @@ export default async function OverviewPage() {
                 </div>
               </div>
               <p className="mt-4 text-xs leading-relaxed text-[var(--color-text-muted)] text-center sm:text-right font-semibold">
-                ذكاؤنا الاصطناعي يقيس المشاعر تلقائياً، والمدقق البشري يقدر يعدلها ويعتمدها قبل ما تروح للتقرير الفخم.
+                تصنيف المحتوى يعطي مؤشراً أولياً إيجابي/محايد/سلبي، والمدقق البشري يراجعه ويعتمده قبل دخوله في التقرير.
               </p>
             </Panel>
           </section>
@@ -658,7 +650,7 @@ function FeedItem({
           <div className="mt-0.5 font-extrabold text-[var(--color-text-title)]">{item.relevanceScore}%</div>
         </div>
         <div className="rounded-xl bg-[#f7f8f6] px-3.5 py-2 border border-[var(--color-border)]">
-          <div className="text-[10px] text-[var(--color-text-muted)] font-semibold">المشاعر</div>
+          <div className="text-[10px] text-[var(--color-text-muted)] font-semibold">تصنيف المحتوى</div>
           <div className="mt-0.5 font-extrabold text-[var(--color-text-title)]">{sentimentAr}</div>
         </div>
       </div>
@@ -689,22 +681,5 @@ function StatusPill({ label, warning }: { label: string; warning?: boolean }) {
     >
       {friendlyLabel}
     </span>
-  );
-}
-
-function HealthRow({
-  alert,
-}: {
-  alert: { label: string; value: string; status: string };
-}) {
-  const tone =
-    alert.status === "good" ? "bg-[#00C853]/10 text-[#00C853] border border-[#00C853]/20" : "bg-[#FFAB00]/10 text-[#FFAB00] border border-[#FFAB00]/20";
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-[#f7f8f6] px-3.5 py-2.5 text-xs md:text-sm border border-[var(--color-border)]">
-      <span className="text-stone-700 font-semibold">{alert.label}</span>
-      <span className={`rounded-md px-2 py-0.5 text-[10px] md:text-xs font-extrabold ${tone}`}>
-        {alert.value}
-      </span>
-    </div>
   );
 }
