@@ -517,15 +517,12 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
 }
 
 export function extractLegacyPublishDateIso(item: Pick<ImportedReportItem, "rawText" | "publishedDateText">) {
-  const text = normalizeDateText(`${item.publishedDateText}\n${item.rawText}`);
-  const isoDate = extractIsoDate(text);
+  const publishedDateText = normalizeDateText(item.publishedDateText);
+  const rawText = normalizeDateText(item.rawText);
+  const isoDate = extractIsoDate(publishedDateText);
   if (isoDate) return isoDate;
 
-  const monthPattern = Object.keys(monthNumbers).join("|");
-  const match = text.match(new RegExp(`(\\d{1,2})\\s*(${monthPattern})`, "u"));
-  if (!match) return null;
-
-  return toIsoDate(inferYear(Number(match[1]), match[2]), monthNumbers[match[2]], Number(match[1]));
+  return extractLegacyDayMonthDate(publishedDateText) ?? extractLegacyDayMonthDate(rawText);
 }
 
 export function extractLegacyCaptureDateIso(value: string) {
@@ -551,6 +548,21 @@ function normalizeDateText(value: string) {
 
 function inferYear(_day: number, month: string) {
   return monthNumbers[month] === 12 ? 2025 : 2026;
+}
+
+function extractLegacyDayMonthDate(value: string) {
+  const monthPattern = Object.keys(monthNumbers).join("|");
+  const regex = new RegExp(`(^|[^\\d])(\\d{1,2})\\s*(${monthPattern})`, "gu");
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(value)) !== null) {
+    const day = Number(match[2]);
+    const month = match[3];
+    const isoDate = toIsoDate(inferYear(day, month), monthNumbers[month], day);
+    if (isoDate) return isoDate;
+  }
+
+  return null;
 }
 
 function toIsoDate(year: number, month: number, day: number) {

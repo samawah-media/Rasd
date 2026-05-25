@@ -251,6 +251,22 @@ describe("connector and budget utilities", () => {
     assert.equal(captureDate, "2026-02-14");
     assert.equal(
       extractLegacyPublishDateIso({
+        publishedDateText: "هاكاثون يجمع المبدعين في مركز 2026 أبريل16-14 خلال الفترة",
+        rawText:
+          "المحتوى / الملخص\nهاكاثون يجمع المبدعين في مركز 2026 أبريل16-14 خلال الفترة\n2026 فبراير14*تم التقاط هذه الصورة بتاريخ\n14\nشعبان\n02\nفبراير\nمنصة إكس",
+      }),
+      "2026-02-02",
+    );
+    assert.equal(
+      extractLegacyPublishDateIso({
+        publishedDateText: "تصنيف المحتوى 2026 يناير31*تم التقاط هذه الصورة بتاريخ",
+        rawText:
+          "موقع رسمي\nتصنيف المحتوى\n2026 يناير31*تم التقاط هذه الصورة بتاريخ\nالثلاثاء\n18\n2جمادى\n9\nديسمبر",
+      }),
+      "2025-12-09",
+    );
+    assert.equal(
+      extractLegacyPublishDateIso({
         publishedDateText: "2026-05-20T10:30:00.000Z",
         rawText: "Manual URL intake",
       }),
@@ -277,6 +293,8 @@ describe("connector and budget utilities", () => {
     assert.equal(report.items.every((item) => item.sentiment === "positive" && item.sentimentLabel === "إيجابي"), true);
     assert.equal(report.items.every((item) => item.reportLabel.length > 0), true);
     assert.equal(report.items.every((item) => item.clientStatusLabel.length > 0), true);
+    assert.equal(report.summary.dateTo, "2026-03-13");
+    assert.equal(report.items.some((item) => item.publishDateIso?.startsWith("2026-04")), false);
     assert.equal(report.items.every((item) => item.evidenceImagePath?.startsWith("/imports/legacy-content-crops/full/content-")), true);
     assert.equal(report.items.every((item) => item.contentImagePath?.startsWith("/imports/legacy-content-crops/full/content-")), true);
     assert.equal(

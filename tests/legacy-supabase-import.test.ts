@@ -96,6 +96,23 @@ describe("legacy Supabase import plan", () => {
     assert.equal(monitoringRows.every((row) => String(row.normalized_text_hash).length === 32), true);
   });
 
+  it("persists corrected legacy publish and capture dates instead of event-period text", () => {
+    const plan = buildLegacySupabaseUpsertPlan();
+    const monitoringRows = plan.batches.find((batch) => batch.table === "monitoring_items")?.rows ?? [];
+    const captureRows = plan.batches.find((batch) => batch.table === "captures")?.rows ?? [];
+
+    assert.equal(monitoringRows.every((row) => typeof row.published_at === "string"), true);
+    assert.equal(captureRows.every((row) => typeof row.captured_at === "string"), true);
+    assert.equal(monitoringRows.some((row) => String(row.published_at).startsWith("2026-04")), false);
+    assert.equal(
+      monitoringRows
+        .map((row) => String(row.published_at).slice(0, 10))
+        .sort()
+        .at(-1),
+      "2026-03-13",
+    );
+  });
+
   it("uses cropped content images for report captures while preserving the full legacy page as fallback evidence", () => {
     const plan = buildLegacySupabaseUpsertPlan();
     const monitoringRows = plan.batches.find((batch) => batch.table === "monitoring_items")?.rows ?? [];

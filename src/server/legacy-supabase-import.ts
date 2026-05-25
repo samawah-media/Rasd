@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { extractLegacyCaptureDateIso, extractLegacyPublishDateIso } from "@/lib/client-report-data";
 import { getImportedReportsDataset, type ImportedReportItem } from "@/lib/imported-reports";
 import { getLegacyLinkOverrides, isOpenableHttpUrl, type LinkOverridesFile } from "@/lib/legacy-link-overrides";
 import type { ReportItemCard, Sentiment, SourceType } from "@/lib/types";
@@ -304,6 +305,7 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
   const legacyEvidenceUrl = legacyEvidenceUrlForItem(item);
   const storedOriginalUrl = item.originalUrl ?? legacyEvidenceUrl;
   const evidenceImagePath = item.contentImagePath ?? item.evidenceImagePath;
+  const publishedAt = isoDateToTimestamp(extractLegacyPublishDateIso(item));
 
   return {
     id: legacyItemUuid(item),
@@ -323,7 +325,7 @@ function monitoringItemRow(item: ImportedReportItem): DbRow {
     source_item_id: item.id,
     normalized_text_hash: stableFingerprint(item.rawText),
     author_name: item.authorName,
-    published_at: null,
+    published_at: publishedAt,
     summary: item.summary,
     summary_source_text: item.rawText,
     sentiment: normalizeSentiment(item.sentiment),
@@ -390,7 +392,7 @@ function captureRow(item: ImportedReportItem): DbRow {
     asset_url: item.contentImagePath ?? item.evidenceImagePath ?? legacyEvidenceUrlForItem(item),
     html_archive_url: null,
     failure_reason: null,
-    captured_at: null,
+    captured_at: isoDateToTimestamp(extractLegacyCaptureDateIso(item.capturedAtText)),
   };
 }
 
@@ -466,6 +468,10 @@ function mapLegacyConfidence(confidence: ImportedReportItem["confidence"]) {
   if (confidence === "high") return 95;
   if (confidence === "medium") return 82;
   return 70;
+}
+
+function isoDateToTimestamp(value: string | null) {
+  return value ? `${value}T00:00:00.000Z` : null;
 }
 
 function legacyEvidenceUrlForItem(item: ImportedReportItem) {
