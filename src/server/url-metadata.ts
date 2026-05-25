@@ -363,6 +363,8 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   const readableText = readableArticle?.textContent ? clipped(readableArticle.textContent, 900) : undefined;
   const readableSiteName = cleanText(readableArticle?.siteName);
   const publisherName = siteName ?? readableSiteName ?? publisherNameFromUrl(url);
+  const canonicalUrl = firstSafePublicUrl(linkHref(html, "canonical"), url);
+  const platform = platformFromUrl(canonicalUrl ?? url);
   const publishedAt = isoDate(
     firstPresent(
       metaContent(html, "property", "article:published_time"),
@@ -373,8 +375,7 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
       metaContent(html, "name", "DC.date.issued"),
       metaContent(html, "itemprop", "datePublished"),
     ),
-  );
-  const canonicalUrl = firstSafePublicUrl(linkHref(html, "canonical"), url);
+  ) ?? socialDescriptionPublishedAt(description, platform);
   const imageUrl = firstSafePublicUrl(
     firstPresent(
       metaContent(html, "property", "og:image"),
@@ -393,7 +394,7 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
     publishedAt,
     canonicalUrl,
     imageUrl,
-    platform: platformFromUrl(canonicalUrl ?? url),
+    platform,
     source: "html_metadata",
     readabilityUsed: Boolean(readableArticle),
     warnings: warnings.length ? warnings : undefined,
@@ -614,6 +615,12 @@ function clipped(value: string, maxLength: number) {
 
 function firstPresent(...values: Array<string | null | undefined>) {
   return values.find((value): value is string => Boolean(value?.trim()));
+}
+
+function socialDescriptionPublishedAt(description: string | null | undefined, platform: UrlMetadata["platform"]) {
+  if (platform !== "Instagram" || !description) return undefined;
+  const match = description.match(/\bon\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/u);
+  return isoDate(match?.[1]);
 }
 
 function escapeRegex(value: string) {

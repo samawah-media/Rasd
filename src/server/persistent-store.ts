@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sourceLabel } from "@/server/source-label";
+import { platformFromUrl } from "@/server/platform";
+import { AUTO_RELEVANCE_THRESHOLD, LOW_CONFIDENCE_RELEVANCE_THRESHOLD } from "@/server/relevance";
+import { estimateSentiment, estimateSentimentConfidence } from "@/server/sentiment";
 import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
 import { checkBudget, type UsageSnapshot } from "@/lib/guardrails";
+import { UNKNOWN_DATE_LABEL, isValidDateString } from "@/lib/dates";
 import { keywordRules, usageLimit } from "@/lib/mock-data";
 import type {
   Capture,
@@ -20,7 +25,10 @@ import type {
 import { TikTokResearchConnector } from "@/lib/connectors/tiktok/research";
 import { InstagramPublicProfileConnector } from "@/lib/connectors/instagram/public-profile";
 import {
+  DEFAULT_AAWSAT_EDUCATION_SOURCE_ID,
+  DEFAULT_AAWSAT_GULF_SOURCE_ID,
   DEFAULT_MANUAL_SOURCE_ID,
+  DEFAULT_NEWS_SOURCE_ID,
   DEFAULT_ORGANIZATION_ID,
   DEFAULT_ORGANIZATION_NAME,
   DEFAULT_ORGANIZATION_SLUG,
@@ -224,18 +232,6 @@ function now() {
   return new Date().toISOString();
 }
 
-function sourceLabel(type: SourceType) {
-  if (type === "rss") return "مصدر RSS";
-  if (type === "web_page") return "موقع ويب";
-  if (type.startsWith("x_")) return "منصة X";
-  return "إدخال يدوي";
-}
-
-function estimateSentiment(score: number) {
-  if (score <= 30) return "negative";
-  if (score < 40) return "neutral";
-  return "positive";
-}
 
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -359,6 +355,7 @@ async function buildAutomationHealth(input: {
       queuedJobsCount: jobs.filter((job) => job.status === "queued" || job.status === "running").length,
       failedJobsCount: failedJobs.length,
       latestRun: connectorRuns[0] ?? null,
+      latestSuccessfulRun: connectorRuns.find((run) => run.status === "success") ?? null,
       latestFailedJob: failedJobs[0] ?? null,
       mediaMetadataExtractor,
       apify: getApifyHealth(),
@@ -387,6 +384,7 @@ async function buildAutomationHealth(input: {
       queuedJobsCount: 0,
       failedJobsCount: 0,
       latestRun: null,
+      latestSuccessfulRun: null,
       latestFailedJob: null,
       mediaMetadataExtractor: await getMediaMetadataHealth().catch(() => ({
         enabled: false,
@@ -424,24 +422,6 @@ function isUuid(value: string | undefined) {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value));
 }
 
-function platformFromUrl(value: string) {
-  try {
-    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
-    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
-      return "X";
-    }
-    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
-      return "TikTok";
-    }
-    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
-      return "Instagram";
-    }
-    return "Website";
-  } catch {
-    return "Unknown";
-  }
-}
-
 function xStatusIdFromUrl(value: string) {
   try {
     return new URL(value).pathname.match(/\/status\/(\d+)/u)?.[1] ?? null;
@@ -462,6 +442,19 @@ function isWeakManualSummary(row: DbItemRow) {
 
 function rawObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function rawString(value: unknown, key: string) {
+  const entry = rawObject(value)[key];
+  return typeof entry === "string" && entry.trim() ? entry.trim() : null;
+}
+
+function hasTrustedPublishedDate(item: Pick<MonitoringItem, "sourceType" | "publishedAt" | "raw_response">) {
+  if (!isValidDateString(item.publishedAt)) return false;
+  const raw = rawObject(item.raw_response);
+  if (item.sourceType !== "manual_url" || raw.manual !== true) return true;
+  const input = rawObject(raw.input);
+  return Boolean(rawString(input, "publishedAt") || rawString(input, "published_at") || rawString(raw, "publishedDateSource"));
 }
 
 function toReport(row: DbReportRow): ReportVersion {
@@ -539,7 +532,7 @@ async function toItems(supabase: SupabaseClient, rows: DbItemRow[]): Promise<Mon
       originalUrl: row.original_url,
       authorName: row.author_name ?? undefined,
       authorHandle: row.author_handle ?? undefined,
-      publishedAt: row.published_at ?? row.created_at,
+      publishedAt: row.published_at ?? UNKNOWN_DATE_LABEL,
       summary: row.summary ?? "",
       summarySourceText: row.summary_source_text ?? row.summary ?? row.original_url,
       sentiment: row.sentiment ?? "neutral",
@@ -551,6 +544,7 @@ async function toItems(supabase: SupabaseClient, rows: DbItemRow[]): Promise<Mon
       hasReportGradeCapture: captureIds.has(row.id),
       warning: row.warning ?? undefined,
       sourceItemId: row.source_item_id ?? undefined,
+      raw_response: row.raw_response,
       discoveryMethod,
       organizationId: row.organization_id,
       topicId: row.topic_id,
@@ -598,6 +592,47 @@ async function ensureDefaultWorkspace(supabase: SupabaseClient) {
           country: "السعودية",
           credibility: "public",
           is_verified_source: false,
+          is_active: true,
+          poll_interval_minutes: 1440,
+        },
+        {
+          id: DEFAULT_NEWS_SOURCE_ID,
+          organization_id: DEFAULT_ORGANIZATION_ID,
+          name: "الشرق الأوسط - كل الأخبار",
+          type: "rss",
+          url: "https://aawsat.com",
+          feed_url: "https://aawsat.com/feed/news",
+          country: "السعودية",
+          credibility: "media",
+          is_verified_source: true,
+          is_active: true,
+          poll_interval_minutes: 1440,
+        },
+        {
+          id: DEFAULT_AAWSAT_GULF_SOURCE_ID,
+          organization_id: DEFAULT_ORGANIZATION_ID,
+          name: "الشرق الأوسط - الخليج",
+          type: "rss",
+          url: "https://aawsat.com/home/international/section/gulf",
+          feed_url: "https://aawsat.com/feed/gulf",
+          country: "السعودية",
+          credibility: "media",
+          is_verified_source: true,
+          is_active: true,
+          poll_interval_minutes: 1440,
+        },
+        {
+          id: DEFAULT_AAWSAT_EDUCATION_SOURCE_ID,
+          organization_id: DEFAULT_ORGANIZATION_ID,
+          name: "الشرق الأوسط - التعليم",
+          type: "rss",
+          url: "https://aawsat.com",
+          feed_url: "https://aawsat.com/feed/education",
+          country: "السعودية",
+          credibility: "media",
+          is_verified_source: true,
+          is_active: true,
+          poll_interval_minutes: 1440,
         },
       ],
     },
@@ -740,11 +775,12 @@ async function refreshSupabaseManualDuplicate(
     patch.state = match.score > 0 ? "needs_review" : "candidate";
   }
   if (match.score > (row.relevance_score ?? 0)) {
+    const sentiment = estimateSentiment(`${title} ${summary} ${canonicalUrl}`);
     patch.relevance_score = match.score;
     patch.relevance_reason = match.reason;
     patch.matched_terms = match.matchedTerms;
-    patch.sentiment = estimateSentiment(match.score);
-    patch.sentiment_confidence = Math.max(50, Math.min(95, match.score));
+    patch.sentiment = sentiment;
+    patch.sentiment_confidence = estimateSentimentConfidence(sentiment);
     if (row.state === "candidate") patch.state = "needs_review";
   }
 
@@ -755,7 +791,8 @@ async function refreshSupabaseManualDuplicate(
     discoveryMethod,
     platform,
     sourcePdf: "live-hidayathon",
-    publishedDateText: String(patch.published_at ?? row.published_at ?? now()),
+    publishedDateText: String(patch.published_at ?? row.published_at ?? UNKNOWN_DATE_LABEL),
+    publishedDateSource: input.publishedAt ? "input_or_metadata" : rawObject(row.raw_response).publishedDateSource,
     extractedUrls: Array.from(new Set([canonicalUrl, row.original_url].filter(Boolean))),
     input: {
       ...rawObject(rawObject(row.raw_response).input),
@@ -917,11 +954,11 @@ export const persistentStore = {
     const auditLogs = await this.listAuditLogs();
     const dynamicHealth: HealthMetric[] = [
       {
-        label: "Database workflow",
+        label: "تدفق قاعدة البيانات",
         value: `${items.length} مواد / ${auditLogs.length} أحداث تدقيق`,
         status: "good",
       },
-      { label: "Persistence", value: "Supabase configured", status: "good" },
+      { label: "استمرارية التخزين", value: "Supabase نشط", status: "good" },
     ];
 
     return {
@@ -1238,6 +1275,7 @@ export const persistentStore = {
       let duplicates = 0;
       let failed = 0;
       let skipped = 0;
+      let lowConfidence = 0;
       const createdItems: MonitoringItem[] = [];
 
       for (const entry of feed.entries) {
@@ -1248,6 +1286,9 @@ export const persistentStore = {
           }
 
           const ingested = buildRssIngestionItem(source, entry, checkedAt, rule);
+          if (ingested.item.relevanceScore < LOW_CONFIDENCE_RELEVANCE_THRESHOLD) {
+            lowConfidence += 1;
+          }
           const duplicate = await findSupabaseRssDuplicate(supabase, ingested);
           if (duplicate.duplicate) {
             duplicates += 1;
@@ -1308,6 +1349,7 @@ export const persistentStore = {
         duplicates,
         skipped,
         failed,
+        lowConfidence,
       });
 
       return {
@@ -1323,6 +1365,7 @@ export const persistentStore = {
         duplicates,
         skipped,
         failed,
+        lowConfidence,
         items: createdItems,
       };
     } catch (error) {
@@ -1339,7 +1382,7 @@ export const persistentStore = {
     await ensureDefaultWorkspace(supabase);
 
     const canonicalUrl = canonicalizeUrl(input.url);
-    const publishedAt = input.publishedAt ?? now();
+    const publishedAt = input.publishedAt ?? null;
     const platform = platformFromUrl(canonicalUrl);
     const sourceType = input.sourceType ?? "manual_url";
     const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
@@ -1350,7 +1393,7 @@ export const persistentStore = {
         text: input.text ?? input.title ?? canonicalUrl,
         authorName: input.authorName,
         authorHandle: input.authorHandle,
-        publishedAt,
+        publishedAt: publishedAt ?? UNKNOWN_DATE_LABEL,
         raw: input,
       },
       sourceType,
@@ -1409,6 +1452,7 @@ export const persistentStore = {
 
     const rule = input.keywordRule ?? keywordRules[0];
     const match = explainKeywordMatch(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`, rule);
+    const sentiment = estimateSentiment(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`);
     const { data: row, error } = await supabase
       .from("monitoring_items")
       .insert({
@@ -1427,8 +1471,8 @@ export const persistentStore = {
         published_at: publishedAt,
         summary: input.text ?? "تم حفظ الرابط كدليل خفيف بانتظار مراجعة المحرر.",
         summary_source_text: input.text ?? canonicalUrl,
-        sentiment: estimateSentiment(match.score),
-        sentiment_confidence: Math.max(50, Math.min(95, match.score)),
+        sentiment,
+        sentiment_confidence: estimateSentimentConfidence(sentiment),
         relevance_score: match.score,
         relevance_reason: match.reason,
         matched_terms: match.matchedTerms,
@@ -1438,7 +1482,8 @@ export const persistentStore = {
           discoveryMethod,
           platform,
           sourcePdf: "live-hidayathon",
-          publishedDateText: publishedAt,
+          publishedDateText: publishedAt ?? UNKNOWN_DATE_LABEL,
+          publishedDateSource: publishedAt ? "input_or_metadata" : undefined,
           extractedUrls: [canonicalUrl],
           input,
           warning: input.extraction?.warning,
@@ -1616,16 +1661,21 @@ export const persistentStore = {
     const nextUrl = String(patch.original_url ?? row.original_url);
     if (changed.length) {
       const match = explainKeywordMatch(`${nextTitle} ${nextSummary} ${nextUrl}`, keywordRules[0]);
+      const sentiment = estimateSentiment(`${nextTitle} ${nextSummary} ${nextUrl}`);
       patch.relevance_score = match.score;
       patch.relevance_reason = match.reason;
       patch.matched_terms = match.matchedTerms;
-      patch.sentiment = estimateSentiment(match.score);
-      patch.sentiment_confidence = Math.max(50, Math.min(95, match.score));
+      patch.sentiment = sentiment;
+      patch.sentiment_confidence = estimateSentimentConfidence(sentiment);
       patch.raw_response = {
         ...rawObject(row.raw_response),
         sourcePdf: rawObject(row.raw_response).sourcePdf ?? "live-hidayathon",
         platform: rawObject(row.raw_response).platform ?? platformFromUrl(nextUrl),
-        publishedDateText: String(patch.published_at ?? row.published_at ?? now()),
+        publishedDateText: String(patch.published_at ?? row.published_at ?? UNKNOWN_DATE_LABEL),
+        publishedDateSource:
+          patch.published_at || rawObject(row.raw_response).publishedDateSource
+            ? "input_or_metadata"
+            : undefined,
         extractedUrls: Array.from(new Set([nextUrl, row.original_url].filter(Boolean))),
         editorCorrections: [
           ...((rawObject(row.raw_response).editorCorrections as unknown[]) ?? []),
@@ -1951,6 +2001,13 @@ export const persistentStore = {
         ok: false as const,
         error: "item_not_report_ready",
         warning: "لا تدخل المادة التقرير إلا بعد capture أو موافقة صريحة بتحذير.",
+      };
+    }
+    if (!hasTrustedPublishedDate(item)) {
+      return {
+        ok: false as const,
+        error: "published_at_required",
+        warning: "لا يمكن إضافة المادة للتقرير قبل تثبيت تاريخ النشر الحقيقي للمادة.",
       };
     }
 
@@ -2377,9 +2434,11 @@ export const persistentStore = {
 
       for (const rawItem of fetched) {
         const relevance = explainKeywordMatch(`${rawItem.title} ${rawItem.text} ${rawItem.url}`, activeRule);
-        if (relevance.score < 35) {
+        if (relevance.score < AUTO_RELEVANCE_THRESHOLD) {
           continue;
         }
+        const lowConfidence = relevance.score < LOW_CONFIDENCE_RELEVANCE_THRESHOLD;
+        const sentiment = estimateSentiment(`${rawItem.title} ${rawItem.text} ${rawItem.url}`);
 
         const dedupeKey = makeDedupeKey(rawItem, rule.type);
         const canonicalHash = `${rule.type}:${await sha256(dedupeKey)}`;
@@ -2419,7 +2478,7 @@ export const persistentStore = {
             topic_id: rule.topicId,
             source_id: rule.sourceId || null,
             source_type: rule.type,
-            state: "needs_review",
+            state: lowConfidence ? "candidate" : "needs_review",
             title: rawItem.title,
             original_url: rawItem.url,
             canonical_url_hash: canonicalHash,
@@ -2430,13 +2489,13 @@ export const persistentStore = {
             published_at: rawItem.publishedAt,
             summary: rawItem.text,
             summary_source_text: rawItem.text,
-            sentiment: estimateSentiment(relevance.score),
-            sentiment_confidence: Math.max(50, Math.min(95, relevance.score)),
+            sentiment,
+            sentiment_confidence: estimateSentimentConfidence(sentiment),
             relevance_score: relevance.score,
             relevance_reason: relevance.reason,
             matched_terms: relevance.matchedTerms,
             raw_response: rawItem.raw ?? {},
-            warning: null,
+            warning: relevance.score < LOW_CONFIDENCE_RELEVANCE_THRESHOLD ? "ملاءمة منخفضة: تحتاج مراجعة قبل الاعتماد." : null,
             discovery_method: "auto_search",
           })
           .select("*, sources(name)")

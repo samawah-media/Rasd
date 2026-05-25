@@ -201,6 +201,7 @@ function compactExtractionMetadata(metadata: UrlMetadata | null) {
     platform: metadata.platform,
     canonicalUrl: metadata.canonicalUrl,
     imageUrl: metadata.imageUrl,
+    publishedAt: metadata.publishedAt,
     publisherName: metadata.publisherName,
     siteName: metadata.siteName,
     readabilityUsed: metadata.readabilityUsed,

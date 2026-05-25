@@ -6,7 +6,9 @@ import {
   Archive,
   BarChart3,
   Camera,
+  CalendarDays,
   Check,
+  ChevronDown,
   CircleCheck,
   Eye,
   Filter,
@@ -15,6 +17,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Save,
   Search,
   Trash2,
 } from "lucide-react";
@@ -29,6 +32,14 @@ type WorkTab = "active" | "review" | "capture" | "report" | "done";
 type IntakeMode = "manual" | "x-search" | "sources";
 type PlatformFilter = "all" | "news" | "tiktok" | "instagram" | "x";
 type ScanStepStatus = "idle" | "running" | "success" | "warning" | "error";
+type ItemCorrectionDraft = {
+  title: string;
+  summary: string;
+  authorName: string;
+  authorHandle: string;
+  originalUrl: string;
+  publishedDate: string;
+};
 
 type LastScan = {
   finishedAt: string;
@@ -169,6 +180,8 @@ const arabicApiErrors: Record<string, string> = {
   url_is_required: "الصق رابطًا صحيحًا.",
   item_not_found: "المادة غير موجودة.",
   item_not_report_ready: "المادة ليست جاهزة للتقرير بعد.",
+  published_at_required: "ثبّت تاريخ النشر الحقيقي قبل إضافة المادة للتقرير.",
+  "published_at must be a valid date": "تاريخ النشر غير صالح.",
   report_not_found: "التقرير غير موجود.",
   budget_exceeded: "تم تجاوز حد الاستخدام المسموح.",
   source_not_found: "المصدر غير موجود.",
@@ -307,6 +320,33 @@ function mediaPreviewLabel(item: MonitoringItem) {
   if (label === "Instagram") return item.originalUrl.includes("/reel/") ? "فيديو" : "صورة";
   if (label === "X") return "معاينة";
   return "صورة خبر";
+}
+
+function publishedDateInputValue(value: string) {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "";
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+function publishedDateInputToIso(value: string) {
+  return `${value}T00:00:00.000Z`;
+}
+
+function publishedDateLabel(value: string) {
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) return "غير محدد";
+  return new Intl.DateTimeFormat("ar-SA", { day: "numeric", month: "short", year: "numeric" }).format(new Date(timestamp));
+}
+
+function itemCorrectionDraft(item: MonitoringItem): ItemCorrectionDraft {
+  return {
+    title: item.title,
+    summary: item.summary,
+    authorName: item.authorName ?? "",
+    authorHandle: item.authorHandle ?? "",
+    originalUrl: item.originalUrl,
+    publishedDate: publishedDateInputValue(item.publishedAt),
+  };
 }
 
 function messageClass(type: MessageType) {
@@ -830,6 +870,43 @@ export function OpsClient() {
     );
   }
 
+  function updatePublishedDate(item: MonitoringItem, value: string) {
+    if (!value) {
+      setMessage("اختر تاريخ النشر قبل الحفظ.");
+      setMessageType("warning");
+      return undefined;
+    }
+
+    return runItemAction(
+      `date-${item.id}`,
+      () =>
+        apiJson(`/api/items/${item.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ published_at: publishedDateInputToIso(value) }),
+        }),
+      "تم تحديث تاريخ النشر في المادة والتقرير.",
+    );
+  }
+
+  function updateItemFields(item: MonitoringItem, draft: ItemCorrectionDraft) {
+    return runItemAction(
+      `edit-${item.id}`,
+      () =>
+        apiJson(`/api/items/${item.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            title: draft.title.trim() || undefined,
+            summary: draft.summary.trim() || undefined,
+            author_name: draft.authorName.trim() || undefined,
+            author_handle: draft.authorHandle.trim() || undefined,
+            original_url: draft.originalUrl.trim() || undefined,
+            published_at: draft.publishedDate ? publishedDateInputToIso(draft.publishedDate) : undefined,
+          }),
+        }),
+      "تم تحديث بيانات المادة والتقرير.",
+    );
+  }
+
   function archiveItem(item: MonitoringItem) {
     const confirmed = window.confirm("أرشفة هذه المادة؟ ستختفي من صفحة التشغيل وتقرير العميل بدون حذف نهائي.");
     if (!confirmed) return undefined;
@@ -1053,6 +1130,8 @@ export function OpsClient() {
                         if (item.state === "report_ready") return addToReport(item);
                         return approveItem(item);
                       }}
+                      onUpdatePublishedDate={(value) => updatePublishedDate(item, value)}
+                      onSaveCorrections={(draft) => updateItemFields(item, draft)}
                       onArchive={() => archiveItem(item)}
                     />
                   ))
@@ -1200,6 +1279,8 @@ function MonitoringRow({
   onSelect,
   primaryLabel,
   onPrimary,
+  onUpdatePublishedDate,
+  onSaveCorrections,
   onArchive,
 }: {
   item: MonitoringItem;
@@ -1209,71 +1290,253 @@ function MonitoringRow({
   onSelect: () => void;
   primaryLabel: string;
   onPrimary: () => void;
+  onUpdatePublishedDate: (value: string) => void;
+  onSaveCorrections: (draft: ItemCorrectionDraft) => void;
   onArchive: () => void;
 }) {
+  const [editOpen, setEditOpen] = useState(false);
+  const currentDateValue = publishedDateInputValue(item.publishedAt);
+  const [dateDraft, setDateDraft] = useState<{ itemId: string; source: string; value: string } | null>(null);
+  const dateValue = dateDraft?.itemId === item.id && dateDraft.source === currentDateValue ? dateDraft.value : currentDateValue;
+  const datePending = pending === `date-${item.id}`;
+  const dateChanged = Boolean(dateValue && dateValue !== currentDateValue);
+
   return (
-    <div className={`grid gap-3 rounded-lg border p-3 transition sm:grid-cols-[88px_minmax(0,1fr)_86px] ${selected ? "border-[#2563eb] bg-[#f8fbff]" : "border-[var(--color-border)] bg-white"}`}>
-      <div className="min-w-0 text-right sm:order-2">
-        <button type="button" onClick={onSelect} className="block w-full min-w-0 text-right">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <PlatformBadge label={platformLabel(item)} />
-            <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
+    <div className={`rounded-lg border p-3 transition ${selected ? "border-[#2563eb] bg-[#f8fbff]" : "border-[var(--color-border)] bg-white"}`}>
+      <div className="grid gap-3 sm:grid-cols-[88px_minmax(0,1fr)_86px]">
+        <div className="min-w-0 text-right sm:order-2">
+          <div className="block w-full min-w-0 text-right">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                aria-expanded={editOpen}
+                aria-label="فتح حقول تعديل المادة"
+                title="تعديل بيانات المادة"
+                onClick={() => setEditOpen((open) => !open)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#c7d8f3] bg-white text-[#1f6feb] transition hover:border-[#1f6feb]/50"
+              >
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${editOpen ? "rotate-180" : ""}`} />
+              </button>
+              <PlatformBadge label={platformLabel(item)} />
+              <span className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold ${statusClass(item.state)}`}>{stateLabel(item.state)}</span>
+            </div>
+            <button type="button" onClick={onSelect} className="block w-full min-w-0 text-right">
+              <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[var(--color-text-title)]">{item.title}</h3>
+              <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{item.summary}</p>
+            </button>
           </div>
-          <h3 className="mt-2 line-clamp-1 text-sm font-extrabold text-[var(--color-text-title)]">{item.title}</h3>
-          <p className="mt-1 line-clamp-2 text-xs font-semibold leading-5 text-[var(--color-text-muted)]">{item.summary}</p>
-        </button>
-        {item.originalUrl ? (
-          <a
-            href={item.originalUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#c7d8f3] bg-[#f6f9ff] px-2 py-1 text-[10px] font-extrabold text-[#1f6feb] hover:border-[#1f6feb]/50"
-            title={item.originalUrl}
+          {item.originalUrl ? (
+            <a
+              href={item.originalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#c7d8f3] bg-[#f6f9ff] px-2 py-1 text-[10px] font-extrabold text-[#1f6feb] hover:border-[#1f6feb]/50"
+              title={item.originalUrl}
+            >
+              <LinkIcon className="h-3 w-3 shrink-0" />
+              <span className="truncate" dir="ltr">{item.originalUrl}</span>
+            </a>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-1">
+            {item.matchedTerms.slice(0, 4).map((term) => (
+              <span key={term} className="rounded-md bg-[#e8f5ef] px-1.5 py-0.5 text-[9px] font-bold text-[#15803d]">
+                {term}
+              </span>
+            ))}
+          </div>
+          <form
+            className="mt-2 flex flex-wrap items-center gap-1.5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onUpdatePublishedDate(dateValue);
+            }}
           >
-            <LinkIcon className="h-3 w-3 shrink-0" />
-            <span className="truncate" dir="ltr">{item.originalUrl}</span>
-          </a>
-        ) : null}
-        <div className="mt-2 flex flex-wrap gap-1">
-          {item.matchedTerms.slice(0, 4).map((term) => (
-            <span key={term} className="rounded-md bg-[#e8f5ef] px-1.5 py-0.5 text-[9px] font-bold text-[#15803d]">
-              {term}
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--color-border)] bg-white px-2 text-[10px] font-extrabold text-[var(--color-text-muted)]">
+              <CalendarDays className="h-3.5 w-3.5" />
+              {publishedDateLabel(item.publishedAt)}
             </span>
-          ))}
+            <input
+              type="date"
+              value={dateValue}
+              onChange={(event) => setDateDraft({ itemId: item.id, source: currentDateValue, value: event.target.value })}
+              aria-label="تاريخ نشر المادة"
+              className="h-8 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-title)] outline-none transition focus:border-[#2563eb]"
+            />
+            <button
+              type="submit"
+              disabled={pending !== null || !dateChanged}
+              title="حفظ تاريخ النشر"
+              aria-label="حفظ تاريخ النشر"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#ccebd8] bg-[#f1fbf4] text-[#15803d] transition hover:bg-[#e4f7eb] disabled:opacity-50"
+            >
+              {datePending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            </button>
+          </form>
+        </div>
+
+        <button type="button" onClick={onSelect} className="relative h-24 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] sm:order-3">
+          {asset ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={asset} alt="" className="h-full w-full object-cover object-top" />
+          ) : (
+            <Camera className="mx-auto mt-9 h-5 w-5 text-[var(--color-text-muted)]" />
+          )}
+          <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">{mediaPreviewLabel(item)}</span>
+        </button>
+
+        <div className="flex gap-2 sm:order-1 sm:flex-col">
+          <button
+            type="button"
+            onClick={() => setEditOpen((open) => !open)}
+            disabled={pending !== null}
+            aria-expanded={editOpen}
+            aria-label="فتح حقول تعديل المادة"
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-[#c7d8f3] bg-white px-2 text-xs font-bold text-[#1f6feb] transition hover:border-[#1f6feb]/50 disabled:opacity-50 sm:flex-none"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${editOpen ? "rotate-180" : ""}`} />
+            تعديل
+          </button>
+          <button
+            type="button"
+            onClick={onPrimary}
+            disabled={pending !== null}
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md bg-[#16a34a] px-2 text-xs font-extrabold text-white transition hover:bg-[#15803d] disabled:opacity-50 sm:flex-none"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {primaryLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onArchive}
+            disabled={pending !== null}
+            className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-body)] transition hover:border-[#ef4444]/50 disabled:opacity-50 sm:flex-none"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            أرشفة
+          </button>
         </div>
       </div>
+      {editOpen ? (
+        <ItemCorrectionForm item={item} pending={pending} onCancel={() => setEditOpen(false)} onSave={onSaveCorrections} />
+      ) : null}
+    </div>
+  );
+}
 
-      <button type="button" onClick={onSelect} className="relative h-24 overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-main)] sm:order-3">
-        {asset ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={asset} alt="" className="h-full w-full object-cover object-top" />
-        ) : (
-          <Camera className="mx-auto mt-9 h-5 w-5 text-[var(--color-text-muted)]" />
-        )}
-        <span className="absolute bottom-1 left-1 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white">{mediaPreviewLabel(item)}</span>
-      </button>
+function ItemCorrectionForm({
+  item,
+  pending,
+  onCancel,
+  onSave,
+}: {
+  item: MonitoringItem;
+  pending: string | null;
+  onCancel: () => void;
+  onSave: (draft: ItemCorrectionDraft) => void;
+}) {
+  const currentDraft = itemCorrectionDraft(item);
+  const source = [
+    item.id,
+    currentDraft.title,
+    currentDraft.summary,
+    currentDraft.authorName,
+    currentDraft.authorHandle,
+    currentDraft.originalUrl,
+    currentDraft.publishedDate,
+  ].join("\u0000");
+  const [draftState, setDraftState] = useState<{ source: string; value: ItemCorrectionDraft } | null>(null);
+  const draft = draftState?.source === source ? draftState.value : currentDraft;
+  const editPending = pending === `edit-${item.id}`;
 
-      <div className="flex gap-2 sm:order-1 sm:flex-col">
+  function updateDraft<Key extends keyof ItemCorrectionDraft>(key: Key, value: ItemCorrectionDraft[Key]) {
+    setDraftState({ source, value: { ...draft, [key]: value } });
+  }
+
+  return (
+    <form
+      className="mt-3 grid gap-3 rounded-lg border border-[#dbeafe] bg-[#f8fbff] p-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(draft);
+      }}
+    >
+      <div className="grid gap-2 md:grid-cols-2">
+        <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+          العنوان
+          <input
+            value={draft.title}
+            onChange={(event) => updateDraft("title", event.target.value)}
+            className="h-9 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+          الرابط الأصلي
+          <input
+            value={draft.originalUrl}
+            onChange={(event) => updateDraft("originalUrl", event.target.value)}
+            className="h-9 rounded-md border border-[var(--color-border)] bg-white px-2 text-left text-xs font-bold text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+            dir="ltr"
+            required
+          />
+        </label>
+      </div>
+      <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+        الملخص
+        <textarea
+          value={draft.summary}
+          onChange={(event) => updateDraft("summary", event.target.value)}
+          className="min-h-24 rounded-md border border-[var(--color-border)] bg-white px-2 py-2 text-xs font-semibold leading-5 text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+          required
+        />
+      </label>
+      <div className="grid gap-2 md:grid-cols-3">
+        <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+          الناشر
+          <input
+            value={draft.authorName}
+            onChange={(event) => updateDraft("authorName", event.target.value)}
+            className="h-9 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+          />
+        </label>
+        <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+          الحساب
+          <input
+            value={draft.authorHandle}
+            onChange={(event) => updateDraft("authorHandle", event.target.value)}
+            className="h-9 rounded-md border border-[var(--color-border)] bg-white px-2 text-left text-xs font-bold text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+            dir="ltr"
+          />
+        </label>
+        <label className="grid gap-1 text-[11px] font-extrabold text-[var(--color-text-muted)]">
+          تاريخ النشر
+          <input
+            type="date"
+            value={draft.publishedDate}
+            onChange={(event) => updateDraft("publishedDate", event.target.value)}
+            className="h-9 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-title)] outline-none focus:border-[#2563eb]"
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
-          onClick={onPrimary}
+          onClick={onCancel}
           disabled={pending !== null}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md bg-[#16a34a] px-2 text-xs font-extrabold text-white transition hover:bg-[#15803d] disabled:opacity-50 sm:flex-none"
+          className="inline-flex h-9 items-center justify-center rounded-md border border-[var(--color-border)] bg-white px-3 text-xs font-bold text-[var(--color-text-body)] transition hover:border-[#2563eb]/40 disabled:opacity-50"
         >
-          <Check className="h-3.5 w-3.5" />
-          {primaryLabel}
+          إغلاق
         </button>
         <button
-          type="button"
-          onClick={onArchive}
-          disabled={pending !== null}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-md border border-[var(--color-border)] bg-white px-2 text-xs font-bold text-[var(--color-text-body)] transition hover:border-[#ef4444]/50 disabled:opacity-50 sm:flex-none"
+          type="submit"
+          disabled={pending !== null || !draft.title.trim() || !draft.summary.trim() || !draft.originalUrl.trim()}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-[#111827] px-3 text-xs font-extrabold text-white transition hover:bg-[#2563eb] disabled:opacity-50"
         >
-          <Archive className="h-3.5 w-3.5" />
-          أرشفة
+          {editPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          حفظ التعديل
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 

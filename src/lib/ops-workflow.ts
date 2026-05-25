@@ -15,11 +15,16 @@ export function isWorkflowItem(item: MonitoringItem) {
 export function latestWorkflowItems(items: MonitoringItem[], limit = 48, pinnedId?: string | null) {
   const candidates = items
     .filter(isWorkflowItem)
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+    .sort((a, b) => itemTimestamp(b) - itemTimestamp(a));
   const limited = candidates.slice(0, limit);
   const pinned = pinnedId ? candidates.find((item) => item.id === pinnedId) : undefined;
   if (!pinned || limited.some((item) => item.id === pinned.id)) return limited;
   return [pinned, ...limited.slice(0, Math.max(0, limit - 1))];
+}
+
+function itemTimestamp(item: MonitoringItem) {
+  const timestamp = Date.parse(item.publishedAt);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 export function isSocialWorkflowItem(item: MonitoringItem) {

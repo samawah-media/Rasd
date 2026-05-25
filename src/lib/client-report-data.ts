@@ -1,4 +1,4 @@
-import { formatGregorian, formatHijri } from "@/lib/dates";
+import { UNKNOWN_DATE_LABEL, formatGregorian, formatHijri, isValidDateString } from "@/lib/dates";
 import { DEFAULT_ORGANIZATION_ID, LEGACY_ORGANIZATION_ID } from "@/lib/auth-config";
 import { getImportedReportsDataset, type ImportConfidence, type ImportedReportItem } from "@/lib/imported-reports";
 import type { Capture, MonitoringItem } from "@/lib/types";
@@ -331,7 +331,7 @@ function toClientReportItemFromWorkflow(
     title: item.title,
     summary: item.summary,
     sentiment: item.sentiment,
-    publishedDateText: item.publishedAt,
+    publishedDateText: trustedPublishedDateTextFromWorkflow(item),
     capturedAtText: capture?.capturedAt ?? addedAt,
     originalUrl: item.originalUrl,
     extractedOriginalUrl: item.originalUrl,
@@ -458,7 +458,7 @@ function toClientReportItemFromDb(
     title: row.title ?? row.original_url,
     summary: row.summary ?? row.summary_source_text ?? row.original_url,
     sentiment: row.sentiment ?? "neutral",
-    publishedDateText: rawString(row.raw_response, "publishedDateText") ?? row.published_at ?? "غير محدد",
+    publishedDateText: trustedPublishedDateTextFromDb(row),
     capturedAtText: rawString(row.raw_response, "capturedAtText") ?? capture?.captured_at ?? "غير محدد",
     originalUrl,
     extractedOriginalUrl,
@@ -657,6 +657,24 @@ function rawRecord(value: unknown) {
 function rawString(value: unknown, key: string) {
   const entry = rawRecord(value)[key];
   return typeof entry === "string" && entry.trim() ? entry.trim() : null;
+}
+
+function hasTrustedPublishedDate(sourceType: string, rawResponse: unknown, value: string | null | undefined) {
+  if (!isValidDateString(value)) return false;
+  const raw = rawRecord(rawResponse);
+  if (sourceType !== "manual_url" || raw.manual !== true) return true;
+  const input = rawRecord(raw.input);
+  return Boolean(rawString(input, "publishedAt") || rawString(input, "published_at") || rawString(raw, "publishedDateSource"));
+}
+
+function trustedPublishedDateTextFromWorkflow(item: MonitoringItem) {
+  return hasTrustedPublishedDate(item.sourceType, item.raw_response, item.publishedAt) ? item.publishedAt : UNKNOWN_DATE_LABEL;
+}
+
+function trustedPublishedDateTextFromDb(row: DbMonitoringItemRow) {
+  const rawDate = rawString(row.raw_response, "publishedDateText");
+  const value = row.published_at ?? rawDate;
+  return hasTrustedPublishedDate(row.source_type, row.raw_response, value) ? (rawDate ?? row.published_at ?? UNKNOWN_DATE_LABEL) : UNKNOWN_DATE_LABEL;
 }
 
 function rawNumber(value: unknown, key: string) {

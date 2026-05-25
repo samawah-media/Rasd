@@ -1,6 +1,11 @@
 import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
+import { sourceLabel } from "@/server/source-label";
+import { platformFromUrl } from "@/server/platform";
+import { AUTO_RELEVANCE_THRESHOLD, LOW_CONFIDENCE_RELEVANCE_THRESHOLD } from "@/server/relevance";
+import { estimateSentiment, estimateSentimentConfidence } from "@/server/sentiment";
 import { checkBudget, type UsageSnapshot } from "@/lib/guardrails";
 import { getImportedReportsDataset, type ImportedReportItem } from "@/lib/imported-reports";
+import { UNKNOWN_DATE_LABEL, isValidDateString } from "@/lib/dates";
 import {
   captures as seedCaptures,
   healthMetrics,
@@ -10,6 +15,7 @@ import {
   sources as seedSources,
   usageLimit,
 } from "@/lib/mock-data";
+import { DEFAULT_MANUAL_SOURCE_ID, DEFAULT_X_SEARCH_SOURCE_ID } from "@/lib/auth-config";
 import { getPersistenceMode } from "@/server/supabase-admin";
 import { evidenceCardUrl } from "@/server/evidence-card";
 import { errorMessage } from "@/server/error-message";
@@ -152,6 +158,28 @@ function now() {
   return new Date().toISOString();
 }
 
+function itemTime(value: string | null | undefined) {
+  const timestamp = Date.parse(value ?? "");
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function rawRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function rawString(value: unknown, key: string) {
+  const entry = rawRecord(value)[key];
+  return typeof entry === "string" && entry.trim() ? entry.trim() : null;
+}
+
+function hasTrustedPublishedDate(item: MonitoringItem) {
+  if (!isValidDateString(item.publishedAt)) return false;
+  const raw = rawRecord(item.raw_response);
+  if (item.sourceType !== "manual_url" || raw.manual !== true) return true;
+  const input = rawRecord(raw.input);
+  return Boolean(rawString(input, "publishedAt") || rawString(input, "published_at") || rawString(raw, "publishedDateSource"));
+}
+
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -171,37 +199,6 @@ function audit(action: string, entityId: string, metadata?: Record<string, unkno
   };
   auditLogs.unshift(event);
   return event;
-}
-
-function sourceLabel(type: SourceType) {
-  if (type === "rss") return "مصدر RSS";
-  if (type === "web_page") return "موقع ويب";
-  if (type.startsWith("x_")) return "منصة X";
-  return "إدخال يدوي";
-}
-
-function estimateSentiment(score: number) {
-  if (score <= 30) return "negative";
-  if (score < 40) return "neutral";
-  return "positive";
-}
-
-function platformFromUrl(value: string): "X" | "TikTok" | "Instagram" | "Website" | "Unknown" {
-  try {
-    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
-    if (host === "x.com" || host === "twitter.com" || host.endsWith(".x.com") || host.endsWith(".twitter.com")) {
-      return "X";
-    }
-    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
-      return "TikTok";
-    }
-    if (host === "instagram.com" || host === "instagr.am" || host.endsWith(".instagram.com")) {
-      return "Instagram";
-    }
-    return "Website";
-  } catch {
-    return "Unknown";
-  }
 }
 
 function mapLegacyPlatformToSourceType(platform: string): SourceType {
@@ -332,6 +329,11 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
   }
   if (input.publishedAt) {
     item.publishedAt = input.publishedAt;
+    item.raw_response = {
+      ...rawRecord(item.raw_response),
+      publishedDateText: input.publishedAt,
+      publishedDateSource: "input_or_metadata",
+    };
     changed = true;
   }
   if (item.state === "archived" || item.state === "rejected") {
@@ -351,8 +353,8 @@ function refreshManualDuplicate(item: MonitoringItem, input: ManualUrlInput, can
     item.relevanceScore = match.score;
     item.relevanceReason = match.reason;
     item.matchedTerms = match.matchedTerms;
-    item.sentiment = estimateSentiment(match.score);
-    item.sentimentConfidence = Math.max(50, Math.min(95, match.score));
+    item.sentiment = estimateSentiment(`${item.title} ${item.summary} ${item.originalUrl}`);
+    item.sentimentConfidence = estimateSentimentConfidence(item.sentiment);
     if (item.state === "candidate") item.state = "needs_review";
     changed = true;
   }
@@ -404,7 +406,7 @@ function isWorkflowItem(item: MonitoringItem) {
 function latestWorkflowItemIds(limit = 48) {
   return items
     .filter(isWorkflowItem)
-    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime())
+    .sort((a, b) => itemTime(b.publishedAt) - itemTime(a.publishedAt))
     .slice(0, limit)
     .map((item) => item.id);
 }
@@ -441,8 +443,8 @@ export const store = {
         status: "good",
       },
       {
-        label: "Persistence",
-        value: getPersistenceMode() === "supabase" ? "Supabase configured" : "Local memory",
+        label: "Persistence mode",
+        value: getPersistenceMode() === "supabase" ? "Supabase active" : "Local memory",
         status: getPersistenceMode() === "supabase" ? "good" : "warning",
       },
     ];
@@ -476,6 +478,7 @@ export const store = {
         queuedJobsCount: jobsState.filter((job) => job.status === "queued" || job.status === "running").length,
         failedJobsCount: jobsState.filter((job) => job.status === "failed" || job.status === "dead_letter").length,
         latestRun: schedulerConnectorRunsState[0] ?? null,
+        latestSuccessfulRun: schedulerConnectorRunsState.find((run) => run.status === "success") ?? null,
         latestFailedJob: jobsState.find((job) => job.status === "failed" || job.status === "dead_letter") ?? null,
         tiktok: {
           enabled: process.env.TIKTOK_RESEARCH_ENABLED === "true",
@@ -778,6 +781,7 @@ export const store = {
       let duplicates = 0;
       let failed = 0;
       let skipped = 0;
+      let lowConfidence = 0;
       const createdItems: MonitoringItem[] = [];
 
       for (const entry of feed.entries) {
@@ -788,6 +792,9 @@ export const store = {
           }
 
           const ingested = buildRssIngestionItem(source, entry, checkedAt, rule);
+          if (ingested.item.relevanceScore < LOW_CONFIDENCE_RELEVANCE_THRESHOLD) {
+            lowConfidence += 1;
+          }
           const duplicate = findRssDuplicate(ingested);
           if (duplicate) {
             duplicates += 1;
@@ -815,6 +822,7 @@ export const store = {
         duplicates,
         skipped,
         failed,
+        lowConfidence,
       });
 
       return {
@@ -825,6 +833,7 @@ export const store = {
         duplicates,
         skipped,
         failed,
+        lowConfidence,
         items: createdItems,
       };
     } catch (error) {
@@ -836,7 +845,7 @@ export const store = {
 
   ingestManualUrl(input: ManualUrlInput) {
     const canonicalUrl = canonicalizeUrl(input.url);
-    const publishedAt = input.publishedAt ?? now();
+    const publishedAt = input.publishedAt ?? UNKNOWN_DATE_LABEL;
     const platform = platformFromUrl(canonicalUrl);
     const sourceType = input.sourceType ?? "manual_url";
     const discoveryMethod = input.discoveryMethod ?? (sourceType === "x_recent_search" ? "auto_search" : "manual");
@@ -879,9 +888,10 @@ export const store = {
 
     const rule = input.keywordRule ?? keywordRules[0];
     const match = explainKeywordMatch(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`, rule);
+    const sentiment = estimateSentiment(`${input.title ?? ""} ${input.text ?? ""} ${canonicalUrl}`);
     const item: MonitoringItem = {
       id: crypto.randomUUID(),
-      sourceId: sourceType === "manual_url" ? "src-manual" : "src-x-search",
+      sourceId: sourceType === "manual_url" ? DEFAULT_MANUAL_SOURCE_ID : DEFAULT_X_SEARCH_SOURCE_ID,
       sourceName: input.sourceName ?? (sourceType === "x_recent_search" ? input.authorHandle ?? sourceLabel(sourceType) : "إدخال يدوي"),
       sourceType,
       state: match.score > 0 ? "needs_review" : "candidate",
@@ -892,8 +902,8 @@ export const store = {
       publishedAt,
       summary: input.text ?? "تم حفظ الرابط كدليل خفيف بانتظار مراجعة المحرر.",
       summarySourceText: input.text ?? canonicalUrl,
-      sentiment: estimateSentiment(match.score),
-      sentimentConfidence: Math.max(50, Math.min(95, match.score)),
+      sentiment,
+      sentimentConfidence: estimateSentimentConfidence(sentiment),
       relevanceScore: match.score,
       relevanceReason: match.reason,
       matchedTerms: match.matchedTerms,
@@ -906,6 +916,7 @@ export const store = {
         discoveryMethod,
         platform,
         publishedDateText: publishedAt,
+        publishedDateSource: input.publishedAt ? "input_or_metadata" : undefined,
         input,
         warning: input.extraction?.warning,
         warningDetail: input.extraction?.warningDetail,
@@ -992,8 +1003,17 @@ export const store = {
       item.relevanceScore = match.score;
       item.relevanceReason = match.reason;
       item.matchedTerms = match.matchedTerms;
-      item.sentiment = estimateSentiment(match.score);
-      item.sentimentConfidence = Math.max(50, Math.min(95, match.score));
+      item.sentiment = estimateSentiment(`${item.title} ${item.summary} ${item.originalUrl}`);
+      item.sentimentConfidence = estimateSentimentConfidence(item.sentiment);
+      item.raw_response = {
+        ...rawRecord(item.raw_response),
+        sourcePdf: rawRecord(item.raw_response).sourcePdf ?? "live-hidayathon",
+        platform: rawRecord(item.raw_response).platform ?? platformFromUrl(item.originalUrl),
+        publishedDateText: item.publishedAt || UNKNOWN_DATE_LABEL,
+        publishedDateSource: changed.includes("publishedAt")
+          ? "input_or_metadata"
+          : rawRecord(item.raw_response).publishedDateSource,
+      };
     }
 
     const auditLog = audit("item.corrected", item.id, {
@@ -1131,6 +1151,13 @@ export const store = {
         ok: false as const,
         error: "item_not_report_ready",
         warning: "لا تدخل المادة التقرير إلا بعد capture أو موافقة صريحة بتحذير.",
+      };
+    }
+    if (!hasTrustedPublishedDate(item)) {
+      return {
+        ok: false as const,
+        error: "published_at_required",
+        warning: "لا يمكن إضافة المادة للتقرير قبل تثبيت تاريخ النشر الحقيقي للمادة.",
       };
     }
 
@@ -1303,20 +1330,21 @@ export const store = {
     const ingestedItems: MonitoringItem[] = [];
     for (const result of results) {
       const matchResult = explainKeywordMatch(result.text, rule);
+      const sentiment = estimateSentiment(result.text);
 
       const newItem: MonitoringItem = {
         id: crypto.randomUUID(),
-        sourceId: "src-x-search",
+        sourceId: DEFAULT_X_SEARCH_SOURCE_ID,
         sourceName: result.authorHandle,
         sourceType: "x_recent_search",
         state: "needs_review" as ItemState,
         title: result.text.slice(0, 120),
         summary: result.text,
         summarySourceText: result.text,
-        sentiment: "neutral" as MonitoringItem["sentiment"],
-        sentimentConfidence: 0.5,
+        sentiment,
+        sentimentConfidence: estimateSentimentConfidence(sentiment),
         originalUrl: result.tweetUrl,
-        publishedAt: result.publishedAt ?? now(),
+        publishedAt: result.publishedAt ?? UNKNOWN_DATE_LABEL,
         authorName: result.authorHandle.replace(/^@/u, ""),
         authorHandle: result.authorHandle,
         relevanceScore: matchResult.score,
@@ -1514,9 +1542,11 @@ export const store = {
 
       for (const rawItem of fetched) {
         const relevance = explainKeywordMatch(`${rawItem.title} ${rawItem.text} ${rawItem.url}`, activeRule);
-        if (relevance.score < 35) {
+        if (relevance.score < AUTO_RELEVANCE_THRESHOLD) {
           continue;
         }
+        const lowConfidence = relevance.score < LOW_CONFIDENCE_RELEVANCE_THRESHOLD;
+        const sentiment = estimateSentiment(`${rawItem.title} ${rawItem.text} ${rawItem.url}`);
 
         const dedupeKey = makeDedupeKey(rawItem, rule.type);
         const duplicate = items.some((i) => i.dedupeKey === dedupeKey || i.originalUrl === rawItem.url);
@@ -1529,7 +1559,7 @@ export const store = {
           sourceId: rule.sourceId || "watchlist",
           sourceName: rawItem.authorName || "Watchlist",
           sourceType: rule.type,
-          state: "needs_review",
+          state: lowConfidence ? "candidate" : "needs_review",
           title: rawItem.title,
           originalUrl: rawItem.url,
           authorName: rawItem.authorName ?? "غير محدد",
@@ -1537,8 +1567,8 @@ export const store = {
           publishedAt: rawItem.publishedAt,
           summary: rawItem.text,
           summarySourceText: rawItem.text,
-          sentiment: estimateSentiment(relevance.score),
-          sentimentConfidence: Math.max(50, Math.min(95, relevance.score)),
+          sentiment,
+          sentimentConfidence: estimateSentimentConfidence(sentiment),
           relevanceScore: relevance.score,
           relevanceReason: relevance.reason,
           matchedTerms: relevance.matchedTerms,
@@ -1549,6 +1579,7 @@ export const store = {
           discoveryMethod: "auto_search",
           organizationId: rule.organizationId,
           topicId: rule.topicId,
+          warning: relevance.score < LOW_CONFIDENCE_RELEVANCE_THRESHOLD ? "ملاءمة منخفضة: تحتاج مراجعة قبل الاعتماد." : undefined,
         };
 
         items.unshift(newItem);

@@ -816,6 +816,7 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(manualReportItem.originalUrl, "https://x.com/Hidayathon/status/123456790");
     assert.equal(manualReportItem.linkStatus, "openable");
     assert.equal(manualReportItem.screenshotStatus, "available");
+    assert.equal(manualReportItem.publishDateIso, "2026-05-21");
     assert.match(manualReportItem.contentImagePath, /^\/api\/items\/.+\/evidence-card\.svg$|^https:\/\/api\.microlink\.io\//);
 
     const archived = await requestJson(`/api/items/${manual.json.item.id}/archive`, {
@@ -833,6 +834,39 @@ describe("Hono API acceptance workflow", () => {
     assert.equal(clientReportAfterArchive.response.status, 200);
     assert.equal(clientReportAfterArchive.json.report.summary.items, 124);
     assert.equal(archivedReportItem, undefined);
+  });
+
+  it("blocks report insertion when a manual item is missing the real publication date", async () => {
+    const liveReport = await requestJson("/api/reports/hidayathon-live");
+    const manual = await requestJson("/api/items/manual-url", {
+      method: "POST",
+      body: JSON.stringify({
+        url: "https://example.com/manual/missing-publication-date",
+        title: "متابعة هاكاثون هداية بدون تاريخ نشر",
+        text: "مادة عن هداية وهاكاثون هداية لاختبار عدم استخدام تاريخ الإضافة كتاريخ نشر.",
+        author_name: "فريق اختبار رصد",
+      }),
+    });
+
+    assert.equal(manual.response.status, 201);
+    assert.equal(Number.isNaN(Date.parse(manual.json.item.publishedAt)), true);
+
+    await requestJson(`/api/items/${manual.json.item.id}/review`, {
+      method: "POST",
+      body: JSON.stringify({ action: "approve" }),
+    });
+    await requestJson(`/api/items/${manual.json.item.id}/capture-report-grade`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    const inserted = await requestJson(`/api/reports/${liveReport.json.report.id}/items`, {
+      method: "POST",
+      body: JSON.stringify({ item_id: manual.json.item.id }),
+    });
+
+    assert.equal(inserted.response.status, 409);
+    assert.equal(inserted.json.error, "published_at_required");
   });
 
   it("bulk archives only visible workflow items without touching legacy archive data", async () => {
@@ -1213,7 +1247,7 @@ describe("Hono API acceptance workflow", () => {
     delete process.env.APIFY_API_TOKEN;
     globalThis.fetch = async () =>
       new Response(
-        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://tiktok.com/image.jpg"></head></html>`,
+        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://tiktok.com/image.jpg"><meta property="article:published_time" content="2026-05-22T10:00:00+03:00"></head></html>`,
         { status: 200, headers: { "content-type": "text/html" } }
       );
 
@@ -1230,6 +1264,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(manual.json.metadata.platform, "TikTok");
       assert.equal(manual.json.item.state, "needs_review");
       assert.equal(manual.json.item.title, title);
+      assert.equal(manual.json.item.publishedAt, "2026-05-22T07:00:00.000Z");
 
       const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
         method: "POST",
@@ -1280,6 +1315,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(clientReportItem.platform, "TikTok");
       assert.equal(clientReportItem.title, title);
       assert.equal(clientReportItem.originalUrl, "https://tiktok.com/@username/video/12345");
+      assert.equal(clientReportItem.publishDateIso, "2026-05-22");
       assert.equal(clientReportItem.screenshotStatus, "available");
     } finally {
       globalThis.fetch = originalFetch;
@@ -1300,7 +1336,7 @@ describe("Hono API acceptance workflow", () => {
     delete process.env.APIFY_API_TOKEN;
     globalThis.fetch = async () =>
       new Response(
-        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://instagram.com/image.jpg"></head></html>`,
+        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://instagram.com/image.jpg"><meta property="article:published_time" content="2026-05-21T20:30:00+03:00"></head></html>`,
         { status: 200, headers: { "content-type": "text/html" } }
       );
 
@@ -1317,6 +1353,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(manual.json.metadata.platform, "Instagram");
       assert.equal(manual.json.item.state, "needs_review");
       assert.equal(manual.json.item.title, title);
+      assert.equal(manual.json.item.publishedAt, "2026-05-21T17:30:00.000Z");
 
       const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
         method: "POST",
@@ -1367,6 +1404,7 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(clientReportItem.platform, "Instagram");
       assert.equal(clientReportItem.title, title);
       assert.equal(clientReportItem.originalUrl, "https://instagram.com/p/ABCDE");
+      assert.equal(clientReportItem.publishDateIso, "2026-05-21");
       assert.equal(clientReportItem.screenshotStatus, "available");
     } finally {
       globalThis.fetch = originalFetch;
