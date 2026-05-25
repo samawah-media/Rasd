@@ -146,16 +146,17 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
       grid-template-rows: 18% 64% 18%;
       border-block: 2px solid #111;
       align-self: center;
-      height: 86%;
-      margin: 0 0 0 7%;
-      direction: rtl;
+      width: 86%;
+      height: 73%;
+      margin-left: 7%;
+      direction: ltr;
     }
     .generated-rail {
       grid-area: rail;
       display: grid;
       align-content: start;
       gap: 22px;
-      padding: 17% 13% 0;
+      padding: 102px 13% 0;
       background: #183d2a;
       color: #f5f8f4;
       clip-path: polygon(18% 0, 100% 0, 100% 100%, 18% 100%, 0 50%);
@@ -169,18 +170,126 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     .date-card b { display: block; font-size: clamp(20px, 3vw, 38px); }
     .platform-card { display: grid; place-items: center; gap: 10px; min-height: 110px; border-radius: 6px; background: #eff0f1; color: #222; text-align: center; }
     .platform-symbol { font-size: clamp(34px, 5vw, 70px); line-height: 1; }
-    .source-pane { grid-row: 1 / 4; border-inline-start: 2px solid #111; display: grid; grid-template-rows: 18% 64% 18%; min-width: 0; }
-    .source-mark { display: grid; place-items: center; border-bottom: 2px solid #111; font-size: clamp(28px, 4vw, 54px); }
+    .source-pane {
+      grid-column: 1;
+      grid-row: 1 / 4;
+      border-right: 2px solid #111;
+      display: grid;
+      grid-template-rows: 18% 64% 18%;
+      min-width: 0;
+      position: relative;
+      direction: rtl;
+    }
+    .source-mark {
+      position: relative;
+      border-bottom: 2px solid #111;
+    }
+    .source-link-icon {
+      position: absolute;
+      left: 50px;
+      top: 18px;
+      width: 92px;
+      height: 72px;
+    }
+    .source-link-ring {
+      position: absolute;
+      width: 31px;
+      height: 17px;
+      border: 6px solid #111;
+      border-radius: 999px;
+      transform: rotate(-35deg);
+    }
+    .source-link-ring-a { left: 15px; top: 5px; }
+    .source-link-ring-b { left: 36px; top: 20px; }
+    .source-link-spark {
+      position: absolute;
+      width: 6px;
+      height: 18px;
+      border-radius: 999px;
+      background: #111;
+      transform-origin: center bottom;
+    }
+    .source-link-spark-a { left: 26px; top: -11px; transform: rotate(-42deg); }
+    .source-link-spark-b { left: 42px; top: -14px; transform: rotate(-9deg); height: 16px; }
+    .source-link-spark-c { left: 57px; top: -7px; transform: rotate(34deg); height: 14px; }
+    .source-link-cursor {
+      position: absolute;
+      left: 44px;
+      top: 37px;
+      width: 0;
+      height: 0;
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+      border-left: 29px solid #111;
+      transform: rotate(39deg);
+      transform-origin: 9px 13px;
+    }
+    .source-link-cursor::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: 7px;
+      width: 12px;
+      height: 29px;
+      background: #111;
+      transform: rotate(-22deg);
+    }
     .source-image { display: grid; place-items: center; padding: 18px; }
     .source-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .source-note { writing-mode: vertical-rl; align-self: center; justify-self: end; color: #c8cbc8; font-size: clamp(9px, 1vw, 15px); padding-inline-end: 14px; }
-    .meta-head { display: flex; align-items: center; justify-content: center; gap: 22px; border-bottom: 2px solid #111; padding: 0 28px; text-align: center; }
+    .source-note {
+      position: absolute;
+      left: 10px;
+      bottom: 28px;
+      max-height: 230px;
+      overflow: hidden;
+      writing-mode: vertical-rl;
+      color: #c8cbc8;
+      font-size: clamp(9px, 0.82vw, 13px);
+      line-height: 1.4;
+    }
+    .meta-head {
+      grid-column: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      border-bottom: 2px solid #111;
+      padding: 0 28px;
+      text-align: center;
+      direction: rtl;
+    }
     .meta-head small { display: block; color: #2f7c60; font-size: clamp(9px, 1vw, 15px); margin-bottom: 4px; }
     .meta-head b { font-size: clamp(18px, 2.2vw, 34px); font-weight: 500; }
-    .summary { display: grid; align-content: start; padding: 28px 42px; text-align: center; }
+    .author-avatar {
+      width: 74px;
+      height: 74px;
+      object-fit: cover;
+    }
+    .summary {
+      grid-column: 2;
+      display: grid;
+      align-content: start;
+      padding: 28px 42px;
+      text-align: center;
+      direction: rtl;
+      overflow: hidden;
+    }
     .summary h2 { color: #2f7c60; font-size: clamp(14px, 1.4vw, 23px); font-weight: 500; margin: 0 0 18px; }
-    .summary p { font-size: clamp(16px, 2vw, 32px); line-height: 1.58; margin: 0; }
-    .sentiment { display: flex; align-items: center; justify-content: end; gap: 20px; border-top: 2px solid #111; padding: 0 32px; color: #2f7c60; font-size: clamp(14px, 1.5vw, 24px); }
+    .summary p { font-size: clamp(15px, 1.52vw, 24px); line-height: 1.58; margin: 0; }
+    .summary p.long { font-size: clamp(13px, 1.25vw, 20px); line-height: 1.5; }
+    .summary p.xlong { font-size: clamp(12px, 1.1vw, 18px); line-height: 1.45; }
+    .sentiment {
+      grid-column: 2;
+      display: flex;
+      align-items: center;
+      justify-content: end;
+      gap: 20px;
+      border-top: 2px solid #111;
+      padding: 0 32px;
+      color: #2f7c60;
+      font-size: clamp(14px, 1.5vw, 24px);
+      direction: rtl;
+    }
     .faces { display: flex; gap: 14px; color: #111; }
     .face { display: inline-grid; place-items: center; min-width: 64px; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; background: #f2f2f2; font-weight: 700; }
     .face.active { background: #8bc8b1; }
@@ -274,16 +383,26 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
     </aside>
     <div class="generated-main">
       <div class="source-pane">
-        <div class="source-mark">↗</div>
+        <div class="source-mark" aria-hidden="true">
+          <span class="source-link-icon">
+            <span class="source-link-ring source-link-ring-a"></span>
+            <span class="source-link-ring source-link-ring-b"></span>
+            <span class="source-link-spark source-link-spark-a"></span>
+            <span class="source-link-spark source-link-spark-b"></span>
+            <span class="source-link-spark source-link-spark-c"></span>
+            <span class="source-link-cursor"></span>
+          </span>
+        </div>
         <div class="source-image">${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : ""}</div>
         <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
       </div>
       <header class="meta-head">
         <div><small>الكاتب</small><b>${escapeHtml(item.authorName || item.sourceName)}</b></div>
+        ${renderAuthorAvatar(item)}
       </header>
       <div class="summary">
         <h2>المحتوى / الملخص</h2>
-        <p>${escapeHtml(item.summary || item.title)}</p>
+        <p class="${summaryTextClass(item.summary || item.title)}">${escapeHtml(item.summary || item.title)}</p>
       </div>
       <footer class="sentiment">
         <span>تصنيف المحتوى</span>
@@ -295,6 +414,19 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
       </footer>
     </div>
   </section>`;
+}
+
+function renderAuthorAvatar(item: ClientReportItem) {
+  if (!item.publisherProfileImagePath) return "";
+  return `<img class="author-avatar" src="${escapeAttribute(item.publisherProfileImagePath)}" alt="${escapeAttribute(
+    item.authorName || item.sourceName,
+  )}" />`;
+}
+
+function summaryTextClass(value: string) {
+  if (value.length > 190) return "xlong";
+  if (value.length > 120) return "long";
+  return "";
 }
 
 function pageLabel(item: ClientReportItem) {
