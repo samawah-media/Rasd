@@ -1055,7 +1055,7 @@ export function ImportsClient({ dataset }: { dataset: ImportedReportsDataset }) 
                     {/* Sentiment and Warnings */}
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-                        <span className="text-slate-400 block mb-1">المشاعر المقدرة</span>
+                        <span className="text-slate-400 block mb-1">تصنيف المحتوى</span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${sentimentStyles[selectedItem.sentiment] ?? sentimentStyles.neutral}`}>
                           {sentimentLabels[selectedItem.sentiment] ?? selectedItem.sentiment}
                         </span>

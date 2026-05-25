@@ -8,6 +8,7 @@ import {
   Database,
   Cpu,
   FileText,
+  FileInput,
   Menu,
   X,
   LockKeyhole,
@@ -82,6 +83,12 @@ export default function RichRightSidebar() {
       subtitle: "قنوات الرصد والكلمات",
       path: "/sources",
       icon: Database,
+    },
+    {
+      title: "الاستيراد",
+      subtitle: "التقارير القديمة والروابط",
+      path: "/imports",
+      icon: FileInput,
     },
     {
       title: "الإعدادات",

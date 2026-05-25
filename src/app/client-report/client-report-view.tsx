@@ -233,7 +233,7 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
 
           <BentoCard
             colSpan="col-span-1"
-            title="التوجه والمشاعر"
+            title="توجه المحتوى وتصنيفه"
             subtitle={metrics.positiveLabel}
             icon={Heart}
             className="cursor-pointer"
@@ -366,7 +366,7 @@ export function ClientReportView({ data, role }: { data: ClientReportData; role:
                 value={filters.source}
               />
               <SelectInput
-                label="تصنيف المشاعر"
+                label="تصنيف المحتوى"
                 onChange={(value) => updateFilter("sentiment", value)}
                 options={[
                   { label: "كل التصنيفات", value: "all" },

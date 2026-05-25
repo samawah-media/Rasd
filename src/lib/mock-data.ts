@@ -1,3 +1,11 @@
+import {
+  DEFAULT_AAWSAT_EDUCATION_SOURCE_ID,
+  DEFAULT_AAWSAT_GULF_SOURCE_ID,
+  DEFAULT_MANUAL_SOURCE_ID,
+  DEFAULT_NEWS_SOURCE_ID,
+  DEFAULT_X_SEARCH_SOURCE_ID,
+  DEFAULT_X_SOURCE_ID,
+} from "./auth-config";
 import type {
   Capture,
   HealthMetric,
@@ -55,7 +63,7 @@ export const keywordRules: KeywordRule[] = [
 
 export const sources: Source[] = [
   {
-    id: "src-x",
+    id: DEFAULT_X_SOURCE_ID,
     name: "منصة X",
     type: "x_oembed",
     url: "https://x.com",
@@ -67,11 +75,11 @@ export const sources: Source[] = [
     pollIntervalMinutes: 1440,
   },
   {
-    id: "src-news",
-    name: "صحيفة رقمية",
+    id: DEFAULT_NEWS_SOURCE_ID,
+    name: "الشرق الأوسط - كل الأخبار",
     type: "rss",
-    url: "https://example.com/rss.xml",
-    feedUrl: "https://example.com/rss.xml",
+    url: "https://aawsat.com",
+    feedUrl: "https://aawsat.com/feed/news",
     country: "السعودية",
     credibility: "media",
     isVerifiedSource: true,
@@ -79,7 +87,31 @@ export const sources: Source[] = [
     pollIntervalMinutes: 1440,
   },
   {
-    id: "src-manual",
+    id: DEFAULT_AAWSAT_GULF_SOURCE_ID,
+    name: "الشرق الأوسط - الخليج",
+    type: "rss",
+    url: "https://aawsat.com/home/international/section/gulf",
+    feedUrl: "https://aawsat.com/feed/gulf",
+    country: "السعودية",
+    credibility: "media",
+    isVerifiedSource: true,
+    isActive: true,
+    pollIntervalMinutes: 1440,
+  },
+  {
+    id: DEFAULT_AAWSAT_EDUCATION_SOURCE_ID,
+    name: "الشرق الأوسط - التعليم",
+    type: "rss",
+    url: "https://aawsat.com",
+    feedUrl: "https://aawsat.com/feed/education",
+    country: "السعودية",
+    credibility: "media",
+    isVerifiedSource: true,
+    isActive: true,
+    pollIntervalMinutes: 1440,
+  },
+  {
+    id: DEFAULT_MANUAL_SOURCE_ID,
     name: "إدخال يدوي",
     type: "manual_url",
     url: "manual://intake",
@@ -90,7 +122,7 @@ export const sources: Source[] = [
     pollIntervalMinutes: 1440,
   },
   {
-    id: "src-x-search",
+    id: DEFAULT_X_SEARCH_SOURCE_ID,
     name: "بحث تلقائي في X",
     type: "x_recent_search",
     url: "https://x.com/search",
@@ -106,7 +138,7 @@ export const sources: Source[] = [
 export const monitoringItems: MonitoringItem[] = [
   {
     id: "item-1",
-    sourceId: "src-x",
+    sourceId: DEFAULT_X_SOURCE_ID,
     sourceName: "حساب هاكاثون هداية",
     sourceType: "x_oembed",
     state: "report_ready",
@@ -120,7 +152,7 @@ export const monitoringItems: MonitoringItem[] = [
     summarySourceText:
       "انطلقت فعاليات هاكاثون هداية بمشاركة واسعة من المهتمين بالتقنية والابتكار.",
     sentiment: "positive",
-    sentimentConfidence: 92,
+    sentimentConfidence: 70,
     relevanceScore: 96,
     relevanceReason: "طابقت المادة اسم الهاكاثون والهاشتاق الرسمي.",
     matchedTerms: ["هداية", "هاكاثون"],
@@ -129,7 +161,7 @@ export const monitoringItems: MonitoringItem[] = [
   },
   {
     id: "item-2",
-    sourceId: "src-news",
+    sourceId: DEFAULT_NEWS_SOURCE_ID,
     sourceName: "صحيفة رقمية",
     sourceType: "rss",
     state: "needs_review",
@@ -142,7 +174,7 @@ export const monitoringItems: MonitoringItem[] = [
     summarySourceText:
       "استضافت الجامعة فعالية ابتكارية بمشاركة فرق تقنية تعمل على حلول الهداية الرقمية.",
     sentiment: "neutral",
-    sentimentConfidence: 71,
+    sentimentConfidence: 0,
     relevanceScore: 74,
     relevanceReason: "الخبر لا يذكر الاسم في العنوان لكنه يطابق النص الداخلي.",
     matchedTerms: ["هداية"],
@@ -151,7 +183,7 @@ export const monitoringItems: MonitoringItem[] = [
   },
   {
     id: "item-3",
-    sourceId: "src-manual",
+    sourceId: DEFAULT_MANUAL_SOURCE_ID,
     sourceName: "رابط يدوي",
     sourceType: "manual_url",
     state: "capture_failed",
@@ -162,7 +194,7 @@ export const monitoringItems: MonitoringItem[] = [
     summary: "مادة ذات صلة عالية لكن لقطة الشاشة فشلت بسبب بطء الصفحة.",
     summarySourceText: "تجربة مشارك في هاكاثون هداية.",
     sentiment: "positive",
-    sentimentConfidence: 84,
+    sentimentConfidence: 70,
     relevanceScore: 88,
     relevanceReason: "مطابقة مباشرة لاسم الفعالية وتجربة مشارك.",
     matchedTerms: ["هاكاثون", "هداية"],
@@ -223,10 +255,10 @@ export const reportVersions: ReportVersion[] = [
 ];
 
 export const healthMetrics: HealthMetric[] = [
-  { label: "RSS connector", value: "آخر نجاح قبل 12 دقيقة", status: "good" },
+  { label: "موصل RSS", value: "آخر نجاح قبل 12 دقيقة", status: "good" },
   { label: "X API", value: "غير مهيأ بعد", status: "warning" },
-  { label: "Capture success", value: "86%", status: "good" },
-  { label: "PDF failures", value: "0%", status: "good" },
+  { label: "نجاح الالتقاط", value: "86%", status: "good" },
+  { label: "أخطاء PDF", value: "0%", status: "good" },
   { label: "Review backlog", value: "3 مواد", status: "warning" },
   { label: "Budget", value: "42% من حد الشهر", status: "good" },
 ];

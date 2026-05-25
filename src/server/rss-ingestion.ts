@@ -1,7 +1,9 @@
 import Parser from "rss-parser";
+import { AUTO_RELEVANCE_THRESHOLD, LOW_CONFIDENCE_RELEVANCE_THRESHOLD } from "@/server/relevance";
+import { estimateSentiment, estimateSentimentConfidence } from "@/server/sentiment";
 import { canonicalizeUrl, explainKeywordMatch, makeDedupeKey, type IngestedItem } from "@/lib/connectors";
 import { keywordRules } from "@/lib/mock-data";
-import type { ItemState, KeywordRule, MonitoringItem, Sentiment, Source } from "@/lib/types";
+import type { ItemState, KeywordRule, MonitoringItem, Source } from "@/lib/types";
 import { isSafePublicHttpUrl } from "@/server/url-metadata";
 
 type FetchLike = typeof fetch;
@@ -112,6 +114,7 @@ export async function parseRssFeed(xml: string, feedUrl: string): Promise<RssFee
   }
 }
 
+
 export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = new Date().toISOString(), rule: KeywordRule = keywordRules[0]): RssIngestionItem {
   const title = cleanText(entry.title) ?? "مادة مرصودة من RSS";
   const summary = cleanText(entry.text) ?? title;
@@ -126,8 +129,9 @@ export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = 
   );
   const match = explainKeywordMatch(`${title} ${summary} ${entry.canonicalUrl}`, rule);
   const relevanceScore = match.score;
-  const state = initialStateForSource(source);
-  const sentiment = estimateSentiment(relevanceScore);
+  const lowConfidence = relevanceScore < LOW_CONFIDENCE_RELEVANCE_THRESHOLD;
+  const state = lowConfidence ? "candidate" : initialStateForSource(source);
+  const sentiment = estimateSentiment(`${title} ${summary}`);
   const rawResponse = {
     extractor: {
       name: "rasd-rss-ingestion",
@@ -165,14 +169,14 @@ export function buildRssIngestionItem(source: Source, entry: RssEntry, nowIso = 
       summary,
       summarySourceText: summary,
       sentiment,
-      sentimentConfidence: Math.max(50, Math.min(95, relevanceScore || 50)),
+      sentimentConfidence: estimateSentimentConfidence(sentiment),
       relevanceScore,
       relevanceReason: match.reason,
       matchedTerms: match.matchedTerms,
       dedupeKey,
       hasReportGradeCapture: false,
       sourceItemId: sourceItemKeyInput,
-      warning: entry.warnings.length ? entry.warnings.join(", ") : undefined,
+      warning: [lowConfidence ? "ملاءمة منخفضة: تحتاج مراجعة قبل الاعتماد." : undefined, ...entry.warnings].filter(Boolean).join(", ") || undefined,
     },
     rawResponse,
     canonicalUrl: entry.canonicalUrl,
@@ -187,7 +191,7 @@ export function evaluateRssEntryRelevance(entry: RssEntry, rule: KeywordRule = k
   const match = explainKeywordMatch(text, rule);
 
   return {
-    ok: match.score >= 35,
+    ok: match.score >= AUTO_RELEVANCE_THRESHOLD,
     score: match.score,
     reason: match.reason,
     matchedTerms: match.matchedTerms,
@@ -309,12 +313,6 @@ function compactRawItem(item: ParserItem) {
 function initialStateForSource(source: Source): ItemState {
   if (source.credibility === "official" || source.credibility === "media") return "needs_review";
   return "candidate";
-}
-
-function estimateSentiment(score: number): Sentiment {
-  if (score <= 30) return "negative";
-  if (score < 40) return "neutral";
-  return "positive";
 }
 
 function cleanText(value: string | null | undefined) {
