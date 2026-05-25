@@ -135,18 +135,23 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     }
     .generated-page {
       display: grid;
-      grid-template-columns: 1fr 21%;
-      direction: rtl;
+      grid-template-columns: 79% 21%;
+      grid-template-areas: "main rail";
+      direction: ltr;
     }
     .generated-main {
+      grid-area: main;
       display: grid;
       grid-template-columns: 43% 57%;
       grid-template-rows: 18% 64% 18%;
       border-block: 2px solid #111;
-      margin: 7% 0 7% 7%;
+      align-self: center;
+      height: 86%;
+      margin: 0 0 0 7%;
       direction: rtl;
     }
     .generated-rail {
+      grid-area: rail;
       display: grid;
       align-content: start;
       gap: 22px;
@@ -155,6 +160,7 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
       color: #f5f8f4;
       clip-path: polygon(18% 0, 100% 0, 100% 100%, 18% 100%, 0 50%);
       border-inline-start: 5px solid #c0912d;
+      direction: rtl;
     }
     .generated-weekday { font-size: clamp(24px, 3.8vw, 48px); font-weight: 700; text-align: center; }
     .date-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -222,13 +228,18 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
 }
 
 function renderExportPage(item: ClientReportItem) {
-  if (item.sourceEvidenceImagePath) {
+  const sourcePageImagePath = item.sourceEvidenceImagePath;
+  if (isLegacyReportPageImage(sourcePageImagePath)) {
     return `<section class="page" aria-label="${escapeAttribute(pageLabel(item))}">
-      <img src="${escapeAttribute(item.sourceEvidenceImagePath)}" alt="${escapeAttribute(pageLabel(item))}" />
+      <img src="${escapeAttribute(sourcePageImagePath)}" alt="${escapeAttribute(pageLabel(item))}" />
     </section>`;
   }
 
   return renderGeneratedTemplatePage(item);
+}
+
+function isLegacyReportPageImage(path: string | null): path is string {
+  return Boolean(path?.startsWith("/imports/legacy-pages/"));
 }
 
 function sortItemsForLegacyExport(items: ClientReportItem[]) {
@@ -244,7 +255,10 @@ function sortItemsForLegacyExport(items: ClientReportItem[]) {
 }
 
 function renderGeneratedTemplatePage(item: ClientReportItem) {
-  const imagePath = item.contentImagePath ?? item.evidenceImagePath;
+  const imagePath =
+    item.contentImagePath ??
+    item.evidenceImagePath ??
+    (isLegacyReportPageImage(item.sourceEvidenceImagePath) ? null : item.sourceEvidenceImagePath);
   const dateParts = reportDateParts(item.publishDateIso);
   return `<section class="page generated-page" aria-label="${escapeAttribute(pageLabel(item))}">
     <aside class="generated-rail">

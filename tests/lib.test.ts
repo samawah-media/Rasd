@@ -354,7 +354,9 @@ describe("connector and budget utilities", () => {
       sourcePdf: "live-hidayathon",
       reportIssue: null,
       reportLabel: "الرصد الحي",
-      sourceEvidenceImagePath: null,
+      evidenceImagePath: null,
+      contentImagePath: null,
+      sourceEvidenceImagePath: "/live-capture.png",
       page: 1,
     };
     const exportHtml = buildClientReportExportHtml({ ...report, items: [liveItem] }, [liveItem.id]);
@@ -362,6 +364,8 @@ describe("connector and budget utilities", () => {
     assert.equal(exportHtml.ok, true);
     assert.match(exportHtml.html, /generated-page/);
     assert.match(exportHtml.html, /الرصد الحي/);
+    assert.match(exportHtml.html, /<div class="source-image"><img src="\/live-capture\.png"/);
+    assert.doesNotMatch(exportHtml.html, /<section class="page"[^>]*>\s*<img src="\/live-capture\.png"/);
   });
 
   it("does not treat the old placeholder capture image as client evidence", () => {
