@@ -407,6 +407,72 @@ describe("connector and budget utilities", () => {
     assert.doesNotMatch(item.summary, /likes|comments|emadowado7 on March/u);
   });
 
+  it("uses the source name as the report author for website news items", () => {
+    const item = enrichClientReportItem({
+      id: "website-source-author",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Website",
+      sourceName: "عاجل",
+      authorName: "فريق التحرير",
+      title: "خبر عن هاكاثون هداية",
+      summary: "تغطية خبرية من موقع إخباري.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://ajel.sa/story/hidayathon",
+      extractedOriginalUrl: "https://ajel.sa/story/hidayathon",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://ajel.sa/story/hidayathon"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.authorName, "عاجل");
+  });
+
+  it("keeps a specific publisher name when the website source is generic", () => {
+    const item = enrichClientReportItem({
+      id: "website-generic-source-author",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Website",
+      sourceName: "إدخال يدوي",
+      authorName: "أخبار السعودية",
+      title: "خبر عن هاكاثون هداية",
+      summary: "تغطية خبرية من موقع إخباري.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://saudinews.example/story/hidayathon",
+      extractedOriginalUrl: "https://saudinews.example/story/hidayathon",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://saudinews.example/story/hidayathon"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.authorName, "أخبار السعودية");
+  });
+
   it("does not treat the old placeholder capture image as client evidence", () => {
     const item = enrichClientReportItem({
       id: "manual-placeholder",

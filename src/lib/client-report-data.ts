@@ -324,8 +324,10 @@ function toClientReportItemFromWorkflow(
   const authorName = clientReportAuthorName({
     authorName: item.authorName,
     authorHandle: item.authorHandle,
+    sourceName: item.sourceName,
     originalUrl: item.originalUrl,
     platform,
+    rawResponse: item.raw_response,
     textHints: [item.summarySourceText, item.summary, item.title],
   });
 
@@ -455,11 +457,14 @@ function toClientReportItemFromDb(
   const originalUrl = row.original_url_status === "openable" ? openableHttpUrl(row.original_url) : null;
   const extractedOriginalUrl = row.original_url_extracted ?? rawString(row.raw_response, "extractedOriginalUrl");
   const warnings = unique([row.warning, link.warning].filter((warning): warning is string => Boolean(warning)));
+  const sourceName = sources.get(row.source_id ?? "");
   const authorName = clientReportAuthorName({
     authorName: row.author_name,
     authorHandle: row.author_handle,
+    sourceName,
     originalUrl: originalUrl ?? row.original_url,
     platform,
+    rawResponse: row.raw_response,
     textHints: [row.summary_source_text, row.summary, row.title],
   });
 
@@ -469,7 +474,7 @@ function toClientReportItemFromDb(
     reportIssue,
     page: rawNumber(row.raw_response, "page") ?? link.display_order,
     platform,
-    sourceName: sources.get(row.source_id ?? "") ?? authorName ?? row.author_name ?? platformLabels[platform] ?? platform,
+    sourceName: sourceName ?? authorName ?? row.author_name ?? platformLabels[platform] ?? platform,
     authorName: authorName ?? row.author_name ?? "غير محدد",
     title: row.title ?? row.original_url,
     summary: row.summary ?? row.summary_source_text ?? row.original_url,
@@ -506,9 +511,18 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
   const screenshotStatus = evidenceImagePath ? "available" : "missing";
   const title = cleanClientReportContent(item.title) ?? item.title;
   const summary = cleanClientReportContent(item.summary) ?? item.summary;
+  const authorName =
+    clientReportAuthorName({
+      authorName: item.authorName,
+      sourceName: item.sourceName,
+      originalUrl,
+      platform: item.platform,
+      textHints: [item.rawText, summary, title],
+    }) ?? item.authorName;
 
   return {
     ...item,
+    authorName,
     title,
     summary,
     originalUrl,
@@ -638,13 +652,15 @@ function withPercent<T extends Record<K, number>, K extends keyof T>(items: T[],
 function clientReportAuthorName(input: {
   authorName?: string | null;
   authorHandle?: string | null;
+  sourceName?: string | null;
   originalUrl?: string | null;
   platform?: string | null;
+  rawResponse?: unknown;
   textHints?: Array<string | null | undefined>;
 }) {
   const platform = input.platform ?? (input.originalUrl ? platformFromOriginalUrl(input.originalUrl) : null);
   const isSocial = platform === "X" || platform === "TikTok" || platform === "Instagram";
-  if (!isSocial) return cleanDisplayText(input.authorName);
+  if (!isSocial) return clientReportSiteAuthorName(input, platform);
 
   const authorName = cleanDisplayText(input.authorName);
   const extractedHandle =
@@ -660,6 +676,93 @@ function clientReportAuthorName(input: {
   if (authorName && providedHandle && displayHandle(authorName) !== providedHandle) return authorName;
 
   return providedHandle ?? authorName;
+}
+
+function clientReportSiteAuthorName(
+  input: {
+    authorName?: string | null;
+    sourceName?: string | null;
+    originalUrl?: string | null;
+    rawResponse?: unknown;
+  },
+  platform: string | null,
+) {
+  const isSitePlatform = !platform || platform === "Website" || platform === "News" || platform === "Official" || platform === "Unknown";
+  if (!isSitePlatform) return cleanDisplayText(input.authorName);
+
+  return (
+    cleanReportSourceName(input.sourceName) ??
+    rawExtractionPublisherName(input.rawResponse) ??
+    cleanReportSourceName(input.authorName) ??
+    publisherNameFromUrl(input.originalUrl)
+  );
+}
+
+function cleanReportSourceName(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const normalized = cleaned.toLowerCase();
+  const genericNames = new Set([
+    "إدخال يدوي",
+    "رابط يدوي",
+    "مصدر غير محدد",
+    "غير محدد",
+    "manual",
+    "manual_url",
+    "web_page",
+    "website",
+    "news",
+    "rss",
+    "unknown",
+    platformLabels.Website,
+    platformLabels.News,
+    platformLabels.Official,
+    platformLabels.Unknown,
+  ].map((entry) => entry.toLowerCase()));
+  if (genericNames.has(normalized)) return null;
+
+  return cleaned;
+}
+
+function rawExtractionPublisherName(rawResponse: unknown) {
+  const raw = rawRecord(rawResponse);
+  const input = rawRecord(raw.input);
+  const extraction = rawRecord(input.extraction);
+  const directExtraction = rawRecord(raw.extraction);
+
+  return (
+    cleanReportSourceName(rawString(extraction, "publisherName")) ??
+    cleanReportSourceName(rawString(extraction, "siteName")) ??
+    cleanReportSourceName(rawString(directExtraction, "publisherName")) ??
+    cleanReportSourceName(rawString(directExtraction, "siteName")) ??
+    cleanReportSourceName(rawString(raw, "publisherName")) ??
+    cleanReportSourceName(rawString(raw, "siteName"))
+  );
+}
+
+function publisherNameFromUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const hostname = new URL(value).hostname.replace(/^www\./u, "").toLowerCase();
+    const ignoredLabels = new Set(["com", "net", "org", "gov", "edu", "co", "news", "sa", "ae", "qa", "kw", "bh", "om"]);
+    const label = hostname
+      .split(".")
+      .filter((part) => part && !ignoredLabels.has(part))
+      .at(-1);
+
+    return label ? titleCaseDomainLabel(label) : hostname;
+  } catch {
+    return null;
+  }
+}
+
+function titleCaseDomainLabel(value: string) {
+  return value
+    .split(/[-_]/u)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
 }
 
 function handleFromSocialText(value: string | null | undefined) {
