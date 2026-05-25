@@ -571,6 +571,54 @@ describe("Hono API acceptance workflow", () => {
     }
   });
 
+  it("continues polling other RSS sources when one feed fails", async () => {
+    const healthy = store.createSource({
+      name: "Healthy RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/healthy.xml",
+      credibility: "media",
+    });
+    const broken = store.createSource({
+      name: "Broken RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/broken.xml",
+      credibility: "media",
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("broken.xml")) {
+        return new Response("<rss><channel><item>", { status: 200, headers: { "content-type": "application/rss+xml" } });
+      }
+      return new Response(
+        rssFeed({
+          guid: "healthy-story-1",
+          link: "https://news.example.com/hidayathon/healthy-story-1",
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+    };
+
+    try {
+      const result = await requestJson("/api/sources/poll-active", {
+        method: "POST",
+        body: JSON.stringify({ limit: 2 }),
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.poll.sources, 2);
+      assert.equal(result.json.poll.created, 1);
+      assert.equal(result.json.poll.failed, 1);
+      assert.equal(result.json.poll.runs.find((run: { sourceId: string }) => run.sourceId === healthy.id).ok, true);
+      const failedRun = result.json.poll.runs.find((run: { sourceId: string }) => run.sourceId === broken.id);
+      assert.equal(failedRun.ok, false);
+      assert.equal(failedRun.error, "rss_parse_failed");
+      assert.equal(store.listSources().find((source) => source.id === broken.id)?.lastError, "rss_parse_failed");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("runs scheduled RSS polling only for due sources behind CRON_SECRET", async () => {
     const previousSecret = process.env.CRON_SECRET;
     process.env.CRON_SECRET = "cron_test_secret";
@@ -616,6 +664,67 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(result.json.poll.created, 1);
       assert.equal(result.json.poll.runs[0].sourceId, due.id);
       assert.equal(result.json.poll.runs.some((run: { sourceId: string }) => run.sourceId === notDue.id), false);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (previousSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = previousSecret;
+    }
+  });
+
+  it("caps scheduled RSS polling batches and skips fresh sources", async () => {
+    const previousSecret = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "cron_batch_secret";
+    for (const source of store.listSources()) {
+      if (source.type === "rss") source.isActive = false;
+    }
+
+    const dueSources = Array.from({ length: 12 }, (_, index) =>
+      store.createSource({
+        name: `Batch RSS ${index + 1}`,
+        type: "rss",
+        feedUrl: `https://news.example.com/batch-${index + 1}.xml`,
+        credibility: "media",
+        pollIntervalMinutes: 1440,
+      }),
+    );
+    const fresh = store.createSource({
+      name: "Fresh RSS",
+      type: "rss",
+      feedUrl: "https://news.example.com/fresh-batch.xml",
+      credibility: "media",
+      pollIntervalMinutes: 1440,
+    });
+    fresh.lastCheckedAt = new Date().toISOString();
+
+    const fetchedUrls: string[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      fetchedUrls.push(url);
+      const match = url.match(/batch-(\d+)\.xml/);
+      const id = match?.[1] ?? "unknown";
+      return new Response(
+        rssFeed({
+          guid: `batch-story-${id}`,
+          link: `https://news.example.com/hidayathon/batch-story-${id}`,
+        }),
+        { status: 200, headers: { "content-type": "application/rss+xml" } },
+      );
+    };
+
+    try {
+      const result = await requestJson("/api/cron/poll-sources?limit=99", {
+        headers: { authorization: "Bearer cron_batch_secret" },
+      });
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.json.poll.due, 10);
+      assert.equal(result.json.poll.sources, 10);
+      assert.equal(result.json.poll.created, 10);
+      assert.equal(result.json.poll.failed, 0);
+      assert.equal(fetchedUrls.length, 10);
+      assert.equal(result.json.poll.runs.some((run: { sourceId: string }) => run.sourceId === fresh.id), false);
+      assert.equal(result.json.poll.runs.every((run: { sourceId: string }) => dueSources.some((source) => source.id === run.sourceId)), true);
     } finally {
       globalThis.fetch = originalFetch;
       if (previousSecret === undefined) delete process.env.CRON_SECRET;
