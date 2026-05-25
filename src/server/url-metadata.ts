@@ -365,6 +365,10 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   const publisherName = siteName ?? readableSiteName ?? publisherNameFromUrl(url);
   const canonicalUrl = firstSafePublicUrl(linkHref(html, "canonical"), url);
   const platform = platformFromUrl(canonicalUrl ?? url);
+  const instagramDescription = platform === "Instagram" ? parseInstagramMetricDescription(description) : null;
+  const instagramTitle = platform === "Instagram" ? parseInstagramMetricDescription(title) : null;
+  const cleanDescription = instagramDescription?.caption ?? description;
+  const cleanTitle = instagramTitle?.caption ? clipped(instagramTitle.caption, 110) : title;
   const publishedAt = isoDate(
     firstPresent(
       metaContent(html, "property", "article:published_time"),
@@ -375,7 +379,7 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
       metaContent(html, "name", "DC.date.issued"),
       metaContent(html, "itemprop", "datePublished"),
     ),
-  ) ?? socialDescriptionPublishedAt(description, platform);
+  ) ?? instagramDescription?.publishedAt ?? instagramTitle?.publishedAt ?? socialDescriptionPublishedAt(description, platform);
   const imageUrl = firstSafePublicUrl(
     firstPresent(
       metaContent(html, "property", "og:image"),
@@ -386,9 +390,10 @@ async function fetchHtmlMetadata(url: string, fetcher: FetchLike): Promise<UrlMe
   );
 
   return {
-    title: title ?? cleanText(readableArticle?.title) ?? "مادة مرصودة من رابط",
-    text: description ?? cleanText(readableArticle?.excerpt) ?? readableText ?? title ?? url,
-    authorName: authorName ?? cleanText(readableArticle?.byline) ?? publisherName,
+    title: cleanTitle ?? cleanText(readableArticle?.title) ?? "مادة مرصودة من رابط",
+    text: cleanDescription ?? cleanText(readableArticle?.excerpt) ?? readableText ?? cleanTitle ?? url,
+    authorName: instagramDescription?.authorName ?? instagramTitle?.authorName ?? authorName ?? cleanText(readableArticle?.byline) ?? publisherName,
+    authorHandle: instagramDescription?.authorHandle ?? instagramTitle?.authorHandle,
     publisherName,
     siteName: siteName ?? readableSiteName,
     publishedAt,
@@ -621,6 +626,24 @@ function socialDescriptionPublishedAt(description: string | null | undefined, pl
   if (platform !== "Instagram" || !description) return undefined;
   const match = description.match(/\bon\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/u);
   return isoDate(match?.[1]);
+}
+
+function parseInstagramMetricDescription(value: string | null | undefined) {
+  const cleaned = cleanText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const match = cleaned.match(
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?([A-Za-z0-9._]+)\s+on\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})\s*:\s*([\s\S]*)$/iu,
+  );
+  if (!match) return null;
+
+  const authorName = match[1];
+  return {
+    authorName,
+    authorHandle: normalizeHandle(authorName),
+    publishedAt: isoDate(match[2]),
+    caption: cleanText(match[3]),
+  };
 }
 
 function escapeRegex(value: string) {

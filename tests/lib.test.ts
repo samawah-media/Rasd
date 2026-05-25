@@ -633,7 +633,9 @@ describe("connector and budget utilities", () => {
       assert.equal(metadata.platform, "Instagram");
       assert.equal(metadata.source, "html_metadata");
       assert.equal(metadata.title, "Instagram HTML title");
-      assert.equal(metadata.text, "25 likes, 0 comments - rasd on April 6, 2026: HTML fallback caption");
+      assert.equal(metadata.text, "HTML fallback caption");
+      assert.equal(metadata.authorName, "rasd");
+      assert.equal(metadata.authorHandle, "@rasd");
       assert.equal(metadata.imageUrl, "https://instagram.com/fallback.jpg");
       assert.equal(metadata.publishedAt, "2026-04-06T00:00:00.000Z");
     } finally {

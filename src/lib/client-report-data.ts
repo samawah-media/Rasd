@@ -77,6 +77,7 @@ type DbMonitoringItemRow = {
   evidence_image_path: string | null;
   source_item_id: string | null;
   author_name: string | null;
+  author_handle: string | null;
   published_at: string | null;
   summary: string | null;
   summary_source_text: string | null;
@@ -196,7 +197,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
     supabase
       .from("monitoring_items")
       .select(
-        "id, source_id, external_id, source_type, state, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
+        "id, source_id, external_id, source_type, state, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, author_handle, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
       )
       .in("id", itemIds),
     supabase
@@ -319,15 +320,23 @@ function toClientReportItemFromWorkflow(
   order: number,
 ) {
   const evidenceImagePath = openableAssetUrl(capture?.assetUrl);
+  const platform = platformFromOriginalUrl(item.originalUrl);
+  const authorName = clientReportAuthorName({
+    authorName: item.authorName,
+    authorHandle: item.authorHandle,
+    originalUrl: item.originalUrl,
+    platform,
+    textHints: [item.summarySourceText, item.summary, item.title],
+  });
 
   return enrichClientReportItem({
     id: item.id,
     sourcePdf: "live-hidayathon",
     reportIssue: null,
     page: order,
-    platform: platformFromOriginalUrl(item.originalUrl),
+    platform,
     sourceName: item.sourceName,
-    authorName: item.authorName ?? item.sourceName,
+    authorName: authorName ?? item.authorName ?? item.sourceName,
     title: item.title,
     summary: item.summary,
     sentiment: item.sentiment,
@@ -446,6 +455,13 @@ function toClientReportItemFromDb(
   const originalUrl = row.original_url_status === "openable" ? openableHttpUrl(row.original_url) : null;
   const extractedOriginalUrl = row.original_url_extracted ?? rawString(row.raw_response, "extractedOriginalUrl");
   const warnings = unique([row.warning, link.warning].filter((warning): warning is string => Boolean(warning)));
+  const authorName = clientReportAuthorName({
+    authorName: row.author_name,
+    authorHandle: row.author_handle,
+    originalUrl: originalUrl ?? row.original_url,
+    platform,
+    textHints: [row.summary_source_text, row.summary, row.title],
+  });
 
   return enrichClientReportItem({
     id: row.external_id ?? row.source_item_id ?? row.id,
@@ -453,8 +469,8 @@ function toClientReportItemFromDb(
     reportIssue,
     page: rawNumber(row.raw_response, "page") ?? link.display_order,
     platform,
-    sourceName: sources.get(row.source_id ?? "") ?? row.author_name ?? platformLabels[platform] ?? platform,
-    authorName: row.author_name ?? "غير محدد",
+    sourceName: sources.get(row.source_id ?? "") ?? authorName ?? row.author_name ?? platformLabels[platform] ?? platform,
+    authorName: authorName ?? row.author_name ?? "غير محدد",
     title: row.title ?? row.original_url,
     summary: row.summary ?? row.summary_source_text ?? row.original_url,
     sentiment: row.sentiment ?? "neutral",
@@ -615,6 +631,72 @@ function withPercent<T extends Record<K, number>, K extends keyof T>(items: T[],
     .sort((a, b) => b[valueKey] - a[valueKey]);
 }
 
+function clientReportAuthorName(input: {
+  authorName?: string | null;
+  authorHandle?: string | null;
+  originalUrl?: string | null;
+  platform?: string | null;
+  textHints?: Array<string | null | undefined>;
+}) {
+  const platform = input.platform ?? (input.originalUrl ? platformFromOriginalUrl(input.originalUrl) : null);
+  const isSocial = platform === "X" || platform === "TikTok" || platform === "Instagram";
+  if (!isSocial) return cleanDisplayText(input.authorName);
+
+  const authorName = cleanDisplayText(input.authorName);
+  const extractedHandle =
+    displayHandle(handleFromSocialText(input.authorName)) ??
+    displayHandle(handleFromSocialText(input.textHints?.join(" ")));
+  if (extractedHandle) return extractedHandle;
+
+  const authorNameAsHandle = displayHandle(authorName);
+  const providedHandle =
+    displayHandle(input.authorHandle) ??
+    displayHandle(handleFromSocialUrl(input.originalUrl, platform));
+  if (authorNameAsHandle) return authorNameAsHandle;
+  if (authorName && providedHandle && displayHandle(authorName) !== providedHandle) return authorName;
+
+  return providedHandle ?? authorName;
+}
+
+function handleFromSocialText(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const instagramPrefix = cleaned.match(
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?([A-Za-z0-9._]+)\s+on\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4}\s*:/iu,
+  );
+  if (instagramPrefix) return instagramPrefix[1];
+
+  return cleaned.match(/@([A-Za-z0-9_][A-Za-z0-9._-]{0,80})/u)?.[1] ?? null;
+}
+
+function handleFromSocialUrl(value: string | null | undefined, platform: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const first = segments[0];
+    if (!first) return null;
+    if (platform === "X" && segments[1] === "status") return first;
+    if (platform === "TikTok" && first.startsWith("@")) return first.slice(1);
+    if (platform === "Instagram" && !["p", "reel", "reels", "tv"].includes(first.toLowerCase())) return first;
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function displayHandle(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/^@/u, "");
+  if (!cleaned || !/^[A-Za-z0-9_][A-Za-z0-9._-]{0,80}$/u.test(cleaned)) return null;
+  return `@${cleaned}`;
+}
+
+function cleanDisplayText(value: string | null | undefined) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function allowsLocalClientReportFallback() {
   return process.env.NODE_ENV !== "production" || process.env.RASD_CLIENT_REPORT_FALLBACK === "local";
 }
@@ -734,6 +816,8 @@ function platformFromOriginalUrl(value: string) {
 
 function platformFromSourceType(sourceType: string) {
   if (sourceType.startsWith("x_")) return "X";
+  if (sourceType === "tiktok_research") return "TikTok";
+  if (sourceType === "instagram_public_profile") return "Instagram";
   if (sourceType === "rss") return "News";
   if (sourceType === "web_page") return "Website";
   if (sourceType === "manual_url") return "Website";

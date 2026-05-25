@@ -260,6 +260,7 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     }
     .meta-head small { display: block; color: #2f7c60; font-size: clamp(9px, 1vw, 15px); margin-bottom: 4px; }
     .meta-head b { font-size: clamp(18px, 2.2vw, 34px); font-weight: 500; }
+    .author-value { unicode-bidi: isolate; }
     .author-avatar {
       width: 74px;
       height: 74px;
@@ -397,12 +398,12 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
         <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
       </div>
       <header class="meta-head">
-        <div><small>الكاتب</small><b>${escapeHtml(item.authorName || item.sourceName)}</b></div>
+        <div><small>الكاتب</small><b class="author-value" dir="${authorTextDirection(item.authorName || item.sourceName)}">${escapeHtml(item.authorName || item.sourceName)}</b></div>
         ${renderAuthorAvatar(item)}
       </header>
       <div class="summary">
         <h2>المحتوى / الملخص</h2>
-        <p class="${summaryTextClass(item.summary || item.title)}">${escapeHtml(item.summary || item.title)}</p>
+        <p class="${summaryTextClass(item.summary || item.title)}" dir="auto">${escapeHtml(item.summary || item.title)}</p>
       </div>
       <footer class="sentiment">
         <span>تصنيف المحتوى</span>
@@ -421,6 +422,10 @@ function renderAuthorAvatar(item: ClientReportItem) {
   return `<img class="author-avatar" src="${escapeAttribute(item.publisherProfileImagePath)}" alt="${escapeAttribute(
     item.authorName || item.sourceName,
   )}" />`;
+}
+
+function authorTextDirection(value: string) {
+  return /[@A-Za-z0-9_]/u.test(value) ? "ltr" : "rtl";
 }
 
 function summaryTextClass(value: string) {

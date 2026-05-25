@@ -588,7 +588,12 @@ function ReportRow({ item, selected, onClick }: { item: ClientReportItem; select
                 <Image alt="صورة الحساب" className="h-full w-full object-cover object-top" height={64} src={item.publisherProfileImagePath} unoptimized width={64} />
               </span>
             ) : null}
-            <span className="font-bold text-xs text-[var(--color-text-title)]">{item.authorName || item.sourceName}</span>
+            <span
+              className="font-bold text-xs text-[var(--color-text-title)]"
+              dir={authorDisplayDirection(item.authorName || item.sourceName)}
+            >
+              {item.authorName || item.sourceName}
+            </span>
             <span className="rounded-md bg-[var(--color-bg-main)] px-2 py-0.5 text-[10px] font-extrabold text-[var(--color-text-muted)] border border-[var(--color-border)]">{item.platformLabel}</span>
             <SentimentPill item={item} />
             {isPreparing ? <span className="rounded-md bg-[#fff4c2] px-2 py-0.5 text-[10px] font-extrabold text-[#745f00] border border-[#fbe5c6]">قيد التجهيز</span> : null}
@@ -700,6 +705,7 @@ function DetailPanel({
             ) : null}
             <button
               className="font-extrabold text-xs text-[#204733] hover:underline"
+              dir={authorDisplayDirection(item.authorName || item.sourceName)}
               onClick={() => onFilter("source", item.sourceName)}
               type="button"
             >
@@ -933,6 +939,10 @@ function shortDate(iso: string) {
 
 function sentimentDisplay(label: string, sentiment: string) {
   return `${sentimentIcons[sentiment] ?? "😊"} ${label}`;
+}
+
+function authorDisplayDirection(value: string) {
+  return /[@A-Za-z0-9_]/u.test(value) ? "ltr" : "rtl";
 }
 
 function onFilterDate(value: string, onFilter: (key: ClickableFilterKey, value: string) => void) {

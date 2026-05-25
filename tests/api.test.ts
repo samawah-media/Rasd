@@ -1445,7 +1445,7 @@ describe("Hono API acceptance workflow", () => {
     delete process.env.APIFY_API_TOKEN;
     globalThis.fetch = async () =>
       new Response(
-        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="${description}"><meta property="og:image" content="https://instagram.com/image.jpg"><meta property="article:published_time" content="2026-05-21T20:30:00+03:00"></head></html>`,
+        `<html><head><title>${title}</title><meta property="og:title" content="${title}"><meta property="og:description" content="6 likes, 0 comments - ujeddah on April 6, 2026‎: ${description}"><meta property="og:image" content="https://instagram.com/image.jpg"><meta property="article:published_time" content="2026-05-21T20:30:00+03:00"></head></html>`,
         { status: 200, headers: { "content-type": "text/html" } }
       );
 
@@ -1460,8 +1460,13 @@ describe("Hono API acceptance workflow", () => {
 
       assert.equal(manual.response.status, 201);
       assert.equal(manual.json.metadata.platform, "Instagram");
+      assert.equal(manual.json.metadata.text, description);
+      assert.equal(manual.json.metadata.authorName, "ujeddah");
+      assert.equal(manual.json.metadata.authorHandle, "@ujeddah");
       assert.equal(manual.json.item.state, "needs_review");
       assert.equal(manual.json.item.title, title);
+      assert.equal(manual.json.item.authorName, "ujeddah");
+      assert.equal(manual.json.item.authorHandle, "@ujeddah");
       assert.equal(manual.json.item.publishedAt, "2026-05-21T17:30:00.000Z");
 
       const approved = await requestJson(`/api/items/${manual.json.item.id}/review`, {
@@ -1512,6 +1517,9 @@ describe("Hono API acceptance workflow", () => {
       assert.equal(clientReport.json.report.summary.items, 125);
       assert.equal(clientReportItem.platform, "Instagram");
       assert.equal(clientReportItem.title, title);
+      assert.equal(clientReportItem.authorName, "@ujeddah");
+      assert.equal(clientReportItem.summary, description);
+      assert.doesNotMatch(clientReportItem.summary, /likes|comments|ujeddah on April/u);
       assert.equal(clientReportItem.originalUrl, "https://instagram.com/p/ABCDE");
       assert.equal(clientReportItem.publishDateIso, "2026-05-21");
       assert.equal(clientReportItem.screenshotStatus, "available");
