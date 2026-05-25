@@ -340,6 +340,7 @@ describe("connector and budget utilities", () => {
     assert.match(exportHtml.html, /@page \{ size: 16in 9in; margin: 0; \}/);
     assert.match(exportHtml.html, /image-orientation: none/);
     assert.match(exportHtml.html, /legacy-pages/);
+    assert.match(exportHtml.html, /class="legacy-source-link" href="https?:\/\//);
     assert.doesNotMatch(exportHtml.html, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
     assert.equal(tooMany.ok, false);
     assert.equal(tooMany.error, "export_item_limit_exceeded");
@@ -357,15 +358,119 @@ describe("connector and budget utilities", () => {
       evidenceImagePath: null,
       contentImagePath: null,
       sourceEvidenceImagePath: "/live-capture.png",
+      originalUrl: "https://example.com/live-post",
+      contentUrl: "https://example.com/live-post",
       page: 1,
     };
     const exportHtml = buildClientReportExportHtml({ ...report, items: [liveItem] }, [liveItem.id]);
 
     assert.equal(exportHtml.ok, true);
     assert.match(exportHtml.html, /generated-page/);
+    assert.match(exportHtml.html, /<a class="source-mark" href="https:\/\/example\.com\/live-post"/);
     assert.match(exportHtml.html, /الرصد الحي/);
     assert.match(exportHtml.html, /<div class="source-image"><img src="\/live-capture\.png"/);
     assert.doesNotMatch(exportHtml.html, /<section class="page"[^>]*>\s*<img src="\/live-capture\.png"/);
+  });
+
+  it("removes Instagram engagement metadata from client report content", () => {
+    const item = enrichClientReportItem({
+      id: "instagram-clean-content",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Instagram",
+      sourceName: "Instagram",
+      authorName: "emadowado7",
+      title: "18 likes, 4 comments - emadowado7 on March 31, 2026: عنوان المنشور فقط",
+      summary: "18 likes, 4 comments - emadowado7 on March 31, 2026: هذا هو محتوى المنشور فقط بدون بيانات التفاعل.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://instagram.com/p/ABCDE",
+      extractedOriginalUrl: "https://instagram.com/p/ABCDE",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://instagram.com/p/ABCDE"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.title, "عنوان المنشور فقط");
+    assert.equal(item.summary, "هذا هو محتوى المنشور فقط بدون بيانات التفاعل.");
+    assert.doesNotMatch(item.summary, /likes|comments|emadowado7 on March/u);
+  });
+
+  it("uses the source name as the report author for website news items", () => {
+    const item = enrichClientReportItem({
+      id: "website-source-author",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Website",
+      sourceName: "عاجل",
+      authorName: "فريق التحرير",
+      title: "خبر عن هاكاثون هداية",
+      summary: "تغطية خبرية من موقع إخباري.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://ajel.sa/story/hidayathon",
+      extractedOriginalUrl: "https://ajel.sa/story/hidayathon",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://ajel.sa/story/hidayathon"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.authorName, "عاجل");
+  });
+
+  it("keeps a specific publisher name when the website source is generic", () => {
+    const item = enrichClientReportItem({
+      id: "website-generic-source-author",
+      sourcePdf: "live-hidayathon",
+      reportIssue: null,
+      page: 1,
+      platform: "Website",
+      sourceName: "إدخال يدوي",
+      authorName: "أخبار السعودية",
+      title: "خبر عن هاكاثون هداية",
+      summary: "تغطية خبرية من موقع إخباري.",
+      sentiment: "neutral",
+      publishedDateText: "2026-03-31T10:30:00.000Z",
+      capturedAtText: "2026-03-31T10:31:00.000Z",
+      originalUrl: "https://saudinews.example/story/hidayathon",
+      extractedOriginalUrl: "https://saudinews.example/story/hidayathon",
+      originalUrlSource: "pdf",
+      originalUrlOverride: null,
+      extractedUrls: ["https://saudinews.example/story/hidayathon"],
+      evidenceImagePath: null,
+      contentImagePath: null,
+      publisherProfileImagePath: null,
+      sourceEvidenceImagePath: null,
+      rawText: "",
+      imageCount: 0,
+      confidence: "medium",
+      warnings: [],
+      initialState: "approved",
+    });
+
+    assert.equal(item.authorName, "أخبار السعودية");
   });
 
   it("does not treat the old placeholder capture image as client evidence", () => {
@@ -633,7 +738,9 @@ describe("connector and budget utilities", () => {
       assert.equal(metadata.platform, "Instagram");
       assert.equal(metadata.source, "html_metadata");
       assert.equal(metadata.title, "Instagram HTML title");
-      assert.equal(metadata.text, "25 likes, 0 comments - rasd on April 6, 2026: HTML fallback caption");
+      assert.equal(metadata.text, "HTML fallback caption");
+      assert.equal(metadata.authorName, "rasd");
+      assert.equal(metadata.authorHandle, "@rasd");
       assert.equal(metadata.imageUrl, "https://instagram.com/fallback.jpg");
       assert.equal(metadata.publishedAt, "2026-04-06T00:00:00.000Z");
     } finally {

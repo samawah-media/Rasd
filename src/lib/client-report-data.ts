@@ -77,6 +77,7 @@ type DbMonitoringItemRow = {
   evidence_image_path: string | null;
   source_item_id: string | null;
   author_name: string | null;
+  author_handle: string | null;
   published_at: string | null;
   summary: string | null;
   summary_source_text: string | null;
@@ -196,7 +197,7 @@ async function getSupabaseHidayathonClientReportData(): Promise<ClientReportData
     supabase
       .from("monitoring_items")
       .select(
-        "id, source_id, external_id, source_type, state, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
+        "id, source_id, external_id, source_type, state, title, original_url, original_url_extracted, original_url_status, original_url_source, evidence_image_path, source_item_id, author_name, author_handle, published_at, summary, summary_source_text, sentiment, sentiment_confidence, raw_response, warning",
       )
       .in("id", itemIds),
     supabase
@@ -319,15 +320,25 @@ function toClientReportItemFromWorkflow(
   order: number,
 ) {
   const evidenceImagePath = openableAssetUrl(capture?.assetUrl);
+  const platform = platformFromOriginalUrl(item.originalUrl);
+  const authorName = clientReportAuthorName({
+    authorName: item.authorName,
+    authorHandle: item.authorHandle,
+    sourceName: item.sourceName,
+    originalUrl: item.originalUrl,
+    platform,
+    rawResponse: item.raw_response,
+    textHints: [item.summarySourceText, item.summary, item.title],
+  });
 
   return enrichClientReportItem({
     id: item.id,
     sourcePdf: "live-hidayathon",
     reportIssue: null,
     page: order,
-    platform: platformFromOriginalUrl(item.originalUrl),
+    platform,
     sourceName: item.sourceName,
-    authorName: item.authorName ?? item.sourceName,
+    authorName: authorName ?? item.authorName ?? item.sourceName,
     title: item.title,
     summary: item.summary,
     sentiment: item.sentiment,
@@ -446,6 +457,16 @@ function toClientReportItemFromDb(
   const originalUrl = row.original_url_status === "openable" ? openableHttpUrl(row.original_url) : null;
   const extractedOriginalUrl = row.original_url_extracted ?? rawString(row.raw_response, "extractedOriginalUrl");
   const warnings = unique([row.warning, link.warning].filter((warning): warning is string => Boolean(warning)));
+  const sourceName = sources.get(row.source_id ?? "");
+  const authorName = clientReportAuthorName({
+    authorName: row.author_name,
+    authorHandle: row.author_handle,
+    sourceName,
+    originalUrl: originalUrl ?? row.original_url,
+    platform,
+    rawResponse: row.raw_response,
+    textHints: [row.summary_source_text, row.summary, row.title],
+  });
 
   return enrichClientReportItem({
     id: row.external_id ?? row.source_item_id ?? row.id,
@@ -453,8 +474,8 @@ function toClientReportItemFromDb(
     reportIssue,
     page: rawNumber(row.raw_response, "page") ?? link.display_order,
     platform,
-    sourceName: sources.get(row.source_id ?? "") ?? row.author_name ?? platformLabels[platform] ?? platform,
-    authorName: row.author_name ?? "غير محدد",
+    sourceName: sourceName ?? authorName ?? row.author_name ?? platformLabels[platform] ?? platform,
+    authorName: authorName ?? row.author_name ?? "غير محدد",
     title: row.title ?? row.original_url,
     summary: row.summary ?? row.summary_source_text ?? row.original_url,
     sentiment: row.sentiment ?? "neutral",
@@ -488,9 +509,22 @@ export function enrichClientReportItem(item: ImportedReportItem): ClientReportIt
   const sourceEvidenceImagePath = openableAssetUrl(item.sourceEvidenceImagePath);
   const linkStatus = getClientLinkStatus({ ...item, originalUrl, contentUrl });
   const screenshotStatus = evidenceImagePath ? "available" : "missing";
+  const title = cleanClientReportContent(item.title) ?? item.title;
+  const summary = cleanClientReportContent(item.summary) ?? item.summary;
+  const authorName =
+    clientReportAuthorName({
+      authorName: item.authorName,
+      sourceName: item.sourceName,
+      originalUrl,
+      platform: item.platform,
+      textHints: [item.rawText, summary, title],
+    }) ?? item.authorName;
 
   return {
     ...item,
+    authorName,
+    title,
+    summary,
     originalUrl,
     contentUrl,
     evidenceImagePath,
@@ -615,6 +649,172 @@ function withPercent<T extends Record<K, number>, K extends keyof T>(items: T[],
     .sort((a, b) => b[valueKey] - a[valueKey]);
 }
 
+function clientReportAuthorName(input: {
+  authorName?: string | null;
+  authorHandle?: string | null;
+  sourceName?: string | null;
+  originalUrl?: string | null;
+  platform?: string | null;
+  rawResponse?: unknown;
+  textHints?: Array<string | null | undefined>;
+}) {
+  const platform = input.platform ?? (input.originalUrl ? platformFromOriginalUrl(input.originalUrl) : null);
+  const isSocial = platform === "X" || platform === "TikTok" || platform === "Instagram";
+  if (!isSocial) return clientReportSiteAuthorName(input, platform);
+
+  const authorName = cleanDisplayText(input.authorName);
+  const extractedHandle =
+    displayHandle(handleFromSocialText(input.authorName)) ??
+    displayHandle(handleFromSocialText(input.textHints?.join(" ")));
+  if (extractedHandle) return extractedHandle;
+
+  const authorNameAsHandle = displayHandle(authorName);
+  const providedHandle =
+    displayHandle(input.authorHandle) ??
+    displayHandle(handleFromSocialUrl(input.originalUrl, platform));
+  if (authorNameAsHandle) return authorNameAsHandle;
+  if (authorName && providedHandle && displayHandle(authorName) !== providedHandle) return authorName;
+
+  return providedHandle ?? authorName;
+}
+
+function clientReportSiteAuthorName(
+  input: {
+    authorName?: string | null;
+    sourceName?: string | null;
+    originalUrl?: string | null;
+    rawResponse?: unknown;
+  },
+  platform: string | null,
+) {
+  const isSitePlatform = !platform || platform === "Website" || platform === "News" || platform === "Official" || platform === "Unknown";
+  if (!isSitePlatform) return cleanDisplayText(input.authorName);
+
+  return (
+    cleanReportSourceName(input.sourceName) ??
+    rawExtractionPublisherName(input.rawResponse) ??
+    cleanReportSourceName(input.authorName) ??
+    publisherNameFromUrl(input.originalUrl)
+  );
+}
+
+function cleanReportSourceName(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const normalized = cleaned.toLowerCase();
+  const genericNames = new Set([
+    "إدخال يدوي",
+    "رابط يدوي",
+    "مصدر غير محدد",
+    "غير محدد",
+    "manual",
+    "manual_url",
+    "web_page",
+    "website",
+    "news",
+    "rss",
+    "unknown",
+    platformLabels.Website,
+    platformLabels.News,
+    platformLabels.Official,
+    platformLabels.Unknown,
+  ].map((entry) => entry.toLowerCase()));
+  if (genericNames.has(normalized)) return null;
+
+  return cleaned;
+}
+
+function rawExtractionPublisherName(rawResponse: unknown) {
+  const raw = rawRecord(rawResponse);
+  const input = rawRecord(raw.input);
+  const extraction = rawRecord(input.extraction);
+  const directExtraction = rawRecord(raw.extraction);
+
+  return (
+    cleanReportSourceName(rawString(extraction, "publisherName")) ??
+    cleanReportSourceName(rawString(extraction, "siteName")) ??
+    cleanReportSourceName(rawString(directExtraction, "publisherName")) ??
+    cleanReportSourceName(rawString(directExtraction, "siteName")) ??
+    cleanReportSourceName(rawString(raw, "publisherName")) ??
+    cleanReportSourceName(rawString(raw, "siteName"))
+  );
+}
+
+function publisherNameFromUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const hostname = new URL(value).hostname.replace(/^www\./u, "").toLowerCase();
+    const ignoredLabels = new Set(["com", "net", "org", "gov", "edu", "co", "news", "sa", "ae", "qa", "kw", "bh", "om"]);
+    const label = hostname
+      .split(".")
+      .filter((part) => part && !ignoredLabels.has(part))
+      .at(-1);
+
+    return label ? titleCaseDomainLabel(label) : hostname;
+  } catch {
+    return null;
+  }
+}
+
+function titleCaseDomainLabel(value: string) {
+  return value
+    .split(/[-_]/u)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
+function handleFromSocialText(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const instagramPrefix = cleaned.match(
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?([A-Za-z0-9._]+)\s+on\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4}\s*:/iu,
+  );
+  if (instagramPrefix) return instagramPrefix[1];
+
+  return cleaned.match(/@([A-Za-z0-9_][A-Za-z0-9._-]{0,80})/u)?.[1] ?? null;
+}
+
+function handleFromSocialUrl(value: string | null | undefined, platform: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const first = segments[0];
+    if (!first) return null;
+    if (platform === "X" && segments[1] === "status") return first;
+    if (platform === "TikTok" && first.startsWith("@")) return first.slice(1);
+    if (platform === "Instagram" && !["p", "reel", "reels", "tv"].includes(first.toLowerCase())) return first;
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function displayHandle(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/^@/u, "");
+  if (!cleaned || !/^[A-Za-z0-9_][A-Za-z0-9._-]{0,80}$/u.test(cleaned)) return null;
+  return `@${cleaned}`;
+}
+
+function cleanClientReportContent(value: string | null | undefined) {
+  const cleaned = cleanDisplayText(value)?.replace(/[\u200e\u200f]/gu, "");
+  if (!cleaned) return null;
+
+  const instagramPrefix = cleaned.match(
+    /^\s*[\d,.]+\s+likes?\s*,\s*[\d,.]+\s+comments?\s*-\s*@?[A-Za-z0-9._]+\s+on\s+[A-Z][a-z]+(?:\s+\d{1,2})?(?:,\s+\d{4})?\s*:?\s*([\s\S]*)$/iu,
+  );
+  if (instagramPrefix) return instagramPrefix[1]?.trim() ?? "";
+  return cleaned;
+}
+
+function cleanDisplayText(value: string | null | undefined) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 function allowsLocalClientReportFallback() {
   return process.env.NODE_ENV !== "production" || process.env.RASD_CLIENT_REPORT_FALLBACK === "local";
 }
@@ -734,6 +934,8 @@ function platformFromOriginalUrl(value: string) {
 
 function platformFromSourceType(sourceType: string) {
   if (sourceType.startsWith("x_")) return "X";
+  if (sourceType === "tiktok_research") return "TikTok";
+  if (sourceType === "instagram_public_profile") return "Instagram";
   if (sourceType === "rss") return "News";
   if (sourceType === "web_page") return "Website";
   if (sourceType === "manual_url") return "Website";

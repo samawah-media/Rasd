@@ -182,57 +182,31 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     }
     .source-mark {
       position: relative;
+      display: block;
       border-bottom: 2px solid #111;
+      color: inherit;
+      text-decoration: none;
     }
-    .source-link-icon {
-      position: absolute;
-      left: 50px;
-      top: 18px;
-      width: 92px;
-      height: 72px;
+    .source-mark[href], .legacy-source-link { cursor: pointer; }
+    .source-mark[href]:focus-visible, .legacy-source-link:focus-visible {
+      outline: 3px solid #c0912d;
+      outline-offset: -3px;
     }
-    .source-link-ring {
+    .legacy-source-link {
       position: absolute;
-      width: 31px;
-      height: 17px;
-      border: 6px solid #111;
-      border-radius: 999px;
-      transform: rotate(-35deg);
+      z-index: 2;
+      left: 82px;
+      top: 86px;
+      width: 190px;
+      height: 140px;
+      text-decoration: none;
     }
-    .source-link-ring-a { left: 15px; top: 5px; }
-    .source-link-ring-b { left: 36px; top: 20px; }
-    .source-link-spark {
+    .source-link-image {
       position: absolute;
-      width: 6px;
-      height: 18px;
-      border-radius: 999px;
-      background: #111;
-      transform-origin: center bottom;
-    }
-    .source-link-spark-a { left: 26px; top: -11px; transform: rotate(-42deg); }
-    .source-link-spark-b { left: 42px; top: -14px; transform: rotate(-9deg); height: 16px; }
-    .source-link-spark-c { left: 57px; top: -7px; transform: rotate(34deg); height: 14px; }
-    .source-link-cursor {
-      position: absolute;
-      left: 44px;
-      top: 37px;
-      width: 0;
-      height: 0;
-      border-top: 13px solid transparent;
-      border-bottom: 13px solid transparent;
-      border-left: 29px solid #111;
-      transform: rotate(39deg);
-      transform-origin: 9px 13px;
-    }
-    .source-link-cursor::after {
-      content: "";
-      position: absolute;
-      left: -7px;
-      top: 7px;
-      width: 12px;
-      height: 29px;
-      background: #111;
-      transform: rotate(-22deg);
+      left: 47px;
+      top: 11px;
+      width: 96px;
+      height: auto;
     }
     .source-image { display: grid; place-items: center; padding: 18px; }
     .source-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -260,6 +234,7 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     }
     .meta-head small { display: block; color: #2f7c60; font-size: clamp(9px, 1vw, 15px); margin-bottom: 4px; }
     .meta-head b { font-size: clamp(18px, 2.2vw, 34px); font-weight: 500; }
+    .author-value { unicode-bidi: isolate; }
     .author-avatar {
       width: 74px;
       height: 74px;
@@ -339,8 +314,10 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
 function renderExportPage(item: ClientReportItem) {
   const sourcePageImagePath = item.sourceEvidenceImagePath;
   if (isLegacyReportPageImage(sourcePageImagePath)) {
+    const url = reportItemUrl(item);
     return `<section class="page" aria-label="${escapeAttribute(pageLabel(item))}">
       <img src="${escapeAttribute(sourcePageImagePath)}" alt="${escapeAttribute(pageLabel(item))}" />
+      ${url ? `<a class="legacy-source-link" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" aria-label="فتح رابط المنشور"></a>` : ""}
     </section>`;
   }
 
@@ -383,26 +360,17 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
     </aside>
     <div class="generated-main">
       <div class="source-pane">
-        <div class="source-mark" aria-hidden="true">
-          <span class="source-link-icon">
-            <span class="source-link-ring source-link-ring-a"></span>
-            <span class="source-link-ring source-link-ring-b"></span>
-            <span class="source-link-spark source-link-spark-a"></span>
-            <span class="source-link-spark source-link-spark-b"></span>
-            <span class="source-link-spark source-link-spark-c"></span>
-            <span class="source-link-cursor"></span>
-          </span>
-        </div>
+        ${renderSourceMark(item)}
         <div class="source-image">${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : ""}</div>
         <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
       </div>
       <header class="meta-head">
-        <div><small>الكاتب</small><b>${escapeHtml(item.authorName || item.sourceName)}</b></div>
+        <div><small>الكاتب</small><b class="author-value" dir="${authorTextDirection(item.authorName || item.sourceName)}">${escapeHtml(item.authorName || item.sourceName)}</b></div>
         ${renderAuthorAvatar(item)}
       </header>
       <div class="summary">
         <h2>المحتوى / الملخص</h2>
-        <p class="${summaryTextClass(item.summary || item.title)}">${escapeHtml(item.summary || item.title)}</p>
+        <p class="${summaryTextClass(item.summary || item.title)}" dir="auto">${escapeHtml(item.summary || item.title)}</p>
       </div>
       <footer class="sentiment">
         <span>تصنيف المحتوى</span>
@@ -416,11 +384,22 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
   </section>`;
 }
 
+function renderSourceMark(item: ClientReportItem) {
+  const icon = `<img class="source-link-image" src="/imports/legacy-ui/source-link-marker.png" alt="" aria-hidden="true" />`;
+  const url = reportItemUrl(item);
+  if (!url) return `<div class="source-mark" aria-hidden="true">${icon}</div>`;
+  return `<a class="source-mark" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" aria-label="فتح رابط المنشور">${icon}</a>`;
+}
+
 function renderAuthorAvatar(item: ClientReportItem) {
   if (!item.publisherProfileImagePath) return "";
   return `<img class="author-avatar" src="${escapeAttribute(item.publisherProfileImagePath)}" alt="${escapeAttribute(
     item.authorName || item.sourceName,
   )}" />`;
+}
+
+function authorTextDirection(value: string) {
+  return /[@A-Za-z0-9_]/u.test(value) ? "ltr" : "rtl";
 }
 
 function summaryTextClass(value: string) {
@@ -431,6 +410,10 @@ function summaryTextClass(value: string) {
 
 function pageLabel(item: ClientReportItem) {
   return `${item.reportLabel} - صفحة ${item.page.toLocaleString("ar-SA")} - ${item.authorName || item.sourceName}`;
+}
+
+function reportItemUrl(item: ClientReportItem) {
+  return item.originalUrl ?? item.contentUrl;
 }
 
 function compactDate(label: string) {
