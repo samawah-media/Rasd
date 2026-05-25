@@ -180,7 +180,60 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
       position: relative;
       direction: rtl;
     }
-    .source-mark { display: grid; place-items: center; border-bottom: 2px solid #111; font-size: clamp(28px, 4vw, 54px); }
+    .source-mark {
+      position: relative;
+      border-bottom: 2px solid #111;
+    }
+    .source-link-icon {
+      position: absolute;
+      left: 50px;
+      top: 18px;
+      width: 92px;
+      height: 72px;
+    }
+    .source-link-ring {
+      position: absolute;
+      width: 31px;
+      height: 17px;
+      border: 6px solid #111;
+      border-radius: 999px;
+      transform: rotate(-35deg);
+    }
+    .source-link-ring-a { left: 15px; top: 5px; }
+    .source-link-ring-b { left: 36px; top: 20px; }
+    .source-link-spark {
+      position: absolute;
+      width: 6px;
+      height: 18px;
+      border-radius: 999px;
+      background: #111;
+      transform-origin: center bottom;
+    }
+    .source-link-spark-a { left: 26px; top: -11px; transform: rotate(-42deg); }
+    .source-link-spark-b { left: 42px; top: -14px; transform: rotate(-9deg); height: 16px; }
+    .source-link-spark-c { left: 57px; top: -7px; transform: rotate(34deg); height: 14px; }
+    .source-link-cursor {
+      position: absolute;
+      left: 44px;
+      top: 37px;
+      width: 0;
+      height: 0;
+      border-top: 13px solid transparent;
+      border-bottom: 13px solid transparent;
+      border-left: 29px solid #111;
+      transform: rotate(39deg);
+      transform-origin: 9px 13px;
+    }
+    .source-link-cursor::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      top: 7px;
+      width: 12px;
+      height: 29px;
+      background: #111;
+      transform: rotate(-22deg);
+    }
     .source-image { display: grid; place-items: center; padding: 18px; }
     .source-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
     .source-note {
@@ -330,7 +383,16 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
     </aside>
     <div class="generated-main">
       <div class="source-pane">
-        <div class="source-mark">↗</div>
+        <div class="source-mark" aria-hidden="true">
+          <span class="source-link-icon">
+            <span class="source-link-ring source-link-ring-a"></span>
+            <span class="source-link-ring source-link-ring-b"></span>
+            <span class="source-link-spark source-link-spark-a"></span>
+            <span class="source-link-spark source-link-spark-b"></span>
+            <span class="source-link-spark source-link-spark-c"></span>
+            <span class="source-link-cursor"></span>
+          </span>
+        </div>
         <div class="source-image">${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : ""}</div>
         <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
       </div>
