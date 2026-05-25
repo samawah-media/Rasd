@@ -589,7 +589,7 @@ describe("connector and budget utilities", () => {
         "https://instagram.com/p/HTMLFALLBACK",
         async () =>
           new Response(
-            '<html><head><title>Instagram HTML title</title><meta property="og:description" content="HTML fallback caption"><meta property="og:image" content="https://instagram.com/fallback.jpg"></head></html>',
+            '<html><head><title>Instagram HTML title</title><meta property="og:description" content="25 likes, 0 comments - rasd on April 6, 2026: HTML fallback caption"><meta property="og:image" content="https://instagram.com/fallback.jpg"></head></html>',
             { status: 200, headers: { "content-type": "text/html" } },
           ),
         { ytdlpRunner: runner },
@@ -598,8 +598,9 @@ describe("connector and budget utilities", () => {
       assert.equal(metadata.platform, "Instagram");
       assert.equal(metadata.source, "html_metadata");
       assert.equal(metadata.title, "Instagram HTML title");
-      assert.equal(metadata.text, "HTML fallback caption");
+      assert.equal(metadata.text, "25 likes, 0 comments - rasd on April 6, 2026: HTML fallback caption");
       assert.equal(metadata.imageUrl, "https://instagram.com/fallback.jpg");
+      assert.equal(metadata.publishedAt, "2026-04-06T00:00:00.000Z");
     } finally {
       if (previousExtractor === undefined) delete process.env.MEDIA_METADATA_EXTRACTOR;
       else process.env.MEDIA_METADATA_EXTRACTOR = previousExtractor;

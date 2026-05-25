@@ -24,6 +24,31 @@ describe("monitoring workflow store", () => {
     assert.equal(second.item.id, first.item.id);
   });
 
+  it("does not fabricate today's date when a manual item has no publication date", () => {
+    const manual = store.ingestManualUrl({
+      url: "https://example.com/manual/no-publication-date",
+      title: "Hidayathon mention without date",
+      text: "A manual monitoring item about Hidayathon without a publication date.",
+    });
+
+    assert.equal(Number.isNaN(Date.parse(manual.item.publishedAt)), true);
+
+    store.reviewItem(manual.item.id, "approve", "Relevant, but date is still missing.");
+    store.requestCapture(manual.item.id, "report_grade");
+
+    const blocked = store.addReportItem("report-5", manual.item.id);
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.error, "published_at_required");
+
+    const corrected = store.updateItem(manual.item.id, {
+      publishedAt: "2026-05-20T10:30:00.000Z",
+    });
+    assert.equal(corrected.item.publishedAt, "2026-05-20T10:30:00.000Z");
+
+    const added = store.addReportItem("report-5", manual.item.id);
+    assert.equal(added.ok, true);
+  });
+
   it("stores RSS source polling settings and rejects private feed URLs", () => {
     const source = store.createSource({
       name: "Official Hidayathon Feed",

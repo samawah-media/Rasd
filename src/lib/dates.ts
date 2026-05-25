@@ -1,3 +1,10 @@
+export const UNKNOWN_DATE_LABEL = "غير محدد";
+
+export function isValidDateString(value: string | null | undefined) {
+  if (!value) return false;
+  return !Number.isNaN(Date.parse(value));
+}
+
 export function formatGregorian(date: string) {
   return new Intl.DateTimeFormat("ar-SA", {
     day: "numeric",
