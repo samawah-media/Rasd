@@ -1,6 +1,6 @@
 import type { ClientReportData, ClientReportItem } from "@/lib/client-report-data";
 
-export const clientReportExportLimit = 50;
+export const clientReportExportLimit = 160;
 
 type ExportResult =
   | {
@@ -33,14 +33,7 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     };
   }
 
-  const latest = sortItemsByDate(selectedItems)[0];
-  const positivePercent = Math.round(
-    (selectedItems.filter((item) => item.sentiment === "positive").length / selectedItems.length) * 100,
-  );
-  const platforms = distribution(selectedItems, (item) => item.platformLabel)
-    .slice(0, 4)
-    .map((entry) => `${escapeHtml(entry.label)} (${entry.count.toLocaleString("ar-SA")})`)
-    .join("، ");
+  const orderedItems = sortItemsForLegacyExport(selectedItems);
 
   return {
     ok: true,
@@ -55,128 +48,290 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
   <title>رصد هداية هاكاثون</title>
   <style>
     * { box-sizing: border-box; }
+    @page { size: 16in 9in; margin: 0; }
+    :root {
+      --export-page-width: 16in;
+      --export-page-height: 9in;
+    }
+    html { background: #141a16; }
     body {
       margin: 0;
-      background: #f6f5ef;
+      background: #141a16;
       color: #111816;
       font-family: "Segoe UI", Tahoma, Arial, sans-serif;
-      line-height: 1.75;
     }
-    main { max-width: 1080px; margin: 0 auto; padding: 32px 24px; }
-    header, section, article {
-      background: #fff;
-      border: 1px solid #dfe3d9;
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      background: rgba(20, 26, 22, 0.94);
+      color: #fff;
+      backdrop-filter: blur(12px);
+    }
+    .toolbar-title { display: grid; gap: 2px; }
+    .toolbar strong { font-size: 16px; }
+    .toolbar span { color: #d9e2dc; font-size: 12px; }
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .print-options {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: #d9e2dc;
+      font-size: 12px;
+    }
+    .print-options b { color: #fff; font-size: 12px; }
+    .print-options span {
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 999px;
+      color: #e5ece7;
+      line-height: 1;
+      padding: 7px 9px;
+    }
+    .print {
+      border: 0;
       border-radius: 8px;
+      background: #c0912d;
+      color: #111816;
+      cursor: pointer;
+      font-weight: 800;
+      min-height: 38px;
+      padding: 0 16px;
     }
-    header { padding: 24px; margin-bottom: 16px; }
-    h1, h2, h3, p { margin: 0; }
-    h1 { font-size: 30px; }
-    h2 { font-size: 18px; margin-bottom: 12px; }
-    .muted { color: #66736d; }
-    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
-    .stat { background: #fbfbf8; border: 1px solid #edf0eb; border-radius: 8px; padding: 14px; }
-    .stat b { display: block; font-size: 24px; margin-top: 8px; }
-    section { padding: 18px; margin-bottom: 16px; }
-    article { display: grid; grid-template-columns: 170px 1fr; gap: 16px; padding: 14px; margin-bottom: 12px; break-inside: avoid; }
-    img {
+    .document {
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+      overflow-x: auto;
+      padding: 24px;
+    }
+    .page {
+      position: relative;
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: #fff;
+      flex: none;
+      box-shadow: 0 18px 54px rgba(0,0,0,0.28);
+    }
+    .page > img {
       display: block;
       width: 100%;
-      aspect-ratio: 4 / 3;
-      object-fit: contain;
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-      border: 1px solid #edf0eb;
-      background: linear-gradient(180deg, #fafaf8 0%, #eef2eb 100%);
-      padding: 6px;
+      height: 100%;
+      image-orientation: none;
+      object-fit: fill;
     }
-    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-    .chip { border-radius: 999px; background: #e8f5ef; color: #116a5c; padding: 4px 10px; font-size: 12px; font-weight: 700; }
-    a { color: #116a5c; font-weight: 700; }
-    .print { position: fixed; left: 20px; top: 20px; border: 0; border-radius: 8px; background: #116a5c; color: #fff; padding: 10px 16px; font-weight: 700; cursor: pointer; }
-    @media (max-width: 720px) {
-      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      article { grid-template-columns: 1fr; }
+    .generated-page {
+      display: grid;
+      grid-template-columns: 1fr 21%;
+      direction: rtl;
     }
+    .generated-main {
+      display: grid;
+      grid-template-columns: 43% 57%;
+      grid-template-rows: 18% 64% 18%;
+      border-block: 2px solid #111;
+      margin: 7% 0 7% 7%;
+      direction: rtl;
+    }
+    .generated-rail {
+      display: grid;
+      align-content: start;
+      gap: 22px;
+      padding: 17% 13% 0;
+      background: #183d2a;
+      color: #f5f8f4;
+      clip-path: polygon(18% 0, 100% 0, 100% 100%, 18% 100%, 0 50%);
+      border-inline-start: 5px solid #c0912d;
+    }
+    .generated-weekday { font-size: clamp(24px, 3.8vw, 48px); font-weight: 700; text-align: center; }
+    .date-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .date-card { border: 2px solid rgba(255,255,255,0.76); border-radius: 7px; padding: 7px 4px; text-align: center; }
+    .date-card small { display: block; color: rgba(255,255,255,0.7); font-size: clamp(9px, 1vw, 14px); }
+    .date-card b { display: block; font-size: clamp(20px, 3vw, 38px); }
+    .platform-card { display: grid; place-items: center; gap: 10px; min-height: 110px; border-radius: 6px; background: #eff0f1; color: #222; text-align: center; }
+    .platform-symbol { font-size: clamp(34px, 5vw, 70px); line-height: 1; }
+    .source-pane { grid-row: 1 / 4; border-inline-start: 2px solid #111; display: grid; grid-template-rows: 18% 64% 18%; min-width: 0; }
+    .source-mark { display: grid; place-items: center; border-bottom: 2px solid #111; font-size: clamp(28px, 4vw, 54px); }
+    .source-image { display: grid; place-items: center; padding: 18px; }
+    .source-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .source-note { writing-mode: vertical-rl; align-self: center; justify-self: end; color: #c8cbc8; font-size: clamp(9px, 1vw, 15px); padding-inline-end: 14px; }
+    .meta-head { display: flex; align-items: center; justify-content: center; gap: 22px; border-bottom: 2px solid #111; padding: 0 28px; text-align: center; }
+    .meta-head small { display: block; color: #2f7c60; font-size: clamp(9px, 1vw, 15px); margin-bottom: 4px; }
+    .meta-head b { font-size: clamp(18px, 2.2vw, 34px); font-weight: 500; }
+    .summary { display: grid; align-content: start; padding: 28px 42px; text-align: center; }
+    .summary h2 { color: #2f7c60; font-size: clamp(14px, 1.4vw, 23px); font-weight: 500; margin: 0 0 18px; }
+    .summary p { font-size: clamp(16px, 2vw, 32px); line-height: 1.58; margin: 0; }
+    .sentiment { display: flex; align-items: center; justify-content: end; gap: 20px; border-top: 2px solid #111; padding: 0 32px; color: #2f7c60; font-size: clamp(14px, 1.5vw, 24px); }
+    .faces { display: flex; gap: 14px; color: #111; }
+    .face { display: inline-grid; place-items: center; min-width: 64px; border: 2px solid #111; border-radius: 999px; padding: 4px 12px; background: #f2f2f2; font-weight: 700; }
+    .face.active { background: #8bc8b1; }
     @media print {
-      body { background: #fff; }
-      main { padding: 0; max-width: none; }
+      html, body { background: #fff; }
       .print { display: none; }
-      header, section, article { border-color: #d9ded4; }
+      .toolbar { display: none; }
+      .document { display: block; padding: 0; }
+      .page {
+        width: var(--export-page-width);
+        height: var(--export-page-height);
+        margin: 0;
+        box-shadow: none;
+        break-after: page;
+        page-break-after: always;
+      }
+      .page:last-child { break-after: auto; page-break-after: auto; }
     }
   </style>
 </head>
 <body>
-  <button class="print" onclick="window.print()">حفظ PDF</button>
-  <main>
-    <header>
-      <p class="muted">تقرير خاص</p>
-      <h1>رصد هداية هاكاثون</h1>
-      <p class="muted">تم إنشاء النسخة: ${escapeHtml(new Date().toLocaleString("ar-SA"))}</p>
-    </header>
-    <section>
-      <h2>ملخص</h2>
-      <div class="stats">
-        <div class="stat"><span>المواد</span><b>${selectedItems.length.toLocaleString("ar-SA")}</b></div>
-        <div class="stat"><span>التوجه</span><b>😊 ${positivePercent.toLocaleString("ar-SA")}%</b></div>
-        <div class="stat"><span>آخر تحديث</span><b>${escapeHtml(compactDate(latest?.publishDateLabel ?? "غير متاح"))}</b></div>
-        <div class="stat"><span>المنصات</span><b>${escapeHtml(String(distribution(selectedItems, (item) => item.platform).length))}</b></div>
+  <div class="toolbar">
+    <div class="toolbar-title">
+      <strong>رصد هداية هاكاثون</strong>
+      <span>${selectedItems.length.toLocaleString("ar-SA")} صفحة بتصميم التقرير الأصلي</span>
+    </div>
+    <div class="toolbar-actions">
+      <div class="print-options" aria-label="خيارات طباعة التقرير">
+        <b>خيارات الطباعة</b>
+        <span>Save as PDF</span>
+        <span>Landscape</span>
+        <span>Margins: None</span>
+        <span>Scale: 100%</span>
+        <span>Background graphics: On</span>
       </div>
-      <p class="muted">${platforms || "لا توجد منصات"}</p>
-    </section>
-    <section>
-      <h2>المواد الظاهرة</h2>
-      ${selectedItems.map(renderItem).join("")}
-    </section>
+      <button class="print" onclick="window.print()">حفظ PDF</button>
+    </div>
+  </div>
+  <main class="document">
+    ${orderedItems.map(renderExportPage).join("")}
   </main>
 </body>
 </html>`,
   };
 }
 
-function renderItem(item: ClientReportItem) {
-  const imagePath = item.contentImagePath ?? item.evidenceImagePath;
-  return `<article>
-    <div>${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : `<div class="muted">قيد التجهيز</div>`}</div>
-    <div>
-      <div class="chips">
-        <span class="chip">${escapeHtml(item.platformLabel)}</span>
-        <span class="chip">${escapeHtml(sentimentDisplay(item.sentimentLabel, item.sentiment))}</span>
-      </div>
-      <h3>${escapeHtml(item.title)}</h3>
-      <p>${escapeHtml(item.summary)}</p>
-      <p class="muted">${escapeHtml(item.authorName || item.sourceName)} · ${escapeHtml(compactDate(item.publishDateLabel))}</p>
-      ${item.originalUrl ? `<p><a href="${escapeAttribute(item.originalUrl)}">فتح الرابط الأصلي</a></p>` : `<p class="muted">الرابط قيد التجهيز</p>`}
-    </div>
-  </article>`;
-}
-
-function distribution(items: ClientReportItem[], getKey: (item: ClientReportItem) => string) {
-  const map = new Map<string, { label: string; count: number }>();
-  for (const item of items) {
-    const key = getKey(item) || "غير محدد";
-    const current = map.get(key) ?? { label: key, count: 0 };
-    current.count += 1;
-    map.set(key, current);
+function renderExportPage(item: ClientReportItem) {
+  if (item.sourceEvidenceImagePath) {
+    return `<section class="page" aria-label="${escapeAttribute(pageLabel(item))}">
+      <img src="${escapeAttribute(item.sourceEvidenceImagePath)}" alt="${escapeAttribute(pageLabel(item))}" />
+    </section>`;
   }
-  return [...map.values()].sort((a, b) => b.count - a.count);
+
+  return renderGeneratedTemplatePage(item);
 }
 
-function sortItemsByDate(items: ClientReportItem[]) {
+function sortItemsForLegacyExport(items: ClientReportItem[]) {
   return [...items].sort((a, b) => {
-    const aDate = a.publishDateIso ?? a.captureDateIso ?? "";
-    const bDate = b.publishDateIso ?? b.captureDateIso ?? "";
-    return bDate.localeCompare(aDate);
+    const aIssue = a.reportIssue ?? Number.MAX_SAFE_INTEGER;
+    const bIssue = b.reportIssue ?? Number.MAX_SAFE_INTEGER;
+    if (aIssue !== bIssue) return aIssue - bIssue;
+    if (a.page !== b.page) return a.page - b.page;
+    const aDate = a.publishDateIso ?? a.captureDateIso ?? "9999-99-99";
+    const bDate = b.publishDateIso ?? b.captureDateIso ?? "9999-99-99";
+    return aDate.localeCompare(bDate);
   });
+}
+
+function renderGeneratedTemplatePage(item: ClientReportItem) {
+  const imagePath = item.contentImagePath ?? item.evidenceImagePath;
+  const dateParts = reportDateParts(item.publishDateIso);
+  return `<section class="page generated-page" aria-label="${escapeAttribute(pageLabel(item))}">
+    <aside class="generated-rail">
+      <div class="generated-weekday">${escapeHtml(dateParts.weekday)}</div>
+      <div class="date-cards">
+        <div class="date-card"><small>${escapeHtml(dateParts.gregorianMonth)}</small><b>${escapeHtml(dateParts.gregorianDay)}</b></div>
+        <div class="date-card"><small>${escapeHtml(dateParts.hijriMonth)}</small><b>${escapeHtml(dateParts.hijriDay)}</b></div>
+      </div>
+      <div class="platform-card">
+        <div class="platform-symbol">${escapeHtml(platformSymbol(item.platform))}</div>
+        <div>${escapeHtml(item.platformLabel)}</div>
+      </div>
+    </aside>
+    <div class="generated-main">
+      <div class="source-pane">
+        <div class="source-mark">↗</div>
+        <div class="source-image">${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : ""}</div>
+        <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
+      </div>
+      <header class="meta-head">
+        <div><small>الكاتب</small><b>${escapeHtml(item.authorName || item.sourceName)}</b></div>
+      </header>
+      <div class="summary">
+        <h2>المحتوى / الملخص</h2>
+        <p>${escapeHtml(item.summary || item.title)}</p>
+      </div>
+      <footer class="sentiment">
+        <span>تصنيف المحتوى</span>
+        <div class="faces">
+          <span class="face${item.sentiment === "negative" ? " active" : ""}">☹</span>
+          <span class="face${item.sentiment === "neutral" ? " active" : ""}">•</span>
+          <span class="face${item.sentiment === "positive" ? " active" : ""}">✓</span>
+        </div>
+      </footer>
+    </div>
+  </section>`;
+}
+
+function pageLabel(item: ClientReportItem) {
+  return `${item.reportLabel} - صفحة ${item.page.toLocaleString("ar-SA")} - ${item.authorName || item.sourceName}`;
 }
 
 function compactDate(label: string) {
   return label.split("·")[0]?.trim() ?? label;
 }
 
-function sentimentDisplay(label: string, sentiment: string) {
-  const icon = sentiment === "positive" ? "😊" : sentiment === "negative" ? "☹️" : "😐";
-  return `${icon} ${label}`;
+function reportDateParts(iso: string | null) {
+  if (!iso) {
+    return {
+      weekday: "غير محدد",
+      gregorianDay: "--",
+      gregorianMonth: "ميلادي",
+      hijriDay: "--",
+      hijriMonth: "هجري",
+    };
+  }
+
+  const date = new Date(iso);
+  const gregorian = new Intl.DateTimeFormat("ar-SA", {
+    day: "2-digit",
+    month: "long",
+    calendar: "gregory",
+  }).formatToParts(date);
+  const hijri = new Intl.DateTimeFormat("ar-SA-u-ca-islamic-umalqura", {
+    day: "2-digit",
+    month: "long",
+  }).formatToParts(date);
+
+  return {
+    weekday: new Intl.DateTimeFormat("ar-SA", { weekday: "long", calendar: "gregory" }).format(date),
+    gregorianDay: partValue(gregorian, "day"),
+    gregorianMonth: partValue(gregorian, "month"),
+    hijriDay: partValue(hijri, "day"),
+    hijriMonth: partValue(hijri, "month"),
+  };
+}
+
+function partValue(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes) {
+  return parts.find((part) => part.type === type)?.value ?? "";
+}
+
+function platformSymbol(platform: string) {
+  if (platform === "X") return "𝕏";
+  if (platform === "YouTube") return "▶";
+  if (platform === "TikTok") return "♪";
+  if (platform === "Instagram") return "◎";
+  return "⌁";
 }
 
 function escapeHtml(value: string) {

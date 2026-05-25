@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { api } from "../src/server/api";
+import { clientReportExportLimit } from "../src/server/client-report-export";
 import { store } from "../src/server/store";
 import { TikTokResearchConnector } from "../src/lib/connectors/tiktok/research";
 import { InstagramPublicProfileConnector } from "../src/lib/connectors/instagram/public-profile";
@@ -1151,17 +1152,16 @@ describe("Hono API acceptance workflow", () => {
     assert.doesNotMatch(exportPage.text, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
   });
 
-  it("limits printable client PDF export to 50 items", async () => {
+  it("serves the full legacy client PDF export within the exact-design limit", async () => {
     const report = await requestJson("/api/client-report/hidayathon");
     const ids = report.json.report.items
-      .slice(0, 51)
       .map((item: { id: string }) => item.id)
       .join(",");
-    const limited = await requestJson(`/api/client-report/hidayathon/export-pdf?ids=${encodeURIComponent(ids)}`);
+    const exportPage = await requestText(`/api/client-report/hidayathon/export-pdf?ids=${encodeURIComponent(ids)}`);
 
-    assert.equal(limited.response.status, 400);
-    assert.equal(limited.json.error, "export_item_limit_exceeded");
-    assert.equal(limited.json.maxItems, 50);
+    assert.equal(report.json.report.items.length <= clientReportExportLimit, true);
+    assert.equal(exportPage.response.status, 200);
+    assert.match(exportPage.text, /صفحة بتصميم التقرير الأصلي/);
   });
 
   it("serves the legacy link backfill dataset for missing original URLs", async () => {
