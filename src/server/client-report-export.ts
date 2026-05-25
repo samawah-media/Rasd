@@ -182,7 +182,24 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
     }
     .source-mark {
       position: relative;
+      display: block;
       border-bottom: 2px solid #111;
+      color: inherit;
+      text-decoration: none;
+    }
+    .source-mark[href], .legacy-source-link { cursor: pointer; }
+    .source-mark[href]:focus-visible, .legacy-source-link:focus-visible {
+      outline: 3px solid #c0912d;
+      outline-offset: -3px;
+    }
+    .legacy-source-link {
+      position: absolute;
+      z-index: 2;
+      left: 82px;
+      top: 86px;
+      width: 190px;
+      height: 140px;
+      text-decoration: none;
     }
     .source-link-icon {
       position: absolute;
@@ -340,8 +357,10 @@ export function buildClientReportExportHtml(data: ClientReportData, itemIds: str
 function renderExportPage(item: ClientReportItem) {
   const sourcePageImagePath = item.sourceEvidenceImagePath;
   if (isLegacyReportPageImage(sourcePageImagePath)) {
+    const url = reportItemUrl(item);
     return `<section class="page" aria-label="${escapeAttribute(pageLabel(item))}">
       <img src="${escapeAttribute(sourcePageImagePath)}" alt="${escapeAttribute(pageLabel(item))}" />
+      ${url ? `<a class="legacy-source-link" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" aria-label="فتح رابط المنشور"></a>` : ""}
     </section>`;
   }
 
@@ -384,16 +403,7 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
     </aside>
     <div class="generated-main">
       <div class="source-pane">
-        <div class="source-mark" aria-hidden="true">
-          <span class="source-link-icon">
-            <span class="source-link-ring source-link-ring-a"></span>
-            <span class="source-link-ring source-link-ring-b"></span>
-            <span class="source-link-spark source-link-spark-a"></span>
-            <span class="source-link-spark source-link-spark-b"></span>
-            <span class="source-link-spark source-link-spark-c"></span>
-            <span class="source-link-cursor"></span>
-          </span>
-        </div>
+        ${renderSourceMark(item)}
         <div class="source-image">${imagePath ? `<img src="${escapeAttribute(imagePath)}" alt="صورة المحتوى" />` : ""}</div>
         <div class="source-note">تم التقاط هذه الصورة بتاريخ ${escapeHtml(compactDate(item.captureDateLabel))}</div>
       </div>
@@ -417,6 +427,20 @@ function renderGeneratedTemplatePage(item: ClientReportItem) {
   </section>`;
 }
 
+function renderSourceMark(item: ClientReportItem) {
+  const icon = `<span class="source-link-icon" aria-hidden="true">
+    <span class="source-link-ring source-link-ring-a"></span>
+    <span class="source-link-ring source-link-ring-b"></span>
+    <span class="source-link-spark source-link-spark-a"></span>
+    <span class="source-link-spark source-link-spark-b"></span>
+    <span class="source-link-spark source-link-spark-c"></span>
+    <span class="source-link-cursor"></span>
+  </span>`;
+  const url = reportItemUrl(item);
+  if (!url) return `<div class="source-mark" aria-hidden="true">${icon}</div>`;
+  return `<a class="source-mark" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer" aria-label="فتح رابط المنشور">${icon}</a>`;
+}
+
 function renderAuthorAvatar(item: ClientReportItem) {
   if (!item.publisherProfileImagePath) return "";
   return `<img class="author-avatar" src="${escapeAttribute(item.publisherProfileImagePath)}" alt="${escapeAttribute(
@@ -436,6 +460,10 @@ function summaryTextClass(value: string) {
 
 function pageLabel(item: ClientReportItem) {
   return `${item.reportLabel} - صفحة ${item.page.toLocaleString("ar-SA")} - ${item.authorName || item.sourceName}`;
+}
+
+function reportItemUrl(item: ClientReportItem) {
+  return item.originalUrl ?? item.contentUrl;
 }
 
 function compactDate(label: string) {

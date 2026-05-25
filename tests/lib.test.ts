@@ -340,6 +340,7 @@ describe("connector and budget utilities", () => {
     assert.match(exportHtml.html, /@page \{ size: 16in 9in; margin: 0; \}/);
     assert.match(exportHtml.html, /image-orientation: none/);
     assert.match(exportHtml.html, /legacy-pages/);
+    assert.match(exportHtml.html, /class="legacy-source-link" href="https?:\/\//);
     assert.doesNotMatch(exportHtml.html, /confidence|raw text|backfill|النص الخام|تحذيرات الاستخراج/i);
     assert.equal(tooMany.ok, false);
     assert.equal(tooMany.error, "export_item_limit_exceeded");
@@ -357,12 +358,15 @@ describe("connector and budget utilities", () => {
       evidenceImagePath: null,
       contentImagePath: null,
       sourceEvidenceImagePath: "/live-capture.png",
+      originalUrl: "https://example.com/live-post",
+      contentUrl: "https://example.com/live-post",
       page: 1,
     };
     const exportHtml = buildClientReportExportHtml({ ...report, items: [liveItem] }, [liveItem.id]);
 
     assert.equal(exportHtml.ok, true);
     assert.match(exportHtml.html, /generated-page/);
+    assert.match(exportHtml.html, /<a class="source-mark" href="https:\/\/example\.com\/live-post"/);
     assert.match(exportHtml.html, /الرصد الحي/);
     assert.match(exportHtml.html, /<div class="source-image"><img src="\/live-capture\.png"/);
     assert.doesNotMatch(exportHtml.html, /<section class="page"[^>]*>\s*<img src="\/live-capture\.png"/);
